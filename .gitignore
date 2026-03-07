@@ -1,0 +1,73 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Snakemake runtime
+.snakemake/
+.snakemake_timestamp
+
+# Conda / package manager caches
+conda-meta/
+
+# Workflow logs / benchmarks
+logs/
+benchmark/
+benchmarks/
+*.log
+*.err
+*.out
+
+# Pipeline-generated outputs (PGT-A)
+fastp/
+fastq_clean/
+wisecondorx/
+mapping/
+gatk/
+annotation/
+results/
+work/
+
+# Linked / copied data
+# Keep folder structure if needed via placeholder files
+# but ignore actual data files
+data/fastq/
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.bam
+*.bai
+*.cram
+*.crai
+*.vcf
+*.vcf.gz
+*.tbi
+*.npz
+*.bedGraph
+*.wig
+*.bigWig
+
+# Optional local configs
+config.local.yaml
+*.local.yaml
