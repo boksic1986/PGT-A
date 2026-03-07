@@ -59,6 +59,11 @@ def load_template_config() -> dict:
                 "binsize": 500000,
                 "reference_output": "wisecondorx/reference/ref_500kb.npz",
                 "use_chr_prefix": True,
+                "tuning": {
+                    "enable": True,
+                    "bin_sizes": [100000, 200000, 500000, 1000000],
+                    "pca_components": [2, 3, 4, 5, 6, 8, 10],
+                },
             },
         },
         "biosoft": {

@@ -1,8 +1,14 @@
+if TUNING_ENABLED:
+    FINAL_REF_TARGETS = [REF_OUTPUT, TUNING_SUMMARY, TUNING_BEST]
+else:
+    FINAL_REF_TARGETS = [REF_OUTPUT]
+
+
 rule all:
     input:
         expand(SORTED_BAM, sample=SAMPLES),
         expand(SORTED_BAI, sample=SAMPLES),
-        REF_OUTPUT
+        FINAL_REF_TARGETS
 
 
 rule fastp_bwa:
@@ -40,26 +46,61 @@ rule fastp_bwa:
         """
 
 
-rule build_wisecondorx_reference:
-    input:
-        bams=expand(SORTED_BAM, sample=SAMPLES)
-    output:
-        ref=REF_OUTPUT
-    log:
-        project_path("logs", "wisecondorx", "build_reference.log")
-    params:
-        wise=config["biosoft"]["WisecondorX"],
-        binsize=WISE_CFG["binsize"],
-        converted_dir=project_path("wisecondorx", "converted")
-    threads: 4
-    shell:
-        r"""
-        mkdir -p "{params.converted_dir}" "$(dirname {output.ref})" "$(dirname {log})"
-        for bam in {input.bams}; do
-            sample=$(basename "$bam")
-            sample=${sample%.sorted.bam}
-            npz="{params.converted_dir}/${sample}.npz"
-            {params.wise} convert "$bam" "$npz" --binsize {params.binsize} >> {log} 2>&1
-        done
-        {params.wise} newref {params.converted_dir}/*.npz {output.ref} --binsize {params.binsize} >> {log} 2>&1
-        """
+if TUNING_ENABLED:
+    rule tune_wisecondorx_bin_pca:
+        input:
+            bams=expand(SORTED_BAM, sample=SAMPLES)
+        output:
+            ref=REF_OUTPUT,
+            summary=TUNING_SUMMARY,
+            best=TUNING_BEST
+        log:
+            project_path("logs", "wisecondorx", "tuning.log")
+        params:
+            python_bin=config["biosoft"]["python"],
+            wise=config["biosoft"]["WisecondorX"],
+            bin_sizes=",".join(str(item) for item in TUNING_BIN_SIZES),
+            pca_components=",".join(str(item) for item in TUNING_PCA_COMPONENTS),
+            sample_ids=SAMPLES,
+            workdir=TUNING_WORKDIR
+        threads: 4
+        shell:
+            r"""
+            mkdir -p "$(dirname {output.ref})" "$(dirname {output.summary})" "$(dirname {log})"
+            {params.python_bin:q} scripts/tune_wisecondorx_bin_pca.py \
+                --wisecondorx {params.wise:q} \
+                --bams {input.bams:q} \
+                --sample-ids {params.sample_ids:q} \
+                --bin-sizes {params.bin_sizes} \
+                --pca-components {params.pca_components} \
+                --threads {threads} \
+                --workdir {params.workdir:q} \
+                --summary-output {output.summary:q} \
+                --best-output {output.best:q} \
+                --reference-output {output.ref:q} \
+                --log {log:q}
+            """
+else:
+    rule build_wisecondorx_reference:
+        input:
+            bams=expand(SORTED_BAM, sample=SAMPLES)
+        output:
+            ref=REF_OUTPUT
+        log:
+            project_path("logs", "wisecondorx", "build_reference.log")
+        params:
+            wise=config["biosoft"]["WisecondorX"],
+            binsize=WISE_CFG["binsize"],
+            converted_dir=project_path("wisecondorx", "converted")
+        threads: 4
+        shell:
+            r"""
+            mkdir -p "{params.converted_dir}" "$(dirname {output.ref})" "$(dirname {log})"
+            for bam in {input.bams:q}; do
+                sample=$(basename "$bam")
+                sample=${sample%.sorted.bam}
+                npz="{params.converted_dir}/${sample}.npz"
+                {params.wise:q} convert "$bam" "$npz" --binsize {params.binsize} >> {log:q} 2>&1
+            done
+            {params.wise:q} newref {params.converted_dir:q}/*.npz {output.ref:q} --binsize {params.binsize} >> {log:q} 2>&1
+            """
