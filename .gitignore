@@ -71,3 +71,7 @@ data/fastq/
 # Optional local configs
 config.local.yaml
 *.local.yaml
+
+# Local temporary scratch files
+tmp_*
+*.tmp

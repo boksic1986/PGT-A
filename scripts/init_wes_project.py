@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # Author: jiucheng
-# Updated: 2026/03/08
+# Updated: 2026/03/09
 import argparse
+import re
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -12,21 +13,25 @@ import yaml
 
 def detect_samples(fq_dir: Path) -> dict:
     fq_dir = Path(fq_dir)
-    fq_files = list(fq_dir.rglob("*.fastq.gz")) + list(fq_dir.rglob("*.fq.gz"))
+    fq_files = (
+        list(fq_dir.rglob("*.fastq.gz"))
+        + list(fq_dir.rglob("*.fq.gz"))
+        + list(fq_dir.rglob("*.fastq"))
+        + list(fq_dir.rglob("*.fq"))
+    )
 
     temp_dict = defaultdict(list)
-
     for fq in fq_files:
-        fname = fq.name
-
-        if "_R1" in fname or "_1" in fname:
-            direction = "R1"
-        elif "_R2" in fname or "_2" in fname:
-            direction = "R2"
-        else:
+        name = fq.name
+        base = re.sub(r"(?i)\.(fastq|fq)(\.gz)?$", "", name)
+        match = re.search(r"(?i)(?:^|[._-])R?([12])(?:[._-]\d{3})?$", base)
+        if not match:
             continue
 
-        sample_id = fname.split("_")[0]
+        direction = "R1" if match.group(1) == "1" else "R2"
+        sample_id = base[: match.start()].rstrip("._-")
+        if not sample_id:
+            continue
         temp_dict[sample_id].append((direction, fq))
 
     sample_dict = {}
@@ -34,14 +39,9 @@ def detect_samples(fq_dir: Path) -> dict:
         r1_list = sorted([fq for d, fq in items if d == "R1"])
         r2_list = sorted([fq for d, fq in items if d == "R2"])
         count = min(len(r1_list), len(r2_list))
-
         for i in range(count):
-            sample_key = f"{sample_id}_{i + 1}" if count > 1 else sample_id
-            sample_dict[sample_key] = {
-                "R1": r1_list[i],
-                "R2": r2_list[i],
-            }
-
+            key = f"{sample_id}_{i + 1}" if count > 1 else sample_id
+            sample_dict[key] = {"R1": r1_list[i], "R2": r2_list[i]}
     return sample_dict
 
 
@@ -56,73 +56,376 @@ def load_template_config() -> dict:
                 "chr21", "chr22", "chrX", "chrY",
             ],
             "wisecondorx": {
-                "binsize": 500000,
-                "reference_output": "wisecondorx/reference/ref_500kb.npz",
+                "binsize": 100000,
+                "reference_output": "wisecondorx/reference/ref_input.npz",
+                "reference_output_by_sex": {
+                    "XX": "reference/XX/result/ref_xx_best.npz",
+                    "XY": "reference/XY/result/ref_xy_best.npz",
+                },
+                "reference_model_root": "reference",
                 "use_chr_prefix": True,
                 "tuning": {
                     "enable": True,
-                    "bin_sizes": [100000, 200000, 500000, 1000000],
-                    "pca_components": [2, 3, 4, 5, 6, 8, 10],
+                    "bin_sizes": [100000, 200000, 300000, 500000, 750000, 1000000],
+                    "pca": {"min_components": 2, "max_components": 20, "min_explained_variance": 0.0},
+                    "qc": {
+                        "min_reference_samples": 8,
+                        "max_outlier_fraction": 0.25,
+                        "min_reads_per_sample": 3000000,
+                        "min_corr_to_median": 0.9,
+                        "max_reconstruction_error_z": 3.5,
+                        "max_noise_mad_z": 3.5,
+                    },
+                },
+                "reference_prefilter": {
+                    "binsize": 100000,
+                    "max_iterations": 3,
+                },
+                "cnv": {
+                    "enable": True,
+                    "output_dir": "wisecondorx/cnv",
+                    "qc_dir": "wisecondorx/cnv/qc",
+                    "predict_dir": "wisecondorx/cnv/predict",
+                    "convert_binsize": 100000,
+                    "zscore": 5,
+                    "alpha": 0.001,
+                    "maskrepeats": 5,
+                    "minrefbins": 150,
+                    "qc": {"min_total_counts": 1000000, "min_nonzero_fraction": 0.4, "max_mad_log1p": 1.2},
                 },
             },
         },
+        "pipeline": {"targets": ["mapping", "reference", "cnv"]},
         "biosoft": {
             "fastp": "/biosoftware/bin/fastp",
             "bwa": "/biosoftware/bin/bwa",
             "samtools": "/biosoftware/bin/samtools",
             "WisecondorX": "/biosoftware/miniconda/envs/wise_env/bin/WisecondorX",
-            "python": "/biosoftware/miniconda/envs/wise_env/bin/python",
+            "python": "/biosoftware/miniconda/envs/snakemake_env/bin/python",
         },
         "samples": {},
     }
 
 
-def main(project, fq_dir, output_config, template_snakefile=None):
-    fq_dir = Path(fq_dir).resolve()
+def parse_id_tokens(text: str):
+    normalized = (
+        str(text)
+        .strip()
+        .replace("\u2014", "-")
+        .replace("\u2013", "-")
+        .replace("\uff0c", ",")
+        .replace(" ", "")
+    )
+    tokens = []
+    for item in normalized.split(","):
+        if not item:
+            continue
+        if "-" in item:
+            left, right = item.split("-", 1)
+            if left.isdigit() and right.isdigit():
+                a, b = int(left), int(right)
+                if b < a:
+                    a, b = b, a
+                tokens.extend([str(x) for x in range(a, b + 1)])
+                continue
+            if re.fullmatch(r"[A-Za-z]", left) and re.fullmatch(r"[A-Za-z]", right):
+                a, b = ord(left.upper()), ord(right.upper())
+                if b < a:
+                    a, b = b, a
+                tokens.extend([chr(x) for x in range(a, b + 1)])
+                continue
+        tokens.append(item.upper() if re.fullmatch(r"[A-Za-z]+", item) else item)
+    return tokens
+
+
+def parse_reference_rules_from_excel(sample_info_xlsx: Path):
+    import openpyxl
+
+    wb = openpyxl.load_workbook(sample_info_xlsx, data_only=True)
+    ws = wb[wb.sheetnames[0]]
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise ValueError(f"Empty excel file: {sample_info_xlsx}")
+
+    header = [str(x).strip() if x is not None else "" for x in rows[0]]
+    normalized = [re.sub(r"[\s_]+", "", h).lower() for h in header]
+
+    def find_col(candidates):
+        candidate_norm = [re.sub(r"[\s_]+", "", c).lower() for c in candidates]
+        for i, item in enumerate(normalized):
+            if item in candidate_norm:
+                return i
+        for i, item in enumerate(normalized):
+            for key in candidate_norm:
+                if key and key in item:
+                    return i
+        return None
+
+    idx_batch = find_col(["\u6279\u6b21", "batch", "batchid", "batchno"])
+    idx_list = find_col(["\u6837\u672c\u6e05\u5355", "\u6837\u672cid", "samplelist", "sampleid", "samples", "sample_ids"])
+    idx_sex = find_col(["\u6027\u522b", "sex", "gender"])
+    if idx_batch is None or idx_list is None or idx_sex is None:
+        raise ValueError(
+            "Cannot detect excel columns for batch/sample-list/sex. "
+            f"Header={header}"
+        )
+
+    current_batch = ""
+
+    def detect_batch_group(text: str):
+        normalized = str(text).strip().lower().replace(" ", "")
+        normalized_compact = re.sub(r"[^a-z0-9\u4e00-\u9fff]", "", normalized)
+        if normalized in {"2", "02"} or normalized_compact in {"2", "02"}:
+            return "batch2"
+        if normalized in {"3", "03"} or normalized_compact in {"3", "03"}:
+            return "batch3"
+        if any(token in normalized for token in ["\u7b2c\u4e8c\u6279", "batch2", "batch_2", "batch-2", "2nd", "b2"]):
+            return "batch2"
+        if any(token in normalized for token in ["\u7b2c\u4e09\u6279", "batch3", "batch_3", "batch-3", "3rd", "b3"]):
+            return "batch3"
+        if re.fullmatch(r"batch[_-]?2", normalized_compact):
+            return "batch2"
+        if re.fullmatch(r"batch[_-]?3", normalized_compact):
+            return "batch3"
+        return None
+
+    rules = []
+    for row in rows[1:]:
+        batch_cell = row[idx_batch] if idx_batch < len(row) else None
+        list_cell = row[idx_list] if idx_list < len(row) else None
+        sex_cell = row[idx_sex] if idx_sex < len(row) else None
+        if batch_cell:
+            current_batch = str(batch_cell).strip()
+        if not current_batch or not list_cell or not sex_cell:
+            continue
+        sex = str(sex_cell).strip().upper()
+        if sex not in {"XX", "XY"}:
+            continue
+        batch_group = detect_batch_group(current_batch)
+        if batch_group is None:
+            continue
+        rules.append(
+            {
+                "batch": current_batch,
+                "batch_group": batch_group,
+                "sex": sex,
+                "ids": parse_id_tokens(str(list_cell)),
+            }
+        )
+    return rules
+
+
+def key_for_batch2(sample_id: str):
+    token = re.split(r"[_\-]", sample_id)[0]
+    m = re.match(r"([A-Za-z])", token)
+    return m.group(1).upper() if m else None
+
+
+def key_for_batch3(sample_id: str):
+    s = sample_id.replace("_", "-")
+    m = re.search(r"-([0-9]+)-([0-9]+)(?:[._-].*)?$", s)
+    if m:
+        if m.group(1) == m.group(2):
+            return str(int(m.group(1)))
+        return None
+    m = re.search(r"-([0-9]+)(?:[._-].*)?$", s)
+    if m:
+        return str(int(m.group(1)))
+    return None
+
+
+def build_groups_by_rules(rules, detected, key_getter):
+    lookup = defaultdict(list)
+    for sample_id in sorted(detected.keys()):
+        key = key_getter(sample_id)
+        if key is not None:
+            lookup[str(key).upper()].append(sample_id)
+
+    groups = {"XX": [], "XY": []}
+    for rule in rules:
+        for token in rule["ids"]:
+            token_norm = str(token).upper()
+            matched = sorted(lookup.get(token_norm, []))
+            for sample_id in matched:
+                if sample_id not in groups[rule["sex"]]:
+                    groups[rule["sex"]].append(sample_id)
+    groups["XX"] = sorted(groups["XX"])
+    groups["XY"] = sorted(groups["XY"])
+    return groups
+
+
+def select_reference_groups(sample_info_xlsx: Path, batch2_dir: Path, batch3_dir: Path):
+    rules = parse_reference_rules_from_excel(sample_info_xlsx)
+
+    rules_batch2 = [r for r in rules if r.get("batch_group") == "batch2"]
+    rules_batch3 = [r for r in rules if r.get("batch_group") == "batch3"]
+
+    samples_batch2 = detect_samples(batch2_dir)
+    samples_batch3 = detect_samples(batch3_dir)
+
+    groups2 = build_groups_by_rules(rules_batch2, samples_batch2, key_for_batch2)
+    groups3 = build_groups_by_rules(rules_batch3, samples_batch3, key_for_batch3)
+
+    merged = {"XX": [], "XY": []}
+    for sex in ["XX", "XY"]:
+        merged[sex] = sorted(set(groups2.get(sex, []) + groups3.get(sex, [])))
+    return merged
+
+
+def merge_samples_with_batch(sample_dict, batch_label):
+    merged = {}
+    for sample_id, pair in sample_dict.items():
+        key = sample_id
+        if key in merged:
+            key = f"{sample_id}_{batch_label}"
+        merged[key] = {"R1": str(Path(pair["R1"]).resolve()), "R2": str(Path(pair["R2"]).resolve())}
+    return merged
+
+
+def resolve_sample_info_xlsx(path_value: str, project_root: Path | None = None):
+    candidate = Path(path_value)
+    if candidate.exists():
+        return candidate
+    fallbacks = [Path("sample_info/CNV-seq.xlsx"), Path("rules/sample_info/CNV-seq.xlsx")]
+    if project_root is not None:
+        fallbacks = [project_root / "sample_info/CNV-seq.xlsx", project_root / "rules/sample_info/CNV-seq.xlsx"] + fallbacks
+    for fallback in fallbacks:
+        if fallback.exists():
+            return fallback
+    return candidate
+
+
+def build_reference_groups_into_config(
+    project: str,
+    config_path: Path,
+    sample_info_xlsx: str,
+    batch2_fq_dir: str,
+    batch3_fq_dir: str,
+):
+    project_root = Path(project).resolve()
+    config_file = config_path if config_path.is_absolute() else (project_root / config_path)
+    config_found = config_file.exists()
+    if not config_found:
+        alt = project_root / "config.yaml"
+        if alt.exists():
+            config_file = alt
+            config_found = True
+
+    if config_found:
+        with open(config_file, "r", encoding="utf-8") as handle:
+            config = yaml.safe_load(handle) or {}
+    else:
+        config = load_template_config()
+        config["core"]["project_path"] = str(project_root)
+
+    samples_batch2 = detect_samples(Path(batch2_fq_dir))
+    samples_batch3 = detect_samples(Path(batch3_fq_dir))
+    merged_samples = {}
+    merged_samples.update(merge_samples_with_batch(samples_batch2, "B2"))
+    for sample_id, pair in merge_samples_with_batch(samples_batch3, "B3").items():
+        if sample_id in merged_samples:
+            sample_id = f"{sample_id}_B3"
+        merged_samples[sample_id] = pair
+    config["samples"] = merged_samples
+
+    sample_info = resolve_sample_info_xlsx(sample_info_xlsx, project_root=project_root)
+    groups = select_reference_groups(
+        sample_info_xlsx=sample_info,
+        batch2_dir=Path(batch2_fq_dir),
+        batch3_dir=Path(batch3_fq_dir),
+    )
+    config.setdefault("build_reference", {})
+    config["build_reference"]["enabled"] = True
+    config["build_reference"]["mode"] = "excel"
+    config["build_reference"]["sample_info_xlsx"] = str(sample_info.resolve())
+    config["build_reference"]["rawdata_dirs"] = {
+        "batch2": str(batch2_fq_dir),
+        "batch3": str(batch3_fq_dir),
+    }
+    config["build_reference"]["groups"] = groups
+
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_file, "w", encoding="utf-8") as handle:
+        yaml.safe_dump(config, handle, sort_keys=False, allow_unicode=True)
+    print(f"Build-reference groups updated: XX={len(groups['XX'])}, XY={len(groups['XY'])}")
+    print(f"Config updated at {config_file}")
+
+
+def init_config(
+    project,
+    fq_dir,
+    output_config,
+    template_snakefile=None,
+    build_reference_mode="none",
+    sample_info_xlsx="sample_info/CNV-seq.xlsx",
+    batch2_fq_dir="/data/project/CNV/PGT-A/rawdata/lib_test/2026-02-05",
+    batch3_fq_dir="/data/project/CNV/PGT-A/rawdata/lib_test/2026-03-03",
+):
     project = Path(project).resolve()
+    fq_dir = Path(fq_dir).resolve()
     config_path = Path(output_config).resolve()
 
     project.mkdir(parents=True, exist_ok=True)
-
-    # 1) Create only directories required by fastp and WisecondorX reference building
     for sub in [
         "data/fastq",
         "fastp",
         "mapping",
         "wisecondorx/converted",
         "wisecondorx/reference",
+        "wisecondorx/tuning",
+        "reference/XX/prefilter",
+        "reference/XX/tuning",
+        "reference/XX/result",
+        "reference/XY/prefilter",
+        "reference/XY/tuning",
+        "reference/XY/result",
+        "wisecondorx/cnv",
+        "wisecondorx/cnv/qc",
+        "wisecondorx/cnv/predict",
         "logs/fastp",
         "logs/bwa",
         "logs/wisecondorx",
+        "logs/cnv",
     ]:
         (project / sub).mkdir(parents=True, exist_ok=True)
 
-    # 2) Detect paired-end samples
     samples = detect_samples(fq_dir)
-
-    # 3) Symlink source FASTQs into project/data/fastq and write absolute paths to config
-    for sample, fqs in samples.items():
+    for sample_id, pair in samples.items():
         for direction in ["R1", "R2"]:
-            src = fqs[direction].resolve()
+            src = pair[direction].resolve()
             dst = project / "data/fastq" / src.name
-
             if dst.exists() or dst.is_symlink():
                 dst.unlink()
             dst.symlink_to(src)
-            samples[sample][direction] = str(dst.resolve())
+            samples[sample_id][direction] = str(dst.resolve())
 
-    # 4) Merge config
     config = load_template_config()
     config["core"]["project_path"] = str(project)
     config["samples"] = samples
 
-    # 5) Write config
+    if build_reference_mode == "excel":
+        sample_info = resolve_sample_info_xlsx(sample_info_xlsx, project_root=project)
+        groups = select_reference_groups(
+            sample_info_xlsx=sample_info,
+            batch2_dir=Path(batch2_fq_dir),
+            batch3_dir=Path(batch3_fq_dir),
+        )
+        config["build_reference"] = {}
+        config["build_reference"]["enabled"] = True
+        config["build_reference"]["mode"] = "excel"
+        config["build_reference"]["sample_info_xlsx"] = str(sample_info.resolve())
+        config["build_reference"]["rawdata_dirs"] = {
+            "batch2": str(batch2_fq_dir),
+            "batch3": str(batch3_fq_dir),
+        }
+        config["build_reference"]["groups"] = groups
+        print(f"Reference groups from excel: XX={len(groups['XX'])}, XY={len(groups['XY'])}")
+
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(config, f, sort_keys=False, allow_unicode=True)
+    with open(config_path, "w", encoding="utf-8") as handle:
+        yaml.safe_dump(config, handle, sort_keys=False, allow_unicode=True)
     print(f"Config written to {config_path}")
 
-    # 6) Optionally copy Snakefile template
     if template_snakefile:
         snakefile_src = Path(template_snakefile).resolve()
         snakefile_dst = project / "Snakefile"
@@ -135,16 +438,64 @@ def main(project, fq_dir, output_config, template_snakefile=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Init PGT-A project config (fastp + WisecondorX reference only)"
+        description="Init PGT-A config or update build-reference groups from excel"
     )
-    parser.add_argument("--project", required=True, help="Path to the new project directory")
-    parser.add_argument("--fq_dir", required=True, help="Path to input fastq directory")
-    parser.add_argument("--output_config", required=True, help="Path to output config.yaml")
+    parser.add_argument(
+        "--action",
+        choices=["init_config", "build_reference_groups"],
+        default="init_config",
+        help="Run mode: init config or update build-reference groups only",
+    )
+    parser.add_argument("--project", required=False, help="Project path (analysis directory)")
+    parser.add_argument("--fq_dir", required=False, help="Path to input fastq directory")
+    parser.add_argument("--output_config", required=True, help="Path to target config.yaml")
+    parser.add_argument(
+        "--build_reference_mode",
+        default="none",
+        choices=["none", "excel"],
+        help="Reference group selection mode",
+    )
+    parser.add_argument(
+        "--sample_info_xlsx",
+        default="sample_info/CNV-seq.xlsx",
+        help="Excel with batch, sample list and sex",
+    )
+    parser.add_argument(
+        "--batch2_fq_dir",
+        default="/data/project/CNV/PGT-A/rawdata/lib_test/2026-02-05",
+        help="Batch2 FASTQ dir (second batch, letter IDs)",
+    )
+    parser.add_argument(
+        "--batch3_fq_dir",
+        default="/data/project/CNV/PGT-A/rawdata/lib_test/2026-03-03",
+        help="Batch3 FASTQ dir (third batch, JZ2604xxx-ID-ID)",
+    )
     parser.add_argument(
         "--template_snakefile",
         required=False,
         help="Optional path to template Snakefile",
     )
     args = parser.parse_args()
-
-    main(args.project, args.fq_dir, args.output_config, args.template_snakefile)
+    if args.action == "init_config":
+        if not args.project or not args.fq_dir:
+            raise ValueError("--project and --fq_dir are required for --action init_config")
+        init_config(
+            project=args.project,
+            fq_dir=args.fq_dir,
+            output_config=args.output_config,
+            template_snakefile=args.template_snakefile,
+            build_reference_mode=args.build_reference_mode,
+            sample_info_xlsx=args.sample_info_xlsx,
+            batch2_fq_dir=args.batch2_fq_dir,
+            batch3_fq_dir=args.batch3_fq_dir,
+        )
+    else:
+        if not args.project:
+            raise ValueError("--project is required for --action build_reference_groups")
+        build_reference_groups_into_config(
+            project=args.project,
+            config_path=Path(args.output_config).resolve(),
+            sample_info_xlsx=args.sample_info_xlsx,
+            batch2_fq_dir=args.batch2_fq_dir,
+            batch3_fq_dir=args.batch3_fq_dir,
+        )
