@@ -5,13 +5,27 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from pipeline_logging import setup_logger
 
-def run_command(command, log_path):
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "a", encoding="utf-8") as log_handle:
-        log_handle.write("$ " + " ".join(shlex.quote(part) for part in command) + "\n")
-        log_handle.flush()
-        subprocess.run(command, check=True, stdout=log_handle, stderr=log_handle)
+
+def run_command(command, logger):
+    logger.info("$ %s", " ".join(shlex.quote(part) for part in command))
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if process.stdout is None:
+        raise RuntimeError("Failed to capture command stdout.")
+    for line in process.stdout:
+        line = line.rstrip("\n")
+        if not line:
+            continue
+        logger.info("[cmd] %s", line)
+    return_code = process.wait()
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, command)
 
 
 def load_best_binsize(best_yaml):
@@ -44,14 +58,18 @@ def main():
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--log", required=True)
     args = parser.parse_args()
+    logger = setup_logger("build_reference_from_tuning", args.log)
 
     binsize = load_best_binsize(args.best_yaml)
+    logger.info("loaded best binsize=%s from %s", binsize, args.best_yaml)
     inlier_ids = load_inliers(args.inlier_samples)
+    logger.info("loaded inlier sample ids=%d", len(inlier_ids))
     allowed = {item.strip() for item in args.allowed_samples.split(",") if item.strip()}
     if allowed:
         inlier_ids = [sample_id for sample_id in inlier_ids if sample_id in allowed]
         if not inlier_ids:
             raise ValueError("No inlier samples left after applying --allowed-samples filter.")
+        logger.info("after --allowed-samples filter, inliers=%d", len(inlier_ids))
     converted_dir = Path(args.tuning_workdir) / f"bin_{binsize}" / "converted"
 
     npz_paths = [converted_dir / f"{sample_id}.npz" for sample_id in inlier_ids]
@@ -71,7 +89,13 @@ def main():
             "--cpus",
             str(args.threads),
         ],
-        Path(args.log),
+        logger,
+    )
+    logger.info(
+        "reference build completed: output=%s samples=%d binsize=%s",
+        args.reference_output,
+        len(npz_paths),
+        binsize,
     )
 
 

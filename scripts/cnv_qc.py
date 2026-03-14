@@ -4,6 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
+from pipeline_logging import setup_logger
+
 
 def load_primary_array(npz_path):
     with np.load(npz_path, allow_pickle=True) as data:
@@ -29,8 +31,11 @@ def main():
     parser.add_argument("--min-total-counts", type=float, required=True)
     parser.add_argument("--min-nonzero-fraction", type=float, required=True)
     parser.add_argument("--max-mad-log1p", type=float, required=True)
+    parser.add_argument("--log", default="", help="Optional log file path")
     args = parser.parse_args()
+    logger = setup_logger("cnv_qc", args.log or None)
 
+    logger.info("start CNV QC for sample=%s npz=%s", args.sample_id, args.npz)
     signal_key, values = load_primary_array(Path(args.npz))
     total_counts = float(np.sum(values))
     nonzero_fraction = float(np.mean(values > 0))
@@ -48,6 +53,16 @@ def main():
     passed = len(fail_reasons) == 0
     status = "PASS" if passed else "FAIL"
     reason_text = "PASS" if passed else ",".join(fail_reasons)
+    logger.info(
+        "metrics sample=%s signal=%s total=%.0f nonzero=%.6f mad_log1p=%.6f status=%s reason=%s",
+        args.sample_id,
+        signal_key,
+        total_counts,
+        nonzero_fraction,
+        mad_log1p,
+        status,
+        reason_text,
+    )
 
     output_tsv = Path(args.output_tsv)
     output_tsv.parent.mkdir(parents=True, exist_ok=True)
@@ -96,13 +111,16 @@ def main():
     svg.extend(bar(top + 2 * (bar_h + gap), "MAD(log1p) / max_mad_log1p", mad_log1p, args.max_mad_log1p, mad_ratio, reverse=True))
     svg.append('</svg>')
     output_plot.write_text("\n".join(svg), encoding="utf-8")
+    logger.info("qc report written: tsv=%s plot=%s", output_tsv, output_plot)
 
     if not passed:
+        logger.error("CNV QC failed for %s: %s", args.sample_id, reason_text)
         raise SystemExit(f"CNV QC failed for {args.sample_id}: {reason_text}")
 
     pass_marker = Path(args.pass_marker)
     pass_marker.parent.mkdir(parents=True, exist_ok=True)
     pass_marker.write_text("PASS\n", encoding="utf-8")
+    logger.info("pass marker written: %s", pass_marker)
 
 
 if __name__ == "__main__":

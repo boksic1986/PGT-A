@@ -165,8 +165,13 @@ CNV:
 Logs are written to:
 - `logs/fastp/`
 - `logs/bwa/`
+- `logs/metadata/`
 - `logs/wisecondorx/`
 - `logs/cnv/`
+
+Python scripts now use the `logging` module for pipeline step tracing
+(start/end, command execution, sample filtering, QC summaries, and failure reasons).
+For key rules, script logging is persisted via `--log` in addition to rule-level shell logs.
 
 Audit metadata in logs includes:
 - `git_branch`
@@ -215,3 +220,110 @@ Temporary files (for ad-hoc debugging/source lookups) are not part of the pipeli
 Ignored by default:
 - `tmp_*`
 - `*.tmp`
+
+## 9. Workflow structure (modularized)
+
+The workflow is now organized into modular rule files:
+
+- `Snakefile`: config loading, target assembly, top-level entry rules, and includes
+- `rules/common_preprocess.smk`: shared preprocessing (`collect_run_metadata`, `fastp_bwa`)
+- `rules/reference_workflow.smk`: reference-only stages (prefilter, tuning, reference build)
+- `rules/predict_workflow.smk`: predict-only stages (`convert`, CNV QC, CNV predict)
+
+This keeps common preprocessing and downstream analysis modes separated while preserving existing rule names, outputs, and DAG behavior.
+
+## 10. Config entry points
+
+In addition to `config.yaml`, two mode-specific config entry files are available:
+
+- `config_reference.yaml`
+  - `base_config: "config.yaml"`
+  - `pipeline.targets: ["mapping", "metadata", "reference_qc", "reference"]`
+- `config_predict.yaml`
+  - `base_config: "config.yaml"`
+  - `pipeline.targets: ["mapping", "metadata", "cnv_qc", "cnv"]`
+
+Run examples:
+
+```bash
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake \
+  -s /home/jiucheng/pipelines/PGT_A/Snakefile \
+  --configfile /path/to/project/config_reference.yaml \
+  --cores 32 -p
+```
+
+```bash
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake \
+  -s /home/jiucheng/pipelines/PGT_A/Snakefile \
+  --configfile /path/to/project/config_predict.yaml \
+  --cores 32 -p
+```
+
+## 11. PGT-A algorithm notes
+
+This section explains algorithm concepts only. Runtime behavior, thresholds, QC logic, CNV logic, mosaic logic, sex logic, and output schema are still defined by code/config.
+
+### 11.1 End-to-end stages
+
+1. Raw data preprocessing
+- FASTQ input
+- FASTQ QC (`fastp`)
+- mapping (`bwa`) + BAM sort/index (`samtools`)
+
+2. Bin-level signal construction
+- convert aligned reads into fixed-size genomic bin signals
+
+3. Reference building
+- estimate normal-background distributions on reference samples
+- optional prefilter and tuning before final reference model generation
+
+4. Predict
+- process test sample with reference-consistent settings
+- quantify deviation from reference
+- call CNV results
+
+### 11.2 Notation
+
+- `X_ij`: raw count/signal of sample `i` at bin `j`
+- `X~_ij`: normalized/corrected bin signal
+- `mu_j`, `sigma_j`: reference mean/std at bin `j`
+- `Z_j`: per-bin z-score for test sample
+
+### 11.3 Typical formulas
+
+Library-size normalization:
+
+`X_norm_ij = X_ij / sum_j X_ij`
+
+z-score:
+
+`Z_j = (X~_tj - mu_j) / sigma_j`
+
+Optional floor-stabilized form:
+
+`Z_j = (X~_tj - mu_j) / max(sigma_j, sigma_min)`
+
+If log-ratio is used by a specific implementation path:
+
+`R_j = log2((X~_tj + eps) / (mu_j + eps))`
+
+### 11.4 PCA / denoising intuition
+
+Reference matrix (sample x bin) can be centered and projected to principal components to capture systematic technical variance (for example GC/batch/amplification effects). Tuning determines suitable bin size / PCA dimension combinations. In this pipeline, this behavior is implemented by tuning scripts and WisecondorX-driven workflows.
+
+### 11.5 Segmentation note
+
+CNV inference commonly performs segmentation over ordered bin signals. Exact segmentation internals are tool-implementation specific; this pipeline delegates core prediction behavior to `WisecondorX predict`.
+
+## 12. Implementation mapping
+
+| Module | Rule / Script | Purpose | Main input | Main output |
+|---|---|---|---|---|
+| metadata | `collect_run_metadata` / `scripts/collect_run_metadata.py` | collect run/tool metadata | project + tool paths | `logs/run_metadata.tsv` |
+| preprocess | `fastp_bwa` | fastq QC + mapping | sample R1/R2 | cleaned FASTQ, sorted BAM/BAI |
+| reference prefilter | `reference_prefilter_*` / `scripts/reference_prefilter_qc.py` | remove unusable/outlier reference samples | reference BAMs | prefilter QC/report/inlier list |
+| reference tuning | `tune_wisecondorx_reference_qc*` / `scripts/tune_wisecondorx_bin_pca.py` | tune bin/PCA and sample QC | prefilter inliers + BAMs | tuning summary/best params/inliers |
+| reference build | `build_wisecondorx_reference_*` / `scripts/build_reference_from_tuning.py` | generate final reference | tuning outputs | reference `.npz` |
+| predict convert | `wisecondorx_convert_for_cnv` | convert BAM to CNV NPZ | sample BAM | CNV NPZ |
+| predict QC | `wisecondorx_qc_for_predict` / `scripts/cnv_qc.py` | per-sample CNV input QC | CNV NPZ | QC TSV/SVG/pass marker |
+| predict | `wisecondorx_predict_cnv` | CNV calling | sample NPZ + reference NPZ | predict outputs + done marker |

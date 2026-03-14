@@ -1,6 +1,27 @@
 configfile: "config.yaml"
 
 from pathlib import Path
+import yaml
+
+
+def merge_config(base, override):
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = merge_config(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+if "base_config" in config:
+    base_cfg_path = Path(config["base_config"])
+    if not base_cfg_path.is_absolute():
+        base_cfg_path = (Path(workflow.basedir) / base_cfg_path).resolve()
+    with open(base_cfg_path, "r", encoding="utf-8") as base_cfg_handle:
+        base_cfg = yaml.safe_load(base_cfg_handle) or {}
+    override_cfg = {k: v for k, v in config.items() if k != "base_config"}
+    config = merge_config(base_cfg, override_cfg)
 
 
 SAMPLES = sorted(config["samples"].keys())
@@ -96,4 +117,73 @@ CNV_DONE = str(Path(CNV_PREDICT_DIR) / "{sample}.done")
 RUN_METADATA = project_path("logs", "run_metadata.tsv")
 PIPELINE_TARGETS = set(PIPELINE_CFG.get("targets", ["mapping", "reference", "cnv"]))
 
-include: "rules/pipeline.smk"
+REQUESTED_TARGETS = set(PIPELINE_TARGETS)
+AVAILABLE_TARGETS = {"mapping", "metadata", "reference"}
+if TUNING_ENABLED: AVAILABLE_TARGETS.add("reference_qc")
+if CNV_ENABLED: AVAILABLE_TARGETS.update({"cnv_qc", "cnv"})
+
+UNKNOWN_TARGETS = sorted(REQUESTED_TARGETS - AVAILABLE_TARGETS)
+if UNKNOWN_TARGETS: raise ValueError(
+    "Unsupported pipeline targets: "
+    + ",".join(UNKNOWN_TARGETS)
+    + f". Available: {','.join(sorted(AVAILABLE_TARGETS))}"
+)
+
+ALL_TARGET_FILES = []
+REFERENCE_QC_TARGET_FILES = []
+if "mapping" in REQUESTED_TARGETS: ALL_TARGET_FILES += expand(SORTED_BAM, sample=SAMPLES) + expand(SORTED_BAI, sample=SAMPLES)
+if "metadata" in REQUESTED_TARGETS: ALL_TARGET_FILES.append(RUN_METADATA)
+if "reference_qc" in REQUESTED_TARGETS and TUNING_ENABLED: REFERENCE_QC_TARGET_FILES += (
+    [
+        p
+        for sex in REF_SEXES
+        for prefilter_dir in [REF_PREFILTER_DIR_BY_SEX[sex]]
+        for tuning_dir in [REF_TUNING_DIR_BY_SEX[sex]]
+        for p in [
+            str(Path(prefilter_dir) / "reference_sample_qc.tsv"),
+            str(Path(prefilter_dir) / "reference_sample_qc.svg"),
+            str(Path(prefilter_dir) / "reference_inlier_samples.txt"),
+            str(Path(prefilter_dir) / "prefilter_summary.yaml"),
+            str(Path(tuning_dir) / "bin_pca_grid.tsv"),
+            str(Path(tuning_dir) / "best_params.yaml"),
+            str(Path(tuning_dir) / "reference_sample_qc.tsv"),
+            str(Path(tuning_dir) / "best_bin_pca_elbow.svg"),
+            str(Path(tuning_dir) / "reference_qc_metrics.svg"),
+            str(Path(tuning_dir) / "reference_inlier_samples.txt"),
+        ]
+    ] if REF_SEXES else [TUNING_SUMMARY, TUNING_BEST, TUNING_QC, TUNING_PLOT, TUNING_QC_STATS_PLOT, TUNING_INLIERS]
+); ALL_TARGET_FILES += REFERENCE_QC_TARGET_FILES
+if "reference" in REQUESTED_TARGETS: ALL_TARGET_FILES += REF_TARGET_FILES
+if "cnv_qc" in REQUESTED_TARGETS and CNV_ENABLED: ALL_TARGET_FILES += expand(CNV_QC_TSV, sample=SAMPLES) + expand(CNV_QC_PLOT, sample=SAMPLES)
+if "cnv" in REQUESTED_TARGETS and CNV_ENABLED: ALL_TARGET_FILES += expand(CNV_DONE, sample=SAMPLES)
+
+
+rule all:
+    input:
+        ALL_TARGET_FILES
+
+
+rule mapping:
+    input:
+        expand(SORTED_BAM, sample=SAMPLES),
+        expand(SORTED_BAI, sample=SAMPLES)
+
+
+rule reference:
+    input:
+        REF_TARGET_FILES
+
+
+rule reference_qc:
+    input:
+        REFERENCE_QC_TARGET_FILES
+
+
+rule cnv:
+    input:
+        expand(CNV_DONE, sample=SAMPLES) if CNV_ENABLED else []
+
+
+include: "rules/common_preprocess.smk"
+include: "rules/reference_workflow.smk"
+include: "rules/predict_workflow.smk"

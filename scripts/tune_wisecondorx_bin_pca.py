@@ -9,6 +9,8 @@ from pathlib import Path
 
 import numpy as np
 
+from pipeline_logging import setup_logger
+
 CHROM_ORDER = tuple(str(index) for index in range(1, 25))
 
 
@@ -19,18 +21,15 @@ def parse_int_list(value):
     return sorted(set(values))
 
 
-def run_command(command, log_path):
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "a", encoding="utf-8") as log_handle:
-        log_handle.write("$ " + " ".join(shlex.quote(part) for part in command) + "\n")
-        log_handle.flush()
+def run_command(command, logger, output_log_path=None):
+    logger.info("$ %s", " ".join(shlex.quote(part) for part in command))
+    if output_log_path is None:
+        subprocess.run(command, check=True)
+        return
+    output_log_path = Path(output_log_path)
+    output_log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_log_path, "a", encoding="utf-8") as log_handle:
         subprocess.run(command, check=True, stdout=log_handle, stderr=log_handle)
-
-
-def append_log_line(log_path, message):
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "a", encoding="utf-8") as log_handle:
-        log_handle.write(message.rstrip("\n") + "\n")
 
 
 def _to_numeric_vector(raw, npz_path, chr_name):
@@ -111,7 +110,7 @@ def build_matrix_from_loaded(loaded):
     return matrix, signal_key
 
 
-def filter_usable_npz(sample_ids, bams, npz_paths, log_path, stage_tag):
+def filter_usable_npz(sample_ids, bams, npz_paths, logger, stage_tag):
     kept_sample_ids = []
     kept_bams = []
     kept_npz_paths = []
@@ -123,9 +122,12 @@ def filter_usable_npz(sample_ids, bams, npz_paths, log_path, stage_tag):
             loaded = load_sample_bins(npz_path)
         except Exception as exc:  # noqa: BLE001
             dropped_samples.append(sample_id)
-            append_log_line(
-                log_path,
-                f"[{stage_tag}] drop sample={sample_id} npz={npz_path} reason={str(exc)}",
+            logger.warning(
+                "[%s] drop sample=%s npz=%s reason=%s",
+                stage_tag,
+                sample_id,
+                npz_path,
+                str(exc),
             )
             continue
         kept_sample_ids.append(sample_id)
@@ -134,9 +136,11 @@ def filter_usable_npz(sample_ids, bams, npz_paths, log_path, stage_tag):
         kept_loaded.append(loaded)
 
     if dropped_samples:
-        append_log_line(
-            log_path,
-            f"[{stage_tag}] dropped unusable NPZ samples ({len(dropped_samples)}): {','.join(sorted(dropped_samples))}",
+        logger.warning(
+            "[%s] dropped unusable NPZ samples (%d): %s",
+            stage_tag,
+            len(dropped_samples),
+            ",".join(sorted(dropped_samples)),
         )
 
     return kept_sample_ids, kept_bams, kept_npz_paths, kept_loaded, dropped_samples
@@ -508,20 +512,20 @@ def write_reference_qc_svg(output_path, rows, qc_cfg):
         handle.write("\n".join(out))
 
 
-def convert_all_bams(wisecondorx, bams, sample_ids, binsize, output_dir, threads, log_path):
+def convert_all_bams(wisecondorx, bams, sample_ids, binsize, output_dir, threads, logger):
     output_dir.mkdir(parents=True, exist_ok=True)
     sample_npz_pairs = [(sample_id, bam_path, output_dir / f"{sample_id}.npz") for sample_id, bam_path in zip(sample_ids, bams)]
     npz_paths = [item[2] for item in sample_npz_pairs]
     pending = [(sample_id, bam_path, npz_path) for sample_id, bam_path, npz_path in sample_npz_pairs if not npz_path.exists()]
     if not pending:
-        append_log_line(log_path, f"[convert] reused existing npz files: {len(npz_paths)} (binsize={binsize})")
+        logger.info("[convert] reused existing npz files: %d (binsize=%s)", len(npz_paths), binsize)
         return npz_paths
 
     convert_log_dir = output_dir / "convert_logs"
     convert_log_dir.mkdir(parents=True, exist_ok=True)
 
     max_workers = max(1, min(int(threads), len(pending)))
-    append_log_line(log_path, f"[convert] start binsize={binsize} pending={len(pending)} workers={max_workers}")
+    logger.info("[convert] start binsize=%s pending=%d workers=%d", binsize, len(pending), max_workers)
 
     def convert_one(sample_id, bam_path, npz_path):
         sample_log = convert_log_dir / f"{sample_id}.convert.log"
@@ -534,6 +538,7 @@ def convert_all_bams(wisecondorx, bams, sample_ids, binsize, output_dir, threads
                 "--binsize",
                 str(binsize),
             ],
+            logger,
             sample_log,
         )
         return sample_id, npz_path, sample_log
@@ -541,18 +546,18 @@ def convert_all_bams(wisecondorx, bams, sample_ids, binsize, output_dir, threads
     if max_workers == 1:
         for sample_id, bam_path, npz_path in pending:
             sid, out_npz, sample_log = convert_one(sample_id, bam_path, npz_path)
-            append_log_line(log_path, f"[convert] done sample={sid} npz={out_npz} log={sample_log}")
+            logger.info("[convert] done sample=%s npz=%s log=%s", sid, out_npz, sample_log)
     else:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(convert_one, sample_id, bam_path, npz_path) for sample_id, bam_path, npz_path in pending]
             for future in as_completed(futures):
                 sid, out_npz, sample_log = future.result()
-                append_log_line(log_path, f"[convert] done sample={sid} npz={out_npz} log={sample_log}")
+                logger.info("[convert] done sample=%s npz=%s log=%s", sid, out_npz, sample_log)
 
     return npz_paths
 
 
-def build_reference(wisecondorx, binsize, npz_paths, reference_output, threads, log_path):
+def build_reference(wisecondorx, binsize, npz_paths, reference_output, threads, logger):
     reference_output.parent.mkdir(parents=True, exist_ok=True)
     run_command(
         [
@@ -565,7 +570,7 @@ def build_reference(wisecondorx, binsize, npz_paths, reference_output, threads, 
             "--cpus",
             str(threads),
         ],
-        log_path,
+        logger,
     )
 
 
@@ -598,6 +603,15 @@ def main():
     parser.add_argument("--skip-build-reference", action="store_true")
     parser.add_argument("--log", required=True)
     args = parser.parse_args()
+    logger = setup_logger("tune_wisecondorx_bin_pca", args.log)
+    logger.info(
+        "start tuning: samples=%d bins=%s threads=%d pca=[%d,%d]",
+        len(args.sample_ids),
+        args.bin_sizes,
+        args.threads,
+        args.pca_min_components,
+        args.pca_max_components,
+    )
 
     bams = [Path(path) for path in args.bams]
     sample_ids = args.sample_ids
@@ -636,7 +650,6 @@ def main():
     qc_stats_plot_output = Path(args.qc_stats_plot_output)
     inlier_samples_output = Path(args.inlier_samples_output)
     reference_output = Path(args.reference_output)
-    log_path = Path(args.log)
 
     rows = []
     per_bin_details = {}
@@ -651,7 +664,7 @@ def main():
             binsize=binsize,
             output_dir=converted_dir,
             threads=args.threads,
-            log_path=log_path,
+            logger=logger,
         )
 
         (
@@ -660,7 +673,7 @@ def main():
             usable_npz_paths,
             loaded_arrays,
             dropped_npz_samples,
-        ) = filter_usable_npz(sample_ids, bams, npz_paths, log_path, stage_tag=f"tuning/bin_{binsize}")
+        ) = filter_usable_npz(sample_ids, bams, npz_paths, logger, stage_tag=f"tuning/bin_{binsize}")
         usable_count = len(usable_sample_ids)
         if usable_count < 3:
             rows.append(
@@ -793,8 +806,15 @@ def main():
             npz_paths=inlier_npz,
             reference_output=reference_output,
             threads=args.threads,
-            log_path=log_path,
+            logger=logger,
         )
+    logger.info(
+        "tuning completed: bins=%d best_binsize=%s best_pca=%s inliers=%d",
+        len(bin_sizes),
+        best_row["binsize"],
+        best_row["selected_pca"],
+        len(inlier_npz),
+    )
 
 
 if __name__ == "__main__":

@@ -4,6 +4,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from pipeline_logging import setup_logger
+
 
 def run_text(command, cwd=None):
     try:
@@ -32,11 +34,14 @@ def main():
     parser.add_argument("--samtools", required=True)
     parser.add_argument("--wisecondorx", required=True)
     parser.add_argument("--python-bin", required=True)
+    parser.add_argument("--log", default="", help="Optional log file path")
     args = parser.parse_args()
+    logger = setup_logger("collect_run_metadata", args.log or None)
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     project_root = Path(args.project_root)
+    logger.info("collecting run metadata under %s", project_root)
 
     rows = []
     rows.append(("generated_utc", datetime.now(timezone.utc).isoformat()))
@@ -54,6 +59,7 @@ def main():
         handle.write("key\tvalue\n")
         for key, value in rows:
             handle.write(f"{key}\t{value}\n")
+    logger.info("metadata written: %s (%d rows)", output, len(rows))
 
 
 if __name__ == "__main__":

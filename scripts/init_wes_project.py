@@ -3,12 +3,17 @@
 # Author: jiucheng
 # Updated: 2026/03/09
 import argparse
+import logging
 import re
 import shutil
 from collections import defaultdict
 from pathlib import Path
 
 import yaml
+
+from pipeline_logging import setup_logger
+
+LOGGER = logging.getLogger("init_wes_project")
 
 
 def detect_samples(fq_dir: Path) -> dict:
@@ -148,27 +153,21 @@ def parse_reference_rules_from_excel(sample_info_xlsx: Path):
         raise ValueError(f"Empty excel file: {sample_info_xlsx}")
 
     header = [str(x).strip() if x is not None else "" for x in rows[0]]
-    normalized = [re.sub(r"[\s_]+", "", h).lower() for h in header]
+    col_map = {str(h).strip().lower(): idx for idx, h in enumerate(header)}
 
-    def find_col(candidates):
-        candidate_norm = [re.sub(r"[\s_]+", "", c).lower() for c in candidates]
-        for i, item in enumerate(normalized):
-            if item in candidate_norm:
-                return i
-        for i, item in enumerate(normalized):
-            for key in candidate_norm:
-                if key and key in item:
-                    return i
-        return None
-
-    idx_batch = find_col(["\u6279\u6b21", "batch", "batchid", "batchno"])
-    idx_list = find_col(["\u6837\u672c\u6e05\u5355", "\u6837\u672cid", "samplelist", "sampleid", "samples", "sample_ids"])
-    idx_sex = find_col(["\u6027\u522b", "sex", "gender"])
-    if idx_batch is None or idx_list is None or idx_sex is None:
+    required_cols = ["batch", "sample_ids", "sample_type", "sex"]
+    missing = [col for col in required_cols if col not in col_map]
+    if missing:
         raise ValueError(
-            "Cannot detect excel columns for batch/sample-list/sex. "
-            f"Header={header}"
+            "Excel is missing required columns: "
+            + ",".join(missing)
+            + f". Header={header}"
         )
+
+    idx_batch = col_map["batch"]
+    idx_list = col_map["sample_ids"]
+    idx_type = col_map["sample_type"]
+    idx_sex = col_map["sex"]
 
     current_batch = ""
 
@@ -193,10 +192,11 @@ def parse_reference_rules_from_excel(sample_info_xlsx: Path):
     for row in rows[1:]:
         batch_cell = row[idx_batch] if idx_batch < len(row) else None
         list_cell = row[idx_list] if idx_list < len(row) else None
+        type_cell = row[idx_type] if idx_type < len(row) else None
         sex_cell = row[idx_sex] if idx_sex < len(row) else None
         if batch_cell:
             current_batch = str(batch_cell).strip()
-        if not current_batch or not list_cell or not sex_cell:
+        if not current_batch or not list_cell or not type_cell or not sex_cell:
             continue
         sex = str(sex_cell).strip().upper()
         if sex not in {"XX", "XY"}:
@@ -225,9 +225,7 @@ def key_for_batch3(sample_id: str):
     s = sample_id.replace("_", "-")
     m = re.search(r"-([0-9]+)-([0-9]+)(?:[._-].*)?$", s)
     if m:
-        if m.group(1) == m.group(2):
-            return str(int(m.group(1)))
-        return None
+        return str(int(m.group(1)))
     m = re.search(r"-([0-9]+)(?:[._-].*)?$", s)
     if m:
         return str(int(m.group(1)))
@@ -254,21 +252,47 @@ def build_groups_by_rules(rules, detected, key_getter):
     return groups
 
 
+def sort_group_items(items):
+    unique_items = set(items)
+    return sorted(unique_items, key=lambda x: (1, int(str(x))) if str(x).isdigit() else (0, str(x)))
+
+
 def select_reference_groups(sample_info_xlsx: Path, batch2_dir: Path, batch3_dir: Path):
     rules = parse_reference_rules_from_excel(sample_info_xlsx)
 
-    rules_batch2 = [r for r in rules if r.get("batch_group") == "batch2"]
+    allowed_batch2_ids = {chr(x) for x in range(ord("A"), ord("H") + 1)}
+    rules_batch2 = []
+    for rule in rules:
+        if rule.get("batch_group") != "batch2":
+            continue
+        if rule.get("sex") != "XY":
+            continue
+        filtered_ids = [token for token in rule.get("ids", []) if str(token).upper() in allowed_batch2_ids]
+        if not filtered_ids:
+            continue
+        new_rule = dict(rule)
+        new_rule["ids"] = filtered_ids
+        rules_batch2.append(new_rule)
     rules_batch3 = [r for r in rules if r.get("batch_group") == "batch3"]
 
     samples_batch2 = detect_samples(batch2_dir)
     samples_batch3 = detect_samples(batch3_dir)
 
     groups2 = build_groups_by_rules(rules_batch2, samples_batch2, key_for_batch2)
+    allowed_batch2_heads = {chr(x) for x in range(ord("A"), ord("H") + 1)}
+    groups2["XX"] = []
+    groups2["XY"] = sorted({
+        key_for_batch2(sample_id)
+        for sample_id in groups2.get("XY", [])
+        if key_for_batch2(sample_id) in allowed_batch2_heads
+    })
     groups3 = build_groups_by_rules(rules_batch3, samples_batch3, key_for_batch3)
+    groups3["XX"] = sorted({key_for_batch3(sample_id) for sample_id in groups3.get("XX", []) if key_for_batch3(sample_id)}, key=int)
+    groups3["XY"] = sorted({key_for_batch3(sample_id) for sample_id in groups3.get("XY", []) if key_for_batch3(sample_id)}, key=int)
 
     merged = {"XX": [], "XY": []}
     for sex in ["XX", "XY"]:
-        merged[sex] = sorted(set(groups2.get(sex, []) + groups3.get(sex, [])))
+        merged[sex] = sort_group_items(groups2.get(sex, []) + groups3.get(sex, []))
     return merged
 
 
@@ -280,6 +304,28 @@ def merge_samples_with_batch(sample_dict, batch_label):
             key = f"{sample_id}_{batch_label}"
         merged[key] = {"R1": str(Path(pair["R1"]).resolve()), "R2": str(Path(pair["R2"]).resolve())}
     return merged
+
+
+def remap_batch2_samples_to_letter_id(sample_dict):
+    remapped = {}
+    for sample_id, pair in sample_dict.items():
+        letter_id = key_for_batch2(sample_id)
+        key = letter_id if letter_id is not None else sample_id
+        if key in remapped:
+            raise ValueError(f"Duplicate batch2 sample letter id detected: {key}")
+        remapped[key] = pair
+    return remapped
+
+
+def remap_batch3_samples_to_numeric_id(sample_dict):
+    remapped = {}
+    for sample_id, pair in sample_dict.items():
+        numeric_id = key_for_batch3(sample_id)
+        key = numeric_id if numeric_id is not None else sample_id
+        if key in remapped:
+            raise ValueError(f"Duplicate batch3 sample numeric id detected: {key}")
+        remapped[key] = pair
+    return remapped
 
 
 def resolve_sample_info_xlsx(path_value: str, project_root: Path | None = None):
@@ -318,8 +364,8 @@ def build_reference_groups_into_config(
         config = load_template_config()
         config["core"]["project_path"] = str(project_root)
 
-    samples_batch2 = detect_samples(Path(batch2_fq_dir))
-    samples_batch3 = detect_samples(Path(batch3_fq_dir))
+    samples_batch2 = remap_batch2_samples_to_letter_id(detect_samples(Path(batch2_fq_dir)))
+    samples_batch3 = remap_batch3_samples_to_numeric_id(detect_samples(Path(batch3_fq_dir)))
     merged_samples = {}
     merged_samples.update(merge_samples_with_batch(samples_batch2, "B2"))
     for sample_id, pair in merge_samples_with_batch(samples_batch3, "B3").items():
@@ -347,8 +393,8 @@ def build_reference_groups_into_config(
     config_file.parent.mkdir(parents=True, exist_ok=True)
     with open(config_file, "w", encoding="utf-8") as handle:
         yaml.safe_dump(config, handle, sort_keys=False, allow_unicode=True)
-    print(f"Build-reference groups updated: XX={len(groups['XX'])}, XY={len(groups['XY'])}")
-    print(f"Config updated at {config_file}")
+    LOGGER.info("build_reference groups updated: XX=%d XY=%d", len(groups["XX"]), len(groups["XY"]))
+    LOGGER.info("config updated: %s", config_file)
 
 
 def init_config(
@@ -384,6 +430,7 @@ def init_config(
         "wisecondorx/cnv/predict",
         "logs/fastp",
         "logs/bwa",
+        "logs/metadata",
         "logs/wisecondorx",
         "logs/cnv",
     ]:
@@ -419,21 +466,21 @@ def init_config(
             "batch3": str(batch3_fq_dir),
         }
         config["build_reference"]["groups"] = groups
-        print(f"Reference groups from excel: XX={len(groups['XX'])}, XY={len(groups['XY'])}")
+        LOGGER.info("reference groups from excel: XX=%d XY=%d", len(groups["XX"]), len(groups["XY"]))
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
     with open(config_path, "w", encoding="utf-8") as handle:
         yaml.safe_dump(config, handle, sort_keys=False, allow_unicode=True)
-    print(f"Config written to {config_path}")
+    LOGGER.info("config written: %s", config_path)
 
     if template_snakefile:
         snakefile_src = Path(template_snakefile).resolve()
         snakefile_dst = project / "Snakefile"
         if snakefile_src.exists():
             shutil.copy(snakefile_src, snakefile_dst)
-            print(f"Snakefile copied to {snakefile_dst}")
+            LOGGER.info("Snakefile copied to %s", snakefile_dst)
         else:
-            print(f"Warning: Snakefile not found at {snakefile_src}")
+            LOGGER.warning("Snakefile not found at %s", snakefile_src)
 
 
 if __name__ == "__main__":
@@ -475,7 +522,9 @@ if __name__ == "__main__":
         required=False,
         help="Optional path to template Snakefile",
     )
+    parser.add_argument("--log", default="", help="Optional log file path")
     args = parser.parse_args()
+    LOGGER = setup_logger("init_wes_project", args.log or None)
     if args.action == "init_config":
         if not args.project or not args.fq_dir:
             raise ValueError("--project and --fq_dir are required for --action init_config")
