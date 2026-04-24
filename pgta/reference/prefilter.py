@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/biosoftware/miniconda/envs/snakemake_env/bin/python
 import argparse
 import math
 import shlex
@@ -8,9 +8,10 @@ from pathlib import Path
 
 import numpy as np
 
-from pipeline_logging import setup_logger
+from pgta.core.logging import setup_logger
 
-CHROM_ORDER = tuple(str(index) for index in range(1, 25))
+CHROM_ORDER = tuple(str(index) for index in range(1, 23))
+SIGNAL_KEY = "sample_dict_chr1_22_aligned"
 
 
 def run_command(command, logger, output_log_path=None):
@@ -98,7 +99,7 @@ def build_matrix_from_loaded(loaded):
     matrix = np.vstack(row_vectors)
     if matrix.shape[1] < 100:
         raise ValueError("Too few usable bins after chromosome alignment (<100).")
-    signal_key = "sample_dict_chr1_24_aligned"
+    signal_key = SIGNAL_KEY
     return matrix, signal_key
 
 
@@ -401,64 +402,62 @@ def convert_all_bams(wisecondorx, bams, sample_ids, binsize, output_dir, threads
     return npz_paths
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Iterative reference sample prefiltering for WisecondorX.")
-    parser.add_argument("--wisecondorx", required=True)
-    parser.add_argument("--bams", nargs="+", required=True)
-    parser.add_argument("--sample-ids", nargs="+", required=True)
-    parser.add_argument("--binsize", type=int, default=100000)
-    parser.add_argument("--pca-min-components", type=int, default=2)
-    parser.add_argument("--pca-max-components", type=int, default=20)
-    parser.add_argument("--min-reference-samples", type=int, default=8)
-    parser.add_argument("--min-reads-per-sample", type=float, default=3_000_000)
-    parser.add_argument("--min-corr-to-median", type=float, default=0.9)
-    parser.add_argument("--max-reconstruction-error-z", type=float, default=3.5)
-    parser.add_argument("--max-noise-mad-z", type=float, default=3.5)
-    parser.add_argument("--max-iterations", type=int, default=3)
-    parser.add_argument("--threads", type=int, default=4)
-    parser.add_argument("--workdir", required=True)
-    parser.add_argument("--qc-output", required=True)
-    parser.add_argument("--plot-output", required=True)
-    parser.add_argument("--inlier-samples-output", required=True)
-    parser.add_argument("--summary-output", required=True)
-    parser.add_argument("--log", required=True)
-    args = parser.parse_args()
-    logger = setup_logger("reference_prefilter_qc", args.log)
+def run_reference_prefilter_qc(
+    wisecondorx,
+    bams,
+    sample_ids,
+    binsize,
+    pca_min_components,
+    pca_max_components,
+    min_reference_samples,
+    min_reads_per_sample,
+    min_corr_to_median,
+    max_reconstruction_error_z,
+    max_noise_mad_z,
+    max_iterations,
+    threads,
+    workdir,
+    qc_output,
+    plot_output,
+    inlier_samples_output,
+    summary_output,
+    logger,
+):
     logger.info(
         "start prefilter: samples=%d binsize=%s threads=%d max_iterations=%d",
-        len(args.sample_ids),
-        args.binsize,
-        args.threads,
-        args.max_iterations,
+        len(sample_ids),
+        binsize,
+        threads,
+        max_iterations,
     )
 
-    bams = [Path(path) for path in args.bams]
-    sample_ids = args.sample_ids
+    bams = [Path(path) for path in bams]
+    sample_ids = list(sample_ids)
     if len(bams) != len(sample_ids):
         raise ValueError("--bams and --sample-ids must contain the same number of items.")
-    if len(sample_ids) < args.min_reference_samples:
+    if len(sample_ids) < min_reference_samples:
         raise ValueError("Input samples are fewer than --min-reference-samples.")
 
     qc_cfg = {
-        "min_reads_per_sample": args.min_reads_per_sample,
-        "min_corr_to_median": args.min_corr_to_median,
-        "max_reconstruction_error_z": args.max_reconstruction_error_z,
-        "max_noise_mad_z": args.max_noise_mad_z,
+        "min_reads_per_sample": min_reads_per_sample,
+        "min_corr_to_median": min_corr_to_median,
+        "max_reconstruction_error_z": max_reconstruction_error_z,
+        "max_noise_mad_z": max_noise_mad_z,
     }
 
-    workdir = Path(args.workdir)
-    qc_output = Path(args.qc_output)
-    plot_output = Path(args.plot_output)
-    inlier_samples_output = Path(args.inlier_samples_output)
-    summary_output = Path(args.summary_output)
+    workdir = Path(workdir)
+    qc_output = Path(qc_output)
+    plot_output = Path(plot_output)
+    inlier_samples_output = Path(inlier_samples_output)
+    summary_output = Path(summary_output)
 
     npz_paths = convert_all_bams(
-        wisecondorx=args.wisecondorx,
+        wisecondorx=wisecondorx,
         bams=bams,
         sample_ids=sample_ids,
-        binsize=args.binsize,
+        binsize=binsize,
         output_dir=workdir / "converted",
-        threads=args.threads,
+        threads=threads,
         logger=logger,
     )
 
@@ -469,11 +468,11 @@ def main():
         loaded_arrays,
         dropped_npz_samples,
     ) = filter_usable_npz(sample_ids, bams, npz_paths, logger)
-    if len(sample_ids) < args.min_reference_samples:
+    if len(sample_ids) < min_reference_samples:
         dropped_text = ",".join(sorted(dropped_npz_samples)) if dropped_npz_samples else "none"
         raise ValueError(
             "Usable samples after NPZ validation are fewer than --min-reference-samples: "
-            f"{len(sample_ids)} < {args.min_reference_samples}. dropped={dropped_text}"
+            f"{len(sample_ids)} < {min_reference_samples}. dropped={dropped_text}"
         )
 
     matrix_raw, signal_key = build_matrix_from_loaded(loaded_arrays)
@@ -488,17 +487,17 @@ def main():
     elbow_pca = 0
     completed_iterations = 0
 
-    for iteration in range(1, args.max_iterations + 1):
+    for iteration in range(1, max_iterations + 1):
         completed_iterations = iteration
         current_indices = [idx_map[s] for s in current_ids]
         current_matrix = matrix[current_indices, :]
         current_totals = totals[current_indices]
-        max_components = min(args.pca_max_components, current_matrix.shape[0] - 1, current_matrix.shape[1])
+        max_components = min(pca_max_components, current_matrix.shape[0] - 1, current_matrix.shape[1])
         if max_components < 1:
             break
         standardized, vt, _, cumulative = pca_profile(current_matrix, max_components)
         elbow_pca = find_elbow_component(cumulative)
-        selected_pca = max(min(args.pca_min_components, max_components), elbow_pca)
+        selected_pca = max(min(pca_min_components, max_components), elbow_pca)
         selected_pca = min(selected_pca, max_components)
 
         metrics = sample_qc_metrics(current_ids, current_matrix, current_totals, standardized, vt, selected_pca)
@@ -506,7 +505,7 @@ def main():
         last_metrics = metrics
         if not outliers:
             break
-        if len(inliers) < args.min_reference_samples:
+        if len(inliers) < min_reference_samples:
             break
         outlier_ids = {row["sample_id"] for row in outliers}
         for row in outliers:
@@ -540,8 +539,8 @@ def main():
             row["reasons"] = removed_state[sample_id]["reasons"] if sample_id in final_outlier_ids else "PASS"
         rows_for_output.append(row)
 
-    if len(current_ids) < args.min_reference_samples:
-        raise ValueError(f"Prefilter leaves only {len(current_ids)} inliers, below minimum {args.min_reference_samples}.")
+    if len(current_ids) < min_reference_samples:
+        raise ValueError(f"Prefilter leaves only {len(current_ids)} inliers, below minimum {min_reference_samples}.")
 
     write_qc_table(qc_output, rows_for_output, removed_state)
     write_qc_svg(plot_output, rows_for_output, qc_cfg)
@@ -549,7 +548,7 @@ def main():
     write_summary(
         summary_output,
         {
-            "binsize": args.binsize,
+            "binsize": binsize,
             "signal_key": signal_key,
             "input_samples": len(sample_ids),
             "final_inliers": len(current_ids),
@@ -569,6 +568,52 @@ def main():
         len(dropped_npz_samples),
         selected_pca,
         elbow_pca,
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Iterative reference sample prefiltering for WisecondorX.")
+    parser.add_argument("--wisecondorx", required=True)
+    parser.add_argument("--bams", nargs="+", required=True)
+    parser.add_argument("--sample-ids", nargs="+", required=True)
+    parser.add_argument("--binsize", type=int, default=100000)
+    parser.add_argument("--pca-min-components", type=int, default=2)
+    parser.add_argument("--pca-max-components", type=int, default=20)
+    parser.add_argument("--min-reference-samples", type=int, default=8)
+    parser.add_argument("--min-reads-per-sample", type=float, default=3_000_000)
+    parser.add_argument("--min-corr-to-median", type=float, default=0.9)
+    parser.add_argument("--max-reconstruction-error-z", type=float, default=3.5)
+    parser.add_argument("--max-noise-mad-z", type=float, default=3.5)
+    parser.add_argument("--max-iterations", type=int, default=3)
+    parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--workdir", required=True)
+    parser.add_argument("--qc-output", required=True)
+    parser.add_argument("--plot-output", required=True)
+    parser.add_argument("--inlier-samples-output", required=True)
+    parser.add_argument("--summary-output", required=True)
+    parser.add_argument("--log", required=True)
+    args = parser.parse_args()
+    logger = setup_logger("reference_prefilter_qc", args.log)
+    run_reference_prefilter_qc(
+        wisecondorx=args.wisecondorx,
+        bams=args.bams,
+        sample_ids=args.sample_ids,
+        binsize=args.binsize,
+        pca_min_components=args.pca_min_components,
+        pca_max_components=args.pca_max_components,
+        min_reference_samples=args.min_reference_samples,
+        min_reads_per_sample=args.min_reads_per_sample,
+        min_corr_to_median=args.min_corr_to_median,
+        max_reconstruction_error_z=args.max_reconstruction_error_z,
+        max_noise_mad_z=args.max_noise_mad_z,
+        max_iterations=args.max_iterations,
+        threads=args.threads,
+        workdir=args.workdir,
+        qc_output=args.qc_output,
+        plot_output=args.plot_output,
+        inlier_samples_output=args.inlier_samples_output,
+        summary_output=args.summary_output,
+        logger=logger,
     )
 
 

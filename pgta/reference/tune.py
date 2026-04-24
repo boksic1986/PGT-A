@@ -1,17 +1,19 @@
-#!/usr/bin/env python3
+#!/biosoftware/miniconda/envs/snakemake_env/bin/python
 import argparse
 import math
 import shlex
 import shutil
 import subprocess
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
 
-from pipeline_logging import setup_logger
+from pgta.core.logging import setup_logger
 
-CHROM_ORDER = tuple(str(index) for index in range(1, 25))
+CHROM_ORDER = tuple(str(index) for index in range(1, 23))
+SIGNAL_KEY = "sample_dict_chr1_22_aligned"
 
 
 def parse_int_list(value):
@@ -106,7 +108,7 @@ def build_matrix_from_loaded(loaded):
     matrix = np.vstack(row_vectors)
     if matrix.shape[1] < 100:
         raise ValueError("Too few usable bins after chromosome alignment (<100).")
-    signal_key = "sample_dict_chr1_24_aligned"
+    signal_key = SIGNAL_KEY
     return matrix, signal_key
 
 
@@ -172,6 +174,8 @@ def pca_profile(matrix, max_components):
     limit = min(max_components, explained.size)
     explained = explained[:limit]
     cumulative = np.cumsum(explained)
+    if np.any(np.diff(cumulative) < -1e-12):
+        raise ValueError("PCA cumulative explained variance must be non-decreasing.")
     return standardized, vt, explained, cumulative
 
 
@@ -311,7 +315,15 @@ def label_outliers(metrics, qc_cfg):
     return inliers, outliers
 
 
-def write_pca_svg(plot_path, explained, cumulative, elbow_component, min_explained):
+def write_pca_profile_tsv(profile_path, explained, cumulative):
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(profile_path, "w", encoding="utf-8") as handle:
+        handle.write("component\texplained_variance_ratio\tcumulative_explained_variance_ratio\n")
+        for index, (component_var, cumulative_var) in enumerate(zip(explained, cumulative), start=1):
+            handle.write(f"{index}\t{component_var:.10f}\t{cumulative_var:.10f}\n")
+
+
+def write_pca_svg(plot_path, binsize, explained, cumulative, elbow_component, min_explained):
     plot_path.parent.mkdir(parents=True, exist_ok=True)
     width, height = 980, 640
     left, right, top, bottom = 90, 40, 60, 80
@@ -349,6 +361,7 @@ def write_pca_svg(plot_path, explained, cumulative, elbow_component, min_explain
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#ffffff" />',
         f'<text x="{left}" y="35" font-size="22" font-family="Arial, sans-serif" fill="#111111">PCA Cumulative Explained Variance</text>',
+        f'<text x="{left}" y="56" font-size="12" font-family="Arial, sans-serif" fill="#475569">Current binsize={binsize}; cumulative values are computed within this binsize only.</text>',
         f'<line x1="{left}" y1="{top + chart_height}" x2="{left + chart_width}" y2="{top + chart_height}" stroke="#222222" stroke-width="1"/>',
         f'<line x1="{left}" y1="{top}" x2="{left}" y2="{top + chart_height}" stroke="#222222" stroke-width="1"/>',
         f'<polyline fill="none" stroke="#0f766e" stroke-width="3" points="{points}" />',
@@ -388,15 +401,119 @@ def write_summary(summary_output, rows):
     summary_output.parent.mkdir(parents=True, exist_ok=True)
     with open(summary_output, "w", encoding="utf-8") as handle:
         handle.write(
-            "binsize\tselected_pca\telbow_pca\tcum_explained_variance\tcv_reconstruction_mse\t"
+            "binsize\tpca_components\tselected_pca\telbow_pca\tcum_explained_variance\tcomponent_explained_variance\t"
+            "component_cum_explained_variance\tis_selected_pca\tpca_profile_tsv\tcv_reconstruction_mse\t"
             "inliers\toutliers\toutlier_fraction\tsignal_key\tsamples\tfeatures\tstatus\n"
         )
         for row in rows:
             cv_mse = "NA" if row["cv_mse"] is None else f"{row['cv_mse']:.10f}"
             handle.write(
-                f"{row['binsize']}\t{row['selected_pca']}\t{row['elbow_pca']}\t{row['cum_var']:.6f}\t{cv_mse}\t"
+                f"{row['binsize']}\t{row['pca_components']}\t{row['selected_pca']}\t{row['elbow_pca']}\t{row['cum_var']:.6f}\t"
+                f"{row['component_var']:.6f}\t{row['component_cum_var']:.6f}\t"
+                f"{str(row['is_selected_pca']).lower()}\t{row['pca_profile_tsv']}\t{cv_mse}\t"
                 f"{row['inliers']}\t{row['outliers']}\t{row['outlier_fraction']:.6f}\t{row['signal_key']}\t"
                 f"{row['samples']}\t{row['features']}\t{row['status']}\n"
+            )
+
+
+def _best_pass_row_sort_key(row):
+    cv_mse = row["cv_mse"] if row["cv_mse"] is not None else float("inf")
+    return (
+        0 if row["is_selected_pca"] else 1,
+        -int(row["inliers"]),
+        float(row["outlier_fraction"]),
+        float(cv_mse),
+        int(row["pca_components"]),
+        int(row["binsize"]),
+    )
+
+
+def summarize_binsize_candidates(rows):
+    grouped = defaultdict(list)
+    for row in rows:
+        grouped[int(row["binsize"])].append(row)
+
+    summaries = []
+    for binsize in sorted(grouped):
+        bin_rows = grouped[binsize]
+        pass_rows = [row for row in bin_rows if row["status"] == "PASS" and row["cv_mse"] is not None]
+        best_row = min(pass_rows, key=_best_pass_row_sort_key) if pass_rows else None
+        fallback_row = min(
+            bin_rows,
+            key=lambda row: (
+                0 if row["is_selected_pca"] else 1,
+                str(row["status"]),
+                int(row["pca_components"]),
+            ),
+        )
+        chosen_row = best_row or fallback_row
+        cv_mse = chosen_row["cv_mse"]
+        summaries.append(
+            {
+                "binsize": binsize,
+                "tested_rows": len(bin_rows),
+                "pass_rows": len(pass_rows),
+                "status": "PASS" if best_row is not None else chosen_row["status"],
+                "best_row": chosen_row,
+                "best_pca_components": int(chosen_row["pca_components"]),
+                "selected_pca": int(chosen_row["selected_pca"]),
+                "is_selected_pca": bool(chosen_row["is_selected_pca"]),
+                "best_cv_mse": cv_mse,
+                "best_inliers": int(chosen_row["inliers"]),
+                "best_outliers": int(chosen_row["outliers"]),
+                "best_outlier_fraction": float(chosen_row["outlier_fraction"]),
+                "best_samples": int(chosen_row["samples"]),
+                "best_features": int(chosen_row["features"]),
+                "selection_rank": 0,
+                "is_best_binsize": False,
+                "selection_reason": "",
+            }
+        )
+
+    valid = [row for row in summaries if row["status"] == "PASS" and row["best_cv_mse"] is not None]
+    if not valid:
+        raise ValueError("No binsize passed strict QC and CV constraints.")
+
+    ranked = sorted(
+        valid,
+        key=lambda row: (
+            -int(row["best_inliers"]),
+            float(row["best_outlier_fraction"]),
+            float(row["best_cv_mse"]),
+            int(row["binsize"]),
+        ),
+    )
+    for rank, summary in enumerate(ranked, start=1):
+        summary["selection_rank"] = rank
+        summary["is_best_binsize"] = rank == 1
+        summary["selection_reason"] = (
+            "ranked_by=max_inliers,min_outlier_fraction,min_cv_reconstruction_mse,smaller_binsize; "
+            f"inliers={summary['best_inliers']}; "
+            f"outlier_fraction={summary['best_outlier_fraction']:.6f}; "
+            f"cv_reconstruction_mse={summary['best_cv_mse']:.10f}; "
+            f"best_pca={summary['best_pca_components']}"
+        )
+
+    return summaries, ranked[0], ranked[0]["best_row"]
+
+
+def write_binsize_summary(output_path, summaries):
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as handle:
+        handle.write(
+            "binsize\tstatus\ttested_rows\tpass_rows\tbest_pca_components\tselected_pca\tis_selected_pca\t"
+            "best_cv_reconstruction_mse\tbest_inliers\tbest_outliers\tbest_outlier_fraction\tbest_samples\t"
+            "best_features\tselection_rank\tis_best_binsize\tselection_reason\n"
+        )
+        for summary in sorted(summaries, key=lambda row: int(row["binsize"])):
+            cv_mse = "NA" if summary["best_cv_mse"] is None else f"{summary['best_cv_mse']:.10f}"
+            selection_rank = summary["selection_rank"] if summary["selection_rank"] else "NA"
+            handle.write(
+                f"{summary['binsize']}\t{summary['status']}\t{summary['tested_rows']}\t{summary['pass_rows']}\t"
+                f"{summary['best_pca_components']}\t{summary['selected_pca']}\t{str(summary['is_selected_pca']).lower()}\t"
+                f"{cv_mse}\t{summary['best_inliers']}\t{summary['best_outliers']}\t{summary['best_outlier_fraction']:.6f}\t"
+                f"{summary['best_samples']}\t{summary['best_features']}\t{selection_rank}\t"
+                f"{str(summary['is_best_binsize']).lower()}\t{summary['selection_reason']}\n"
             )
 
 
@@ -404,12 +521,17 @@ def write_best_yaml(best_output, best_row):
     best_output.parent.mkdir(parents=True, exist_ok=True)
     with open(best_output, "w", encoding="utf-8") as handle:
         handle.write(f"best_binsize: {best_row['binsize']}\n")
-        handle.write(f"best_pca_components: {best_row['selected_pca']}\n")
+        handle.write(f"best_pca_components: {best_row['pca_components']}\n")
+        handle.write(f"best_selected_pca: {best_row['selected_pca']}\n")
         handle.write(f"best_elbow_pca: {best_row['elbow_pca']}\n")
         handle.write(f"best_cum_explained_variance: {best_row['cum_var']:.6f}\n")
+        handle.write(f"best_component_explained_variance: {best_row['component_var']:.6f}\n")
+        handle.write(f"best_component_cum_explained_variance: {best_row['component_cum_var']:.6f}\n")
+        handle.write(f"best_pca_profile_tsv: {best_row['pca_profile_tsv']}\n")
         handle.write(f"best_cv_reconstruction_mse: {best_row['cv_mse']:.10f}\n")
         handle.write(f"best_inliers: {best_row['inliers']}\n")
         handle.write(f"best_outliers: {best_row['outliers']}\n")
+        handle.write("best_selection_method: maximize_inliers_then_minimize_outlier_fraction_then_minimize_cv_reconstruction_mse_then_smaller_binsize\n")
         handle.write(f"signal_key: {best_row['signal_key']}\n")
 
 
@@ -574,6 +696,266 @@ def build_reference(wisecondorx, binsize, npz_paths, reference_output, threads, 
     )
 
 
+def run_tune_wisecondorx(
+    wisecondorx,
+    bams,
+    sample_ids,
+    bin_sizes,
+    pca_min_components,
+    pca_max_components,
+    pca_min_explained_variance,
+    min_reference_samples,
+    max_outlier_fraction,
+    min_reads_per_sample,
+    min_corr_to_median,
+    max_reconstruction_error_z,
+    max_noise_mad_z,
+    threads,
+    workdir,
+    summary_output,
+    binsize_summary_output,
+    best_output,
+    qc_output,
+    plot_output,
+    qc_stats_plot_output,
+    inlier_samples_output,
+    reference_output,
+    logger,
+    allowed_samples_file="",
+    skip_build_reference=True,
+    seed=42,
+):
+    logger.info(
+        "start tuning: samples=%d bins=%s threads=%d pca=[%d,%d]",
+        len(sample_ids),
+        bin_sizes,
+        threads,
+        pca_min_components,
+        pca_max_components,
+    )
+
+    bams = [Path(path) for path in bams]
+    sample_ids = list(sample_ids)
+    if len(bams) != len(sample_ids):
+        raise ValueError("--bams and --sample-ids must contain the same number of items.")
+
+    if allowed_samples_file:
+        allowed_path = Path(allowed_samples_file)
+        if not allowed_path.exists():
+            raise FileNotFoundError(f"allowed samples file not found: {allowed_path}")
+        allowed = {line.strip() for line in allowed_path.read_text(encoding="utf-8").splitlines() if line.strip()}
+        keep_indices = [idx for idx, sample_id in enumerate(sample_ids) if sample_id in allowed]
+        if not keep_indices:
+            raise ValueError("No samples left after filtering by --allowed-samples-file.")
+        sample_ids = [sample_ids[idx] for idx in keep_indices]
+        bams = [bams[idx] for idx in keep_indices]
+
+    if len(bams) < 3:
+        raise ValueError("At least 3 samples are required for reference tuning.")
+
+    bin_sizes = parse_int_list(bin_sizes)
+    qc_cfg = {
+        "min_reference_samples": min_reference_samples,
+        "max_outlier_fraction": max_outlier_fraction,
+        "min_reads_per_sample": min_reads_per_sample,
+        "min_corr_to_median": min_corr_to_median,
+        "max_reconstruction_error_z": max_reconstruction_error_z,
+        "max_noise_mad_z": max_noise_mad_z,
+    }
+
+    workdir = Path(workdir)
+    summary_output = Path(summary_output)
+    binsize_summary_output = Path(binsize_summary_output)
+    best_output = Path(best_output)
+    qc_output = Path(qc_output)
+    plot_output = Path(plot_output)
+    qc_stats_plot_output = Path(qc_stats_plot_output)
+    inlier_samples_output = Path(inlier_samples_output)
+    reference_output = Path(reference_output)
+
+    rows = []
+    per_bin_details = {}
+
+    for binsize in bin_sizes:
+        converted_dir = workdir / f"bin_{binsize}" / "converted"
+        plot_path = workdir / f"bin_{binsize}" / "pca_elbow.svg"
+        profile_path = workdir / f"bin_{binsize}" / "pca_profile.tsv"
+        npz_paths = convert_all_bams(
+            wisecondorx=wisecondorx,
+            bams=bams,
+            sample_ids=sample_ids,
+            binsize=binsize,
+            output_dir=converted_dir,
+            threads=threads,
+            logger=logger,
+        )
+
+        (
+            usable_sample_ids,
+            _usable_bams,
+            usable_npz_paths,
+            loaded_arrays,
+            dropped_npz_samples,
+        ) = filter_usable_npz(sample_ids, bams, npz_paths, logger, stage_tag=f"tuning/bin_{binsize}")
+        usable_count = len(usable_sample_ids)
+        if usable_count < 3:
+            rows.append(
+                {
+                    "binsize": binsize,
+                    "pca_components": 0,
+                    "selected_pca": 0,
+                    "elbow_pca": 0,
+                    "cum_var": 0.0,
+                    "component_var": 0.0,
+                    "component_cum_var": 0.0,
+                    "is_selected_pca": False,
+                    "pca_profile_tsv": str(profile_path),
+                    "cv_mse": None,
+                    "inliers": 0,
+                    "outliers": usable_count,
+                    "outlier_fraction": 1.0 if usable_count > 0 else 0.0,
+                    "signal_key": SIGNAL_KEY,
+                    "samples": usable_count,
+                    "features": 0,
+                    "status": "FAIL_USABLE_SAMPLE_COUNT",
+                }
+            )
+            continue
+
+        raw_matrix, signal_key = build_matrix_from_loaded(loaded_arrays)
+        raw_totals = raw_matrix.sum(axis=1)
+        matrix = normalize_matrix(raw_matrix)
+        sample_count, feature_count = matrix.shape
+        sample_index = {sample_id: idx for idx, sample_id in enumerate(usable_sample_ids)}
+
+        max_components = min(pca_max_components, sample_count - 1, feature_count)
+        if max_components < 1:
+            rows.append(
+                {
+                    "binsize": binsize,
+                    "pca_components": 0,
+                    "selected_pca": 0,
+                    "elbow_pca": 0,
+                    "cum_var": 0.0,
+                    "component_var": 0.0,
+                    "component_cum_var": 0.0,
+                    "is_selected_pca": False,
+                    "pca_profile_tsv": str(profile_path),
+                    "cv_mse": None,
+                    "inliers": 0,
+                    "outliers": sample_count,
+                    "outlier_fraction": 1.0,
+                    "signal_key": signal_key,
+                    "samples": sample_count,
+                    "features": feature_count,
+                    "status": "INVALID_PCA_COMPONENTS",
+                }
+            )
+            continue
+
+        standardized, vt, explained, cumulative = pca_profile(matrix, max_components)
+        selected_pca, elbow_pca = choose_pca_components(
+            cumulative=cumulative,
+            min_components=min(pca_min_components, max_components),
+            min_explained_variance=pca_min_explained_variance,
+        )
+        write_pca_profile_tsv(profile_path, explained, cumulative)
+        write_pca_svg(plot_path, binsize, explained, cumulative, elbow_pca, pca_min_explained_variance)
+        min_components = min(max(1, pca_min_components), max_components)
+        for pca_components in range(min_components, max_components + 1):
+            metrics = sample_qc_metrics(usable_sample_ids, matrix, raw_totals, standardized, vt, pca_components)
+            inliers, outliers = label_outliers(metrics, qc_cfg)
+            outlier_fraction = len(outliers) / max(len(metrics), 1)
+
+            status = "PASS"
+            cv_mse = None
+            if len(inliers) < qc_cfg["min_reference_samples"]:
+                status = "FAIL_INLIER_COUNT"
+            elif outlier_fraction > qc_cfg["max_outlier_fraction"]:
+                status = "FAIL_OUTLIER_FRACTION"
+            else:
+                inlier_indices = [sample_index[row["sample_id"]] for row in inliers]
+                inlier_matrix = matrix[inlier_indices, :]
+                effective_max_components = min(inlier_matrix.shape[0] - 1, inlier_matrix.shape[1])
+                if pca_components > effective_max_components:
+                    status = "FAIL_EFFECTIVE_PCA"
+                else:
+                    cv_mse = cross_validated_mse(inlier_matrix, pca_components, seed=seed)
+                    if cv_mse is None:
+                        status = "FAIL_CV"
+
+            row = {
+                "binsize": binsize,
+                "pca_components": pca_components,
+                "selected_pca": selected_pca,
+                "elbow_pca": elbow_pca,
+                "cum_var": float(cumulative[pca_components - 1]),
+                "component_var": float(explained[pca_components - 1]),
+                "component_cum_var": float(cumulative[pca_components - 1]),
+                "is_selected_pca": bool(pca_components == selected_pca),
+                "pca_profile_tsv": str(profile_path),
+                "cv_mse": cv_mse,
+                "inliers": len(inliers),
+                "outliers": len(outliers),
+                "outlier_fraction": outlier_fraction,
+                "signal_key": signal_key,
+                "samples": sample_count,
+                "features": feature_count,
+                "status": status,
+            }
+            rows.append(row)
+            per_bin_details[(binsize, pca_components)] = {
+                "metrics": metrics,
+                "inliers": inliers,
+                "outliers": outliers,
+                "plot_path": plot_path,
+                "sample_ids": usable_sample_ids,
+                "npz_paths": usable_npz_paths,
+                "selected_pca": selected_pca,
+                "dropped_npz_samples": dropped_npz_samples,
+            }
+
+    write_summary(summary_output, rows)
+    binsize_summaries, best_binsize_summary, best_row = summarize_binsize_candidates(rows)
+    write_binsize_summary(binsize_summary_output, binsize_summaries)
+    write_best_yaml(best_output, best_row)
+
+    best_details = per_bin_details[(best_row["binsize"], best_row["pca_components"])]
+    write_qc_table(qc_output, best_details["metrics"])
+    write_inlier_samples(inlier_samples_output, best_details["metrics"])
+    write_reference_qc_svg(qc_stats_plot_output, best_details["metrics"], qc_cfg)
+    plot_output.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(best_details["plot_path"], plot_output)
+
+    inlier_sample_ids = {row["sample_id"] for row in best_details["inliers"]}
+    inlier_npz = [
+        path
+        for sample_id, path in zip(best_details["sample_ids"], best_details["npz_paths"])
+        if sample_id in inlier_sample_ids
+    ]
+    if len(inlier_npz) < qc_cfg["min_reference_samples"]:
+        raise ValueError("Best bin has insufficient inliers for final reference.")
+
+    if not skip_build_reference:
+        build_reference(
+            wisecondorx=wisecondorx,
+            binsize=best_row["binsize"],
+            npz_paths=inlier_npz,
+            reference_output=reference_output,
+            threads=threads,
+            logger=logger,
+        )
+    logger.info(
+        "tuning completed: bins=%d best_binsize=%s best_pca=%s inliers=%d outlier_fraction=%.6f cv_mse=%.10f",
+        len(bin_sizes),
+        best_row["binsize"],
+        best_row["pca_components"],
+        len(inlier_npz),
+        best_binsize_summary["best_outlier_fraction"],
+        best_binsize_summary["best_cv_mse"],
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Tune WisecondorX bin size and PCA elbow with strict QC.")
     parser.add_argument("--wisecondorx", required=True)
@@ -594,6 +976,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--workdir", required=True)
     parser.add_argument("--summary-output", required=True)
+    parser.add_argument("--binsize-summary-output", required=True)
     parser.add_argument("--best-output", required=True)
     parser.add_argument("--qc-output", required=True)
     parser.add_argument("--plot-output", required=True)
@@ -604,216 +987,34 @@ def main():
     parser.add_argument("--log", required=True)
     args = parser.parse_args()
     logger = setup_logger("tune_wisecondorx_bin_pca", args.log)
-    logger.info(
-        "start tuning: samples=%d bins=%s threads=%d pca=[%d,%d]",
-        len(args.sample_ids),
-        args.bin_sizes,
-        args.threads,
-        args.pca_min_components,
-        args.pca_max_components,
-    )
-
-    bams = [Path(path) for path in args.bams]
-    sample_ids = args.sample_ids
-    if len(bams) != len(sample_ids):
-        raise ValueError("--bams and --sample-ids must contain the same number of items.")
-
-    if args.allowed_samples_file:
-        allowed_path = Path(args.allowed_samples_file)
-        if not allowed_path.exists():
-            raise FileNotFoundError(f"allowed samples file not found: {allowed_path}")
-        allowed = {line.strip() for line in allowed_path.read_text(encoding="utf-8").splitlines() if line.strip()}
-        keep_indices = [idx for idx, sample_id in enumerate(sample_ids) if sample_id in allowed]
-        if not keep_indices:
-            raise ValueError("No samples left after filtering by --allowed-samples-file.")
-        sample_ids = [sample_ids[idx] for idx in keep_indices]
-        bams = [bams[idx] for idx in keep_indices]
-
-    if len(bams) < 3:
-        raise ValueError("At least 3 samples are required for reference tuning.")
-
-    bin_sizes = parse_int_list(args.bin_sizes)
-    qc_cfg = {
-        "min_reference_samples": args.min_reference_samples,
-        "max_outlier_fraction": args.max_outlier_fraction,
-        "min_reads_per_sample": args.min_reads_per_sample,
-        "min_corr_to_median": args.min_corr_to_median,
-        "max_reconstruction_error_z": args.max_reconstruction_error_z,
-        "max_noise_mad_z": args.max_noise_mad_z,
-    }
-
-    workdir = Path(args.workdir)
-    summary_output = Path(args.summary_output)
-    best_output = Path(args.best_output)
-    qc_output = Path(args.qc_output)
-    plot_output = Path(args.plot_output)
-    qc_stats_plot_output = Path(args.qc_stats_plot_output)
-    inlier_samples_output = Path(args.inlier_samples_output)
-    reference_output = Path(args.reference_output)
-
-    rows = []
-    per_bin_details = {}
-
-    for binsize in bin_sizes:
-        converted_dir = workdir / f"bin_{binsize}" / "converted"
-        plot_path = workdir / f"bin_{binsize}" / "pca_elbow.svg"
-        npz_paths = convert_all_bams(
-            wisecondorx=args.wisecondorx,
-            bams=bams,
-            sample_ids=sample_ids,
-            binsize=binsize,
-            output_dir=converted_dir,
-            threads=args.threads,
-            logger=logger,
-        )
-
-        (
-            usable_sample_ids,
-            _usable_bams,
-            usable_npz_paths,
-            loaded_arrays,
-            dropped_npz_samples,
-        ) = filter_usable_npz(sample_ids, bams, npz_paths, logger, stage_tag=f"tuning/bin_{binsize}")
-        usable_count = len(usable_sample_ids)
-        if usable_count < 3:
-            rows.append(
-                {
-                    "binsize": binsize,
-                    "selected_pca": 0,
-                    "elbow_pca": 0,
-                    "cum_var": 0.0,
-                    "cv_mse": None,
-                    "inliers": 0,
-                    "outliers": usable_count,
-                    "outlier_fraction": 1.0 if usable_count > 0 else 0.0,
-                    "signal_key": "sample_dict_chr1_24_aligned",
-                    "samples": usable_count,
-                    "features": 0,
-                    "status": "FAIL_USABLE_SAMPLE_COUNT",
-                }
-            )
-            continue
-
-        raw_matrix, signal_key = build_matrix_from_loaded(loaded_arrays)
-        raw_totals = raw_matrix.sum(axis=1)
-        matrix = normalize_matrix(raw_matrix)
-        sample_count, feature_count = matrix.shape
-        sample_index = {sample_id: idx for idx, sample_id in enumerate(usable_sample_ids)}
-
-        max_components = min(args.pca_max_components, sample_count - 1, feature_count)
-        if max_components < 1:
-            rows.append(
-                {
-                    "binsize": binsize,
-                    "selected_pca": 0,
-                    "elbow_pca": 0,
-                    "cum_var": 0.0,
-                    "cv_mse": None,
-                    "inliers": 0,
-                    "outliers": sample_count,
-                    "outlier_fraction": 1.0,
-                    "signal_key": signal_key,
-                    "samples": sample_count,
-                    "features": feature_count,
-                    "status": "INVALID_PCA_COMPONENTS",
-                }
-            )
-            continue
-
-        standardized, vt, explained, cumulative = pca_profile(matrix, max_components)
-        selected_pca, elbow_pca = choose_pca_components(
-            cumulative=cumulative,
-            min_components=min(args.pca_min_components, max_components),
-            min_explained_variance=args.pca_min_explained_variance,
-        )
-        write_pca_svg(plot_path, explained, cumulative, elbow_pca, args.pca_min_explained_variance)
-
-        metrics = sample_qc_metrics(usable_sample_ids, matrix, raw_totals, standardized, vt, selected_pca)
-        inliers, outliers = label_outliers(metrics, qc_cfg)
-        outlier_fraction = len(outliers) / max(len(metrics), 1)
-
-        status = "PASS"
-        cv_mse = None
-        if len(inliers) < qc_cfg["min_reference_samples"]:
-            status = "FAIL_INLIER_COUNT"
-        elif outlier_fraction > qc_cfg["max_outlier_fraction"]:
-            status = "FAIL_OUTLIER_FRACTION"
-        else:
-            inlier_indices = [sample_index[row["sample_id"]] for row in inliers]
-            inlier_matrix = matrix[inlier_indices, :]
-            effective_components = min(selected_pca, inlier_matrix.shape[0] - 1, inlier_matrix.shape[1])
-            if effective_components < 1:
-                status = "FAIL_EFFECTIVE_PCA"
-            else:
-                cv_mse = cross_validated_mse(inlier_matrix, effective_components, seed=args.seed)
-                if cv_mse is None:
-                    status = "FAIL_CV"
-
-        row = {
-            "binsize": binsize,
-            "selected_pca": selected_pca,
-            "elbow_pca": elbow_pca,
-            "cum_var": float(cumulative[selected_pca - 1]),
-            "cv_mse": cv_mse,
-            "inliers": len(inliers),
-            "outliers": len(outliers),
-            "outlier_fraction": outlier_fraction,
-            "signal_key": signal_key,
-            "samples": sample_count,
-            "features": feature_count,
-            "status": status,
-        }
-        rows.append(row)
-        per_bin_details[binsize] = {
-            "metrics": metrics,
-            "inliers": inliers,
-            "outliers": outliers,
-            "plot_path": plot_path,
-            "sample_ids": usable_sample_ids,
-            "npz_paths": usable_npz_paths,
-            "selected_pca": selected_pca,
-            "dropped_npz_samples": dropped_npz_samples,
-        }
-
-    write_summary(summary_output, rows)
-    valid_rows = [row for row in rows if row["status"] == "PASS" and row["cv_mse"] is not None]
-    if not valid_rows:
-        raise ValueError("No bin size passed strict QC and CV constraints.")
-
-    best_row = sorted(valid_rows, key=lambda item: item["cv_mse"])[0]
-    write_best_yaml(best_output, best_row)
-
-    best_details = per_bin_details[best_row["binsize"]]
-    write_qc_table(qc_output, best_details["metrics"])
-    write_inlier_samples(inlier_samples_output, best_details["metrics"])
-    write_reference_qc_svg(qc_stats_plot_output, best_details["metrics"], qc_cfg)
-    plot_output.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(best_details["plot_path"], plot_output)
-
-    inlier_sample_ids = {row["sample_id"] for row in best_details["inliers"]}
-    inlier_npz = [
-        path
-        for sample_id, path in zip(best_details["sample_ids"], best_details["npz_paths"])
-        if sample_id in inlier_sample_ids
-    ]
-    if len(inlier_npz) < qc_cfg["min_reference_samples"]:
-        raise ValueError("Best bin has insufficient inliers for final reference.")
-
-    if not args.skip_build_reference:
-        build_reference(
-            wisecondorx=args.wisecondorx,
-            binsize=best_row["binsize"],
-            npz_paths=inlier_npz,
-            reference_output=reference_output,
-            threads=args.threads,
-            logger=logger,
-        )
-    logger.info(
-        "tuning completed: bins=%d best_binsize=%s best_pca=%s inliers=%d",
-        len(bin_sizes),
-        best_row["binsize"],
-        best_row["selected_pca"],
-        len(inlier_npz),
+    run_tune_wisecondorx(
+        wisecondorx=args.wisecondorx,
+        bams=args.bams,
+        sample_ids=args.sample_ids,
+        allowed_samples_file=args.allowed_samples_file,
+        bin_sizes=args.bin_sizes,
+        pca_min_components=args.pca_min_components,
+        pca_max_components=args.pca_max_components,
+        pca_min_explained_variance=args.pca_min_explained_variance,
+        min_reference_samples=args.min_reference_samples,
+        max_outlier_fraction=args.max_outlier_fraction,
+        min_reads_per_sample=args.min_reads_per_sample,
+        min_corr_to_median=args.min_corr_to_median,
+        max_reconstruction_error_z=args.max_reconstruction_error_z,
+        max_noise_mad_z=args.max_noise_mad_z,
+        threads=args.threads,
+        seed=args.seed,
+        workdir=args.workdir,
+        summary_output=args.summary_output,
+        binsize_summary_output=args.binsize_summary_output,
+        best_output=args.best_output,
+        qc_output=args.qc_output,
+        plot_output=args.plot_output,
+        qc_stats_plot_output=args.qc_stats_plot_output,
+        inlier_samples_output=args.inlier_samples_output,
+        reference_output=args.reference_output,
+        skip_build_reference=args.skip_build_reference,
+        logger=logger,
     )
 
 
