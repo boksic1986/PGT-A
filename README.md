@@ -17,49 +17,70 @@ Supported targets:
 - `cnv_qc`: CNV input QC (when CNV is enabled)
 - `cnv`: WisecondorX predict (when CNV is enabled)
 
-## 1. Initialize config and update reference groups
+## 1. Initialize configs and update reference groups
 
-Entry script: `scripts/init_wes_project.py`
+Entry script: `scripts/init_pgta_project.py`
 
 Available actions:
-- `init_config`: initialize project structure and `config.yaml`
+- `init_config`: initialize project structure and a typed config YAML
 - `build_reference_groups`: update `build_reference.groups` from Excel
 
-### 1.1 Init config
+Recommended config split:
+- `build_samples.yaml`: build-stage base config used only for baseline/reference samples
+- `config_qc.yaml`: QC-stage overlay based on `build_samples.yaml`
+- `config_reference.yaml`: reference-stage overlay based on `build_samples.yaml`
+- `predict_samples.yaml`: base config used only for predict samples
+- `config_predict.yaml`: predict-stage overlay generated from `predict_samples.yaml` + built references
+
+### 1.1 Init build-ref config
 
 ```bash
-python scripts/init_wes_project.py \
+/biosoftware/miniconda/envs/snakemake_env/bin/python scripts/init_pgta_project.py \
   --action init_config \
+  --config_kind build_ref \
   --project /path/to/project \
   --fq_dir /path/to/fastq \
-  --output_config /path/to/project/config.yaml \
-  --template_snakefile /home/jiucheng/pipelines/PGT_A/Snakefile
+  --output_config /path/to/project/build_samples.yaml \
+  --template_snakefile /path/to/repo/Snakefile
 ```
 
 Optional: init config and fill XX/XY groups from Excel in one step.
 
 ```bash
-python scripts/init_wes_project.py \
+/biosoftware/miniconda/envs/snakemake_env/bin/python scripts/init_pgta_project.py \
   --action init_config \
+  --config_kind build_ref \
   --project /path/to/project \
   --fq_dir /path/to/fastq \
-  --output_config /path/to/project/config.yaml \
+  --output_config /path/to/project/build_samples.yaml \
   --build_reference_mode excel \
-  --sample_info_xlsx /home/jiucheng/pipelines/PGT_A/sample_info/CNV-seq.xlsx \
-  --batch2_fq_dir /data/project/CNV/PGT-A/rawdata/lib_test/2026-02-05 \
-  --batch3_fq_dir /data/project/CNV/PGT-A/rawdata/lib_test/2026-03-03
+  --sample_info_xlsx /path/to/sample_info.xlsx \
+  --batch2_fq_dir /path/to/batch2_fastq \
+  --batch3_fq_dir /path/to/batch3_fastq
 ```
 
-### 1.2 Update only build_reference groups
+### 1.2 Init predict-samples config
 
 ```bash
-python scripts/init_wes_project.py \
+/biosoftware/miniconda/envs/snakemake_env/bin/python scripts/init_pgta_project.py \
+  --action init_config \
+  --config_kind predict_samples \
+  --project /path/to/project \
+  --fq_dir /path/to/predict_fastq \
+  --output_config /path/to/project/predict_samples.yaml \
+  --template_snakefile /path/to/repo/Snakefile
+```
+
+### 1.3 Update only build_reference groups
+
+```bash
+/biosoftware/miniconda/envs/snakemake_env/bin/python scripts/init_pgta_project.py \
   --action build_reference_groups \
   --project /path/to/project \
-  --output_config /path/to/project/config.yaml \
-  --sample_info_xlsx /home/jiucheng/pipelines/PGT_A/sample_info/CNV-seq.xlsx \
-  --batch2_fq_dir /data/project/CNV/PGT-A/rawdata/lib_test/2026-02-05 \
-  --batch3_fq_dir /data/project/CNV/PGT-A/rawdata/lib_test/2026-03-03
+  --output_config /path/to/project/build_samples.yaml \
+  --sample_info_xlsx /path/to/sample_info.xlsx \
+  --batch2_fq_dir /path/to/batch2_fastq \
+  --batch3_fq_dir /path/to/batch3_fastq
 ```
 
 Notes:
@@ -67,11 +88,15 @@ Notes:
 - If `--output_config` does not exist, a template config is created automatically.
 - `samples` contains all batch2 + batch3 samples.
 - `build_reference.groups` is generated from Excel rules.
+- `build_samples.yaml` writes `pipeline.mode: build_ref`.
+- `config_qc.yaml` and `config_reference.yaml` are stage overlays on top of `build_samples.yaml`.
+- `predict_samples.yaml` writes `pipeline.mode: predict` and does not contain `build_reference.groups`.
+- `sample_info_xlsx`, `batch2_fq_dir`, and `batch3_fq_dir` are explicit inputs now; no test-path defaults are injected.
 
-## 2. Default key parameters (from init_wes_project)
+## 2. Default key parameters (from init_pgta_project)
 
 - `core.wisecondorx.binsize: 100000`
-- `core.wisecondorx.tuning.bin_sizes: [100000, 200000, 300000, 500000, 750000, 1000000]`
+- `core.wisecondorx.tuning.bin_sizes: [100000, 200000, 500000, 750000, 1000000, 1500000]`
 - `core.wisecondorx.tuning.pca.min_explained_variance: 0.0`
 - `core.wisecondorx.reference_prefilter.binsize: 100000`
 - `core.wisecondorx.cnv.convert_binsize: 100000`
@@ -83,11 +108,15 @@ Notes:
 Default root: `core.wisecondorx.reference_model_root: reference`
 
 - `reference/XX/prefilter/`
-- `reference/XX/tuning/`
 - `reference/XX/result/`
 - `reference/XY/prefilter/`
-- `reference/XY/tuning/`
 - `reference/XY/result/`
+- `reference/gender/result/`
+- `reference/gender/common_best_binsize.txt`
+- `reference/cohorts/pass_only/`
+- `reference/cohorts/pass_warn/`
+- `reference/prefilter/reference_inlier_samples.txt`
+- `reference/tuning/`
 
 ## 4. Run the pipeline
 
@@ -98,19 +127,28 @@ Use Snakemake in your server env:
 
 ```bash
 /biosoftware/miniconda/envs/snakemake_env/bin/snakemake \
-  -s /home/jiucheng/pipelines/PGT_A/Snakefile \
-  --configfile /path/to/project/config.yaml \
+  -s /path/to/repo/Snakefile \
+  --configfile /path/to/project/config_qc.yaml \
   --cores 32 -p mapping
 ```
 
-### 4.2 Build reference (XX and XY in one run)
+### 4.2 Build reference (global best binsize + sex-specific refs)
+
+Reference build now follows this order:
+
+1. `XX` prefilter on `XX` samples only
+2. `XY` prefilter on `XY` samples only
+3. merge retained prefilter inliers
+4. run one global tuning on merged inliers using autosomes only (`chr1-22`)
+5. write one shared `best binsize`
+6. build `XX ref`, `XY ref`, and `gender ref` with that same binsize
 
 Run reference QC stage first:
 
 ```bash
 /biosoftware/miniconda/envs/snakemake_env/bin/snakemake \
-  -s /home/jiucheng/pipelines/PGT_A/Snakefile \
-  --configfile /path/to/project/config.yaml \
+  -s /path/to/repo/Snakefile \
+  --configfile /path/to/project/config_reference.yaml \
   --cores 32 -p reference_qc
 ```
 
@@ -118,8 +156,8 @@ Then build final reference:
 
 ```bash
 /biosoftware/miniconda/envs/snakemake_env/bin/snakemake \
-  -s /home/jiucheng/pipelines/PGT_A/Snakefile \
-  --configfile /path/to/project/config.yaml \
+  -s /path/to/repo/Snakefile \
+  --configfile /path/to/project/config_reference.yaml \
   --cores 32 --rerun-incomplete -p reference
 ```
 
@@ -127,17 +165,25 @@ Or run all together:
 
 ```bash
 /biosoftware/miniconda/envs/snakemake_env/bin/snakemake \
-  -s /home/jiucheng/pipelines/PGT_A/Snakefile \
-  --configfile /path/to/project/config.yaml \
+  -s /path/to/repo/Snakefile \
+  --configfile /path/to/project/config_reference.yaml \
   --cores 32 --rerun-incomplete -p mapping reference_qc reference
 ```
 
 ### 4.3 CNV
 
+Predict now follows this order in dual-reference mode:
+
+1. `WisecondorX convert` with the shared `best binsize`
+2. `WisecondorX gender` with the mixed `gender ref`
+3. CNV input QC
+4. choose `XX ref` or `XY ref` from the gender result
+5. `WisecondorX predict --gender ...`
+
 ```bash
 /biosoftware/miniconda/envs/snakemake_env/bin/snakemake \
-  -s /home/jiucheng/pipelines/PGT_A/Snakefile \
-  --configfile /path/to/project/config.yaml \
+  -s /path/to/repo/Snakefile \
+  --configfile /path/to/project/config_predict.yaml \
   --cores 32 -p mapping cnv_qc cnv
 ```
 
@@ -148,14 +194,20 @@ Reference:
 - `reference/{SEX}/prefilter/reference_sample_qc.svg`
 - `reference/{SEX}/prefilter/reference_inlier_samples.txt`
 - `reference/{SEX}/prefilter/prefilter_summary.yaml`
-- `reference/{SEX}/tuning/bin_pca_grid.tsv`
-- `reference/{SEX}/tuning/best_params.yaml`
-- `reference/{SEX}/tuning/best_bin_pca_elbow.svg`
-- `reference/{SEX}/tuning/reference_qc_metrics.svg`
-- `reference/{SEX}/tuning/reference_inlier_samples.txt`
-- `reference/{SEX}/result/*.npz`
+- `reference/prefilter/reference_inlier_samples.txt`
+- `reference/tuning/bin_pca_grid.tsv`
+- `reference/tuning/best_params.yaml`
+- `reference/tuning/best_bin_pca_elbow.svg`
+- `reference/tuning/reference_qc_metrics.svg`
+- `reference/tuning/reference_inlier_samples.txt`
+- `reference/tuning/bin_*/pca_profile.tsv`
+- `reference/XX/result/*.npz`
+- `reference/XY/result/*.npz`
+- `reference/gender/result/*.npz`
+- `reference/gender/common_best_binsize.txt`
 
 CNV:
+- `wisecondorx/cnv/gender/{sample}.gender.tsv`
 - `wisecondorx/cnv/qc/{sample}.qc.tsv`
 - `wisecondorx/cnv/qc/{sample}.qc.svg`
 - `wisecondorx/cnv/predict/{sample}*`
@@ -180,7 +232,7 @@ Audit metadata in logs includes:
 
 ## 7. Performance notes
 
-- `scripts/reference_prefilter_qc.py` and `scripts/tune_wisecondorx_bin_pca.py` now run `WisecondorX convert` in parallel, controlled by `--threads`.
+- `scripts/reference.py reference_prefilter_qc` and `scripts/reference.py tune_wisecondorx_bin_pca` now run `WisecondorX convert` in parallel, controlled by `--threads`.
 - Each sample convert job writes its own log under `.../converted/convert_logs/`.
 - Main pipeline log keeps a compact progress summary for convert start/done events.
 - Some repeated list/set traversals were reduced in sample filtering and outlier set construction.
@@ -188,12 +240,12 @@ Audit metadata in logs includes:
 
 ## 8. Troubleshooting
 
-### 8.1 IndentationError in Snakefile/pipeline.smk
+### 8.1 IndentationError in Snakefile
 
 ```bash
-cd /home/jiucheng/pipelines/PGT_A
-sed -i 's/\r$//' Snakefile rules/pipeline.smk
-nl -ba rules/pipeline.smk | sed -n '70,90p;240,260p'
+cd /path/to/repo
+sed -i 's/\r$//' Snakefile
+nl -ba Snakefile | sed -n '70,90p;240,260p'
 ```
 
 ### 8.2 WisecondorX convert argument error
@@ -202,7 +254,7 @@ nl -ba rules/pipeline.smk | sed -n '70,90p;240,260p'
 
 ### 8.3 `No usable numeric arrays found in .../*.npz`
 
-`reference_prefilter_qc.py` now auto-drops unusable NPZ samples and records them in log/summary.
+`scripts/reference.py reference_prefilter_qc` now auto-drops unusable NPZ samples and records them in log/summary.
 NPZ parsing follows official WisecondorX convert output layout:
 - `binsize`
 - `sample` (dict with chromosome keys `1..24`)
@@ -234,30 +286,57 @@ This keeps common preprocessing and downstream analysis modes separated while pr
 
 ## 10. Config entry points
 
-In addition to `config.yaml`, two mode-specific config entry files are available:
+The workflow now uses build and predict base configs plus stage overlays:
 
+- `build_samples.yaml`
+  - `pipeline.mode: build_ref`
+  - used only for baseline/reference samples
+  - may contain `build_reference.groups`
+- `config_qc.yaml`
+  - QC-stage overlay on top of `build_samples.yaml`
 - `config_reference.yaml`
-  - `base_config: "config.yaml"`
-  - `pipeline.targets: ["mapping", "metadata", "reference_qc", "reference"]`
+  - reference-stage overlay on top of `build_samples.yaml`
+- `predict_samples.yaml`
+  - `pipeline.mode: predict`
+  - used only as the base sample config for prediction
+  - must not contain `build_reference.groups`
 - `config_predict.yaml`
-  - `base_config: "config.yaml"`
-  - `pipeline.targets: ["mapping", "metadata", "cnv_qc", "cnv"]`
+  - generated from `predict_samples.yaml`
+  - contains built ref paths:
+    - `reference_output_by_sex.XX`
+    - `reference_output_by_sex.XY`
+    - `gender_reference_output`
+    - `common_reference_binsize_output`
 
 Run examples:
 
 ```bash
 /biosoftware/miniconda/envs/snakemake_env/bin/snakemake \
-  -s /home/jiucheng/pipelines/PGT_A/Snakefile \
+  -s /path/to/repo/Snakefile \
   --configfile /path/to/project/config_reference.yaml \
-  --cores 32 -p
+  --cores 32 -p reference_qc reference
 ```
 
 ```bash
 /biosoftware/miniconda/envs/snakemake_env/bin/snakemake \
-  -s /home/jiucheng/pipelines/PGT_A/Snakefile \
+  -s /path/to/repo/Snakefile \
   --configfile /path/to/project/config_predict.yaml \
-  --cores 32 -p
+  --cores 32 -p mapping cnv_qc cnv
 ```
+
+Main workflow and test workflow are intentionally separate:
+
+- main workflow entry configs:
+  - `build_samples.yaml`
+  - `config_qc.yaml`
+  - `config_reference.yaml`
+  - `predict_samples.yaml`
+  - `config_predict.yaml`
+- server-side dry-run validation entry:
+  - `tests/server_validation/03_snakemake_dryrun.sh`
+- local planning helper:
+  - `python cli/pgta.py plan --stage qc|reference|predict`
+  - `python cli/pgta.py test-plan`
 
 ## 11. PGT-A algorithm notes
 
@@ -315,15 +394,169 @@ Reference matrix (sample x bin) can be centered and projected to principal compo
 
 CNV inference commonly performs segmentation over ordered bin signals. Exact segmentation internals are tool-implementation specific; this pipeline delegates core prediction behavior to `WisecondorX predict`.
 
-## 12. Implementation mapping
+## 12. Current workflow logic
+
+### 12.1 Build reference
+
+Current reference logic is:
+
+1. shared preprocessing: `fastp + bwa + samtools`
+2. `XX` reference prefilter on `XX` samples only
+3. `XY` reference prefilter on `XY` samples only
+4. merge the retained reference samples from both groups
+5. run one global tuning on the merged reference set
+6. compute one shared `best binsize` from autosomes only (`chr1-22`)
+7. build:
+   - `XX ref`
+   - `XY ref`
+   - `gender ref`
+   all with that same shared binsize
+
+This means:
+- reference sample QC is sex-specific
+- best binsize selection is global
+- best binsize is not influenced by chrX/chrY
+- final reference models remain sex-specific where they should be
+
+### 12.2 Predict
+
+Current predict logic is:
+
+1. convert sample BAM to NPZ using the shared `best binsize`
+2. run `WisecondorX gender` using the mixed `gender ref`
+3. run CNV input QC
+4. read `gender.tsv`
+5. select `XX ref` or `XY ref`
+6. run `WisecondorX predict --gender ...`
+
+This keeps gender calling and sex-specific reference selection explicit and reproducible.
+
+## 13. Reference QC metrics
+
+Reference QC is used only in the `build ref` flow. It does not replace WisecondorX core calling logic. Its role is to remove poor reference samples and choose a stable shared binsize.
+
+### 13.1 Prefilter metrics
+
+Implemented in `scripts/reference.py reference_prefilter_qc`.
+
+Main metrics:
+
+- `reads`
+  - total aligned bin counts for the sample
+  - used to flag low-depth reference samples
+- `corr_to_median`
+  - correlation between the sample profile and the cohort median profile
+  - low values indicate strong deviation from the reference cohort
+- `noise_mad`
+  - median absolute deviation of residual signal relative to the cohort median
+  - reflects bin-to-bin noise
+- `noise_mad_z`
+  - robust z-score of `noise_mad`
+  - flags unusually noisy samples
+- `reconstruction_error`
+  - PCA reconstruction error
+  - measures how poorly the sample fits the cohort structure
+- `reconstruction_error_z`
+  - robust z-score of `reconstruction_error`
+  - flags PCA-space outliers
+
+Sample outlier labels:
+
+- `low_reads`
+- `low_corr`
+- `high_recon_z`
+- `high_noise_z`
+
+### 13.2 Tuning metrics
+
+Implemented in `scripts/reference.py tune_wisecondorx_bin_pca`.
+
+For each candidate binsize, the workflow evaluates:
+
+- `pca_components`
+  - PCA dimension actually evaluated for the current `(binsize, pca_components)` pair
+- `selected_pca`
+  - heuristic recommended PCA dimension for the current binsize
+  - kept as a reference value and compatibility field
+- `elbow_pca`
+  - PCA elbow point from cumulative explained variance
+- `cum_explained_variance`
+  - cumulative explained variance at the evaluated `pca_components`
+- `component_explained_variance`
+  - explained variance ratio of the evaluated PCA component itself
+- `component_cum_explained_variance`
+  - same cumulative explained variance value as `cum_explained_variance`, written explicitly for the evaluated component
+- `is_selected_pca`
+  - whether the evaluated `pca_components` matches the heuristic `selected_pca`
+- `pca_profile_tsv`
+  - per-binsize detailed PCA profile with `component`, `explained_variance_ratio`, `cumulative_explained_variance_ratio`
+- `cv_reconstruction_mse`
+  - cross-validated reconstruction error
+  - lower is better
+- `inliers`
+  - number of retained reference samples
+- `outliers`
+  - number of rejected samples
+- `outlier_fraction`
+  - rejected fraction
+- `samples`
+  - usable sample count
+- `features`
+  - usable aligned autosomal bins
+- `status`
+  - binsize pass/fail state
+- `wisecondorx/tuning/*/binsize_ranking.tsv`
+  - binsize-level summary used for final best binsize decision
+  - ranking rule: maximize `inliers`, then minimize `outlier_fraction`, then minimize `cv_reconstruction_mse`, then prefer smaller binsize
+
+Important:
+
+- `reference/tuning/bin_pca_grid.tsv` is a two-dimensional tuning grid, one row per `(binsize, pca_components)` pair.
+- `selected_pca`, `elbow_pca`, and the cumulative explained variance threshold are reference signals only.
+- Final `best_binsize` is selected from binsize-level ranking derived from the full `(binsize, pca_components)` search space; `best_pca_components` is then taken from that binsize's best row.
+- To verify monotonic cumulative explained variance within one binsize, inspect the corresponding `reference/tuning/bin_*/pca_profile.tsv`.
+
+Typical binsize failure states:
+
+- `FAIL_USABLE_SAMPLE_COUNT`
+- `INVALID_PCA_COMPONENTS`
+- `FAIL_INLIER_COUNT`
+- `FAIL_OUTLIER_FRACTION`
+- `FAIL_CV`
+
+### 13.3 What defines the current optimum
+
+In practice, the current optimum is chosen by combining:
+
+- sample-level stability:
+  - `corr_to_median`
+  - `noise_mad_z`
+  - `reconstruction_error_z`
+- binsize-level quality:
+  - `cv_reconstruction_mse`
+  - `outlier_fraction`
+  - `inliers`
+
+The selected `best binsize` is then reused consistently by:
+
+- `XX ref`
+- `XY ref`
+- `gender ref`
+- `predict convert`
+
+## 14. Implementation mapping
 
 | Module | Rule / Script | Purpose | Main input | Main output |
 |---|---|---|---|---|
-| metadata | `collect_run_metadata` / `scripts/collect_run_metadata.py` | collect run/tool metadata | project + tool paths | `logs/run_metadata.tsv` |
+| metadata | `collect_run_metadata` / `pgta.core.run_metadata` | collect run/tool metadata | project + tool paths | `logs/run_metadata.tsv` |
 | preprocess | `fastp_bwa` | fastq QC + mapping | sample R1/R2 | cleaned FASTQ, sorted BAM/BAI |
-| reference prefilter | `reference_prefilter_*` / `scripts/reference_prefilter_qc.py` | remove unusable/outlier reference samples | reference BAMs | prefilter QC/report/inlier list |
-| reference tuning | `tune_wisecondorx_reference_qc*` / `scripts/tune_wisecondorx_bin_pca.py` | tune bin/PCA and sample QC | prefilter inliers + BAMs | tuning summary/best params/inliers |
-| reference build | `build_wisecondorx_reference_*` / `scripts/build_reference_from_tuning.py` | generate final reference | tuning outputs | reference `.npz` |
+| reference prefilter | `reference_prefilter_xx` / `reference_prefilter_xy` / `scripts/reference.py reference_prefilter_qc` | remove unusable/outlier reference samples inside each sex group | reference BAMs | prefilter QC/report/inlier list |
+| reference prefilter merge | `merge_reference_prefilter_inliers` | merge `XX/XY` retained samples for global tuning | sex-specific prefilter inliers | merged inlier list |
+| reference tuning | `tune_wisecondorx_reference_qc` / `scripts/reference.py tune_wisecondorx_bin_pca` | choose one shared binsize on autosomes | merged inliers + BAMs | tuning summary/best params/inliers |
+| shared binsize | `write_common_reference_binsize_from_tuning` | persist the best binsize for downstream reuse | `best_params.yaml` | `common_best_binsize.txt` |
+| reference build | `build_wisecondorx_reference_from_tuning_xx` / `build_wisecondorx_reference_from_tuning_xy` / `scripts/reference.py build_reference_from_tuning` | generate sex-specific final references | tuning outputs + sex-specific sample filters | `XX/XY reference .npz` |
+| gender reference build | `build_wisecondorx_gender_reference_from_tuning` | generate mixed-sex reference for `WisecondorX gender` | tuning outputs | `gender reference .npz` |
 | predict convert | `wisecondorx_convert_for_cnv` | convert BAM to CNV NPZ | sample BAM | CNV NPZ |
-| predict QC | `wisecondorx_qc_for_predict` / `scripts/cnv_qc.py` | per-sample CNV input QC | CNV NPZ | QC TSV/SVG/pass marker |
-| predict | `wisecondorx_predict_cnv` | CNV calling | sample NPZ + reference NPZ | predict outputs + done marker |
+| predict gender | `wisecondorx_gender_for_predict` / `scripts/predict.py wisecondorx_gender` | infer sample sex before predict | sample NPZ + gender ref | `gender.tsv` |
+| predict QC | `wisecondorx_qc_for_predict` / `scripts/predict.py cnv_qc` | per-sample CNV input QC | CNV NPZ | QC TSV/SVG/pass marker |
+| predict | `wisecondorx_predict_cnv` | CNV calling with sex-matched reference | sample NPZ + gender result + sex-specific ref | predict outputs + done marker |
