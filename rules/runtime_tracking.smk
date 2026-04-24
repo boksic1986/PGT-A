@@ -199,25 +199,61 @@ if RUNTIME_TRACKING_ENABLED and RUNTIME_BENCHMARK_FILES:
 
     if "reference_qc" in REQUESTED_TARGETS and TUNING_ENABLED:
         if BUILD_REF_BY_SEX_ENABLED:
-            for sex in ("XX", "XY"):
-                sex_ids = REF_SAMPLE_IDS_BY_SEX[sex]
+            for ref_set in REF_SET_ORDER:
                 RUNTIME_TRACKING_RECORDS.append(
                     _runtime_record(
                         module_name="reference",
-                        rule_name=f"reference_prefilter_{sex.lower()}",
+                        rule_name="select_reference_cohort",
                         snakemake_target="reference_qc",
-                        cohort_type=f"reference_{sex}",
-                        sample_bucket=_sample_bucket(f"reference_{sex}", len(sex_ids)),
-                        benchmark_path=BENCH_REFERENCE_PREFILTER_BY_SEX[sex],
-                        log_path=project_path("logs", "wisecondorx", f"reference_prefilter_{sex}.log"),
+                        cohort_type=f"reference_{ref_set}",
+                        sample_bucket=REFERENCE_BUCKET,
+                        benchmark_path=BENCH_SELECT_REFERENCE_COHORT[ref_set],
+                        log_path=project_path("logs", "wisecondorx", f"reference_select_{ref_set}.log"),
+                        output_paths=[REF_SET_SAMPLE_LISTS[ref_set]],
+                        threads=1,
+                    )
+                )
+                for sex in REF_SEXES:
+                    sex_ids = REF_SAMPLE_IDS_BY_SEX[sex]
+                    RUNTIME_TRACKING_RECORDS.append(
+                        _runtime_record(
+                            module_name="reference",
+                            rule_name="reference_prefilter_cohort_sex",
+                            snakemake_target="reference_qc",
+                            cohort_type=f"reference_{ref_set}_{sex}",
+                            sample_bucket=_sample_bucket(f"reference_{ref_set}_{sex}", len(sex_ids)),
+                            benchmark_path=BENCH_REFERENCE_PREFILTER_BY_SET_SEX[ref_set][sex],
+                            log_path=project_path("logs", "wisecondorx", f"reference_prefilter_{ref_set}_{sex}.log"),
+                            output_paths=[
+                                str(Path(REF_SET_PREFILTER_DIR_BY_SEX[ref_set][sex]) / "reference_sample_qc.tsv"),
+                                str(Path(REF_SET_PREFILTER_DIR_BY_SEX[ref_set][sex]) / "reference_sample_qc.svg"),
+                                str(Path(REF_SET_PREFILTER_DIR_BY_SEX[ref_set][sex]) / "reference_inlier_samples.txt"),
+                                str(Path(REF_SET_PREFILTER_DIR_BY_SEX[ref_set][sex]) / "prefilter_summary.yaml"),
+                            ],
+                            binsize=PREFILTER_BINSIZE,
+                            threads=4,
+                        )
+                    )
+                RUNTIME_TRACKING_RECORDS.append(
+                    _runtime_record(
+                        module_name="reference",
+                        rule_name="tune_wisecondorx_reference_qc_by_cohort",
+                        snakemake_target="reference_qc",
+                        cohort_type=f"reference_{ref_set}",
+                        sample_bucket=REFERENCE_BUCKET,
+                        benchmark_path=BENCH_TUNE_WISECONDORX_REFERENCE_QC_BY_SET[ref_set],
+                        log_path=project_path("logs", "wisecondorx", f"tuning_{ref_set}.log"),
                         output_paths=[
-                            str(Path(REF_PREFILTER_DIR_BY_SEX[sex]) / "reference_sample_qc.tsv"),
-                            str(Path(REF_PREFILTER_DIR_BY_SEX[sex]) / "reference_sample_qc.svg"),
-                            str(Path(REF_PREFILTER_DIR_BY_SEX[sex]) / "reference_inlier_samples.txt"),
-                            str(Path(REF_PREFILTER_DIR_BY_SEX[sex]) / "prefilter_summary.yaml"),
+                            REF_SET_TUNING_SUMMARY[ref_set],
+                            REF_SET_TUNING_BINSIZE_SUMMARY[ref_set],
+                            REF_SET_TUNING_BEST[ref_set],
+                            REF_SET_TUNING_QC[ref_set],
+                            REF_SET_TUNING_PLOT[ref_set],
+                            REF_SET_TUNING_QC_STATS_PLOT[ref_set],
+                            REF_SET_TUNING_INLIERS[ref_set],
                         ],
-                        binsize=PREFILTER_BINSIZE,
                         threads=4,
+                        parameter_path=REF_SET_TUNING_BEST[ref_set],
                     )
                 )
         else:
@@ -241,58 +277,89 @@ if RUNTIME_TRACKING_ENABLED and RUNTIME_BENCHMARK_FILES:
                 )
             )
 
-        RUNTIME_TRACKING_RECORDS.append(
-            _runtime_record(
-                module_name="reference",
-                rule_name="tune_wisecondorx_reference_qc",
-                snakemake_target="reference_qc",
-                cohort_type="reference",
-                sample_bucket=REFERENCE_BUCKET,
-                benchmark_path=BENCH_TUNE_WISECONDORX_REFERENCE_QC,
-                log_path=project_path("logs", "wisecondorx", "tuning.log"),
-                output_paths=[TUNING_SUMMARY, TUNING_BEST, TUNING_QC, TUNING_PLOT, TUNING_QC_STATS_PLOT, TUNING_INLIERS],
-                threads=4,
-                parameter_path=TUNING_BEST,
-            )
-        )
-
-    if "reference" in REQUESTED_TARGETS:
-        if BUILD_REF_BY_SEX_ENABLED:
-            for sex in ("XX", "XY"):
-                sex_ids = REF_SAMPLE_IDS_BY_SEX[sex]
-                parameter_path = TUNING_BEST if TUNING_ENABLED else None
-                binsize = None if TUNING_ENABLED else int(WISE_CFG["binsize"])
-                RUNTIME_TRACKING_RECORDS.append(
-                    _runtime_record(
-                        module_name="reference",
-                        rule_name=f"build_wisecondorx_reference_{sex.lower()}",
-                        snakemake_target="reference",
-                        cohort_type=f"reference_{sex}",
-                        sample_bucket=_sample_bucket(f"reference_{sex}", len(sex_ids)),
-                        benchmark_path=BENCH_BUILD_REFERENCE_BY_SEX[sex],
-                        log_path=project_path("logs", "wisecondorx", f"build_reference_{sex}.log"),
-                        output_paths=[REF_OUTPUTS_BY_SEX[sex]],
-                        binsize=binsize,
-                        threads=4,
-                        parameter_path=parameter_path,
-                    )
-                )
-
             RUNTIME_TRACKING_RECORDS.append(
                 _runtime_record(
                     module_name="reference",
-                    rule_name="build_wisecondorx_gender_reference",
-                    snakemake_target="reference",
+                    rule_name="tune_wisecondorx_reference_qc",
+                    snakemake_target="reference_qc",
                     cohort_type="reference",
                     sample_bucket=REFERENCE_BUCKET,
-                    benchmark_path=BENCH_BUILD_GENDER_REFERENCE,
-                    log_path=project_path("logs", "wisecondorx", "build_reference_gender.log"),
-                    output_paths=[GENDER_REF_OUTPUT],
-                    binsize=None if TUNING_ENABLED else int(WISE_CFG["binsize"]),
+                    benchmark_path=BENCH_TUNE_WISECONDORX_REFERENCE_QC,
+                    log_path=project_path("logs", "wisecondorx", "tuning.log"),
+                    output_paths=[TUNING_SUMMARY, TUNING_BEST, TUNING_QC, TUNING_PLOT, TUNING_QC_STATS_PLOT, TUNING_INLIERS],
                     threads=4,
-                    parameter_path=TUNING_BEST if TUNING_ENABLED else COMMON_REF_BINSIZE,
+                    parameter_path=TUNING_BEST,
                 )
             )
+
+    if "reference" in REQUESTED_TARGETS:
+        if BUILD_REF_BY_SEX_ENABLED:
+            if TUNING_ENABLED:
+                for ref_set in REF_SET_ORDER:
+                    for sex in REF_SEXES:
+                        sex_ids = REF_SAMPLE_IDS_BY_SEX[sex]
+                        RUNTIME_TRACKING_RECORDS.append(
+                            _runtime_record(
+                                module_name="reference",
+                                rule_name="build_wisecondorx_reference_from_tuning_by_cohort_sex",
+                                snakemake_target="reference",
+                                cohort_type=f"reference_{ref_set}_{sex}",
+                                sample_bucket=_sample_bucket(f"reference_{ref_set}_{sex}", len(sex_ids)),
+                                benchmark_path=BENCH_BUILD_REFERENCE_BY_SET_SEX[ref_set][sex],
+                                log_path=project_path("logs", "wisecondorx", f"build_reference_{ref_set}_{sex}.log"),
+                                output_paths=[REF_SET_OUTPUTS_BY_SEX[ref_set][sex]],
+                                threads=4,
+                                parameter_path=REF_SET_TUNING_BEST[ref_set],
+                            )
+                        )
+                    RUNTIME_TRACKING_RECORDS.append(
+                        _runtime_record(
+                            module_name="reference",
+                            rule_name="build_wisecondorx_gender_reference_from_tuning_by_cohort",
+                            snakemake_target="reference",
+                            cohort_type=f"reference_{ref_set}",
+                            sample_bucket=REFERENCE_BUCKET,
+                            benchmark_path=BENCH_BUILD_GENDER_REFERENCE_BY_SET[ref_set],
+                            log_path=project_path("logs", "wisecondorx", f"build_reference_gender_{ref_set}.log"),
+                            output_paths=[REF_SET_GENDER_OUTPUT[ref_set]],
+                            threads=4,
+                            parameter_path=REF_SET_TUNING_BEST[ref_set],
+                        )
+                    )
+            else:
+                for sex in ("XX", "XY"):
+                    sex_ids = REF_SAMPLE_IDS_BY_SEX[sex]
+                    binsize = int(WISE_CFG["binsize"])
+                    RUNTIME_TRACKING_RECORDS.append(
+                        _runtime_record(
+                            module_name="reference",
+                            rule_name=f"build_wisecondorx_reference_{sex.lower()}",
+                            snakemake_target="reference",
+                            cohort_type=f"reference_{sex}",
+                            sample_bucket=_sample_bucket(f"reference_{sex}", len(sex_ids)),
+                            benchmark_path=BENCH_BUILD_REFERENCE_BY_SEX[sex],
+                            log_path=project_path("logs", "wisecondorx", f"build_reference_{sex}.log"),
+                            output_paths=[REF_OUTPUTS_BY_SEX[sex]],
+                            binsize=binsize,
+                            threads=4,
+                        )
+                    )
+
+                RUNTIME_TRACKING_RECORDS.append(
+                    _runtime_record(
+                        module_name="reference",
+                        rule_name="build_wisecondorx_gender_reference",
+                        snakemake_target="reference",
+                        cohort_type="reference",
+                        sample_bucket=REFERENCE_BUCKET,
+                        benchmark_path=BENCH_BUILD_GENDER_REFERENCE,
+                        log_path=project_path("logs", "wisecondorx", "build_reference_gender.log"),
+                        output_paths=[GENDER_REF_OUTPUT],
+                        binsize=int(WISE_CFG["binsize"]),
+                        threads=4,
+                        parameter_path=COMMON_REF_BINSIZE,
+                    )
+                )
         else:
             RUNTIME_TRACKING_RECORDS.append(
                 _runtime_record(

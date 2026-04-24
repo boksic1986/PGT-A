@@ -805,11 +805,14 @@ if CNV_ENABLED:
                     "--output-json", output.json,
                     "--output-md", output.md,
                     "--output-html", output.html,
-                    "--evaluation-summary", CNV_EVAL_SUMMARY,
-                    "--ml-summary", CNV_ML_SUMMARY,
-                    "--benchmark-summary", CNV_BENCHMARK_SUMMARY,
                     "--log", log[0],
                 ]
+                if input.evaluation_summary:
+                    command.extend(["--evaluation-summary", input.evaluation_summary[0]])
+                if input.ml_summary:
+                    command.extend(["--ml-summary", input.ml_summary[0]])
+                if input.benchmark_summary:
+                    command.extend(["--benchmark-summary", input.benchmark_summary[0]])
                 if input.mosaic_truth_validation:
                     command.extend(["--truth-validation-summary", input.mosaic_truth_validation[0]])
                 for path_value in input.events:
