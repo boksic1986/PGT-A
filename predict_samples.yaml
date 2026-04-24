@@ -1,0 +1,157 @@
+core:
+  project_path: "results"
+  reference_genome: "/data/Database/index/hg19/hg19.fa"
+  chromosome_list:
+    - "chr1"
+    - "chr2"
+    - "chr3"
+    - "chr4"
+    - "chr5"
+    - "chr6"
+    - "chr7"
+    - "chr8"
+    - "chr9"
+    - "chr10"
+    - "chr11"
+    - "chr12"
+    - "chr13"
+    - "chr14"
+    - "chr15"
+    - "chr16"
+    - "chr17"
+    - "chr18"
+    - "chr19"
+    - "chr20"
+    - "chr21"
+    - "chr22"
+    - "chrX"
+    - "chrY"
+  wisecondorx:
+    binsize: 100000
+    reference_model_root: "reference"
+    tuning:
+      enable: true
+      bin_sizes: [100000, 200000, 500000, 750000, 1000000, 1500000]
+    reference_prefilter:
+      binsize: 100000
+      max_iterations: 3
+    cnv:
+      enable: true
+      output_dir: "wisecondorx/cnv"
+      gender_dir: "wisecondorx/cnv/gender"
+      qc_dir: "wisecondorx/cnv/qc"
+      predict_dir: "wisecondorx/cnv/predict"
+      convert_binsize: 100000
+      zscore: 5
+      alpha: 0.001
+      maskrepeats: 5
+      minrefbins: 150
+      sex_calling:
+        method: "wisecondorx_plus_bam_depth"
+        bam_xx_min_x_relative: 0.95
+        bam_xy_max_x_relative: 0.80
+        bam_xy_min_y_relative: 0.20
+        bam_xx_max_y_relative: 0.15
+      postprocess:
+        enable_branch_b: true
+        preserve_branch_a: true
+        default_correction: "2d_loess_gc_mappability"
+        correction:
+          loess_frac: 0.2
+          min_valid_bins: 200
+          robust_iters: 2
+          include_mask_labels: ["pass", "soft"]
+        annotation:
+          genome_build: "hg19"
+          par_regions:
+            - "chrX:60001-2699520"
+            - "chrX:154931044-155260560"
+          xtr_regions: []
+          segmental_duplication_bed: ""
+          low_mappability_bed: ""
+          gap_centromere_telomere_bed: ""
+          repeat_rich_bed: ""
+          blacklist_bed: ""
+          sex_homology_bed: ""
+          ambiguous_alignment_bed: ""
+        calling:
+          min_bins: 5
+          max_segments_per_chrom: 12
+          split_threshold: 2.5
+          hmm_state_shift: 2.5
+          hmm_stay_prob: 0.995
+          min_event_bins: 3
+          min_event_z: 1.5
+        calibration:
+          null_quantile_low: 0.1
+          null_quantile_high: 0.9
+          min_null_bins: 200
+          event_z_threshold: 2.5
+        mosaic_fraction:
+          min_effective_bins: 5
+          min_clean_fraction: 0.5
+          max_high_risk_fraction: 0.25
+          min_abs_log2_ratio: 0.03
+          low_fraction_threshold: 0.15
+          baseline_min_bins: 200
+          ci_zscore: 1.96
+        artifact_rules:
+          min_event_bins: 3
+          min_abs_calibrated_z: 2.0
+          max_chrom_fraction: 0.35
+          edge_bin_window: 2
+          max_qvalue: 0.25
+          keep_review: true
+          high_confidence_z: 4.0
+          high_confidence_qvalue: 0.05
+      evaluation:
+        truth_tsv: "sample_info/positive_truth_events.tsv"
+      ml:
+        backend: "auto"
+        cv_folds: 5
+        labels_tsv: ""
+      benchmark:
+        truth_tsv: "sample_info/positive_truth_events.tsv"
+        mosaic_fraction_truth_tsv: "sample_info/mosaic_fraction_validation_y7_y8.tsv"
+        admixture_levels: [1.0, 0.75, 0.5, 0.3, 0.2, 0.1]
+        low_fraction_thresholds: [0.05, 0.10, 0.15, 0.20, 0.30]
+        branch_b_z_threshold: 2.5
+        branch_a_z_threshold: 5.0
+      report: {}
+pipeline:
+  mode: "predict"
+  targets: ["mapping", "metadata", "cnv_qc", "cnv"]
+build_reference:
+  reference_sets:
+    pass_only:
+      decisions: ["PASS"]
+      publish_as_default: true
+    pass_warn:
+      decisions: ["PASS", "WARN"]
+      publish_as_default: false
+reference_assets:
+  atomic_binsize: 50000
+  analysis_binsize: 100000
+  qc_binsize: 1000000
+  hard_n_fraction: 0.2
+  soft_gc_low: 0.2
+  soft_gc_high: 0.8
+  dynamic_z_frac_threshold: 0.05
+  dynamic_median_abs_z_threshold: 1.5
+reference_package:
+  name: "frozen_reference_v1"
+structured_qc: {}
+baseline_qc:
+  gc_correction:
+    method: "loess"
+    loess_frac: 0.2
+    poly_degree: 2
+    min_valid_bins: 200
+    robust_iters: 1
+biosoft:
+  fastp: "/biosoftware/bin/fastp"
+  bwa: "/biosoftware/bin/bwa"
+  samtools: "/biosoftware/bin/samtools"
+  WisecondorX: "/biosoftware/miniconda/envs/wise_env/bin/WisecondorX"
+  python: "/biosoftware/miniconda/envs/snakemake_env/bin/python"
+samples: {}

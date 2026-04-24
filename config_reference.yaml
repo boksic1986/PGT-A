@@ -1,3 +1,4 @@
-base_config: "config.yaml"
+base_config: "build_samples.yaml"
 pipeline:
+  mode: "build_ref"
   targets: ["mapping", "metadata", "reference_qc", "reference"]

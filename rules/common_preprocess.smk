@@ -10,19 +10,21 @@ rule collect_run_metadata:
         samtools=config["biosoft"]["samtools"],
         wise=config["biosoft"]["WisecondorX"],
         project_root=str(Path.cwd())
-    shell:
-        r"""
-        mkdir -p "$(dirname {output})" "$(dirname {log})"
-        {params.python_bin:q} {SCRIPT_COLLECT_RUN_METADATA:q} \
-            --output {output:q} \
-            --project-root {params.project_root:q} \
-            --fastp {params.fastp:q} \
-            --bwa {params.bwa:q} \
-            --samtools {params.samtools:q} \
-            --wisecondorx {params.wise:q} \
-            --python-bin {params.python_bin:q} \
-            --log {log:q}
-        """
+    run:
+        from pgta.core.logging import setup_logger
+        from pgta.core.run_metadata import collect_run_metadata
+
+        logger = setup_logger("collect_run_metadata", log[0])
+        collect_run_metadata(
+            output=output[0],
+            project_root=params.project_root,
+            fastp=params.fastp,
+            bwa=params.bwa,
+            samtools=params.samtools,
+            wisecondorx=params.wise,
+            python_bin=params.python_bin,
+            logger=logger,
+        )
 
 
 rule fastp_bwa:
@@ -39,7 +41,9 @@ rule fastp_bwa:
     log:
         fastp=project_path("logs", "fastp", "{sample}.log"),
         bwa=project_path("logs", "bwa", "{sample}.log")
-    threads: 8
+    benchmark:
+        BENCH_FASTP_BWA
+    threads: 16
     params:
         fastp=config["biosoft"]["fastp"],
         bwa=config["biosoft"]["bwa"],

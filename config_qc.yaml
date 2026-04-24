@@ -1,0 +1,34 @@
+base_config: "build_samples.yaml"
+pipeline:
+  mode: "build_ref"
+  targets: ["mapping", "metadata", "baseline_qc"]
+baseline_qc:
+  bin_size: 1000000
+  bin_sizes: [500000, 750000, 1000000, 1500000, 2000000]
+  threads: 96
+  samtools_threads: 4
+  gc_correction:
+    method: "loess"
+    loess_frac: 0.2
+    poly_degree: 2
+    min_valid_bins: 200
+    robust_iters: 1
+  thresholds:
+    min_mapped_warn: 2000000
+    min_mapped_fail: 1000000
+    max_zero_frac_warn: 0.15
+    max_zero_frac_fail: 0.30
+    max_bin_cv_warn: 1.50
+    max_bin_cv_fail: 2.50
+    max_adj_mad_warn: 0.35
+    max_adj_mad_fail: 0.55
+    max_gini_warn: 0.28
+    max_gini_fail: 0.35
+    min_pearson_warn: 0.92
+    min_pearson_fail: 0.85
+    min_spearman_warn: 0.90
+    min_spearman_fail: 0.83
+    max_median_abs_z_warn: 1.0
+    max_median_abs_z_fail: 1.5
+    max_outlier3_warn: 0.15
+    max_outlier3_fail: 0.30

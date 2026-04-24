@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/biosoftware/miniconda/envs/snakemake_env/bin/python
 import logging
 import sys
 from pathlib import Path
@@ -33,3 +33,21 @@ def setup_logger(name, log_path=None, level=logging.INFO):
 
     return logger
 
+
+def write_rule_audit_log(log_path, metadata_path=None, extra_sections=None):
+    log_file = Path(log_path)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(log_file, "w", encoding="utf-8") as handle:
+        handle.write("=== PIPELINE AUDIT ===\n")
+        if metadata_path:
+            metadata_text = Path(metadata_path).read_text(encoding="utf-8")
+            handle.write(metadata_text)
+            if metadata_text and not metadata_text.endswith("\n"):
+                handle.write("\n")
+        for title, body in extra_sections or []:
+            handle.write(f"=== {title} ===\n")
+            handle.write(str(body))
+            if body and not str(body).endswith("\n"):
+                handle.write("\n")
+        handle.write("=== COMMAND ===\n")
