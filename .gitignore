@@ -94,3 +94,12 @@ pgta_refactor_sync_20260419.tar
 
 # Local analysis summaries and reports
 /qc/
+/tests/qc_result/
+
+# Local/analysis markdowns not used by the workflow DAG
+/docs/*.md
+/config/README.md
+/scripts/README.md
+
+# Legacy spreadsheets not referenced by current workflow/config
+/sample_info/CNV-seq.xlsx
