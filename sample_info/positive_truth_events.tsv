@@ -1,0 +1,11 @@
+sample_id	chrom	expected_state	start	end	note
+Y1	chr21	loss			45,XY,-21
+Y2	chr14	gain			48,XX,+14,+21
+Y2	chr21	gain			48,XX,+14,+21
+Y3	chrX	loss			45,XO
+Y4	chr13	gain			47,XX,+13
+Y5	chr15	loss	23000000	29000000	15q11.2q13.1 del
+Y6	chr7	loss	1000000	58000000	7p22.3p11.2 del
+Y6	chr7	gain	63000000	159000000	7p11.2q36.3 dup
+Y7	chr8	loss	1000000	14000000	8p23.3p23.1 del
+Y8	chr13	gain	19000000	38000000	13q11q12.11 dup

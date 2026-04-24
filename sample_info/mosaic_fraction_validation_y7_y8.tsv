@@ -1,0 +1,7 @@
+sample_id	chrom	expected_state	start	end	abnormal_cell_fraction	fraction_range_hint	fraction_source	validation_scope	validation_note
+Y7	chr8	loss	8101641	9110822	0.60	50%-70%	abnormal_samples.xlsx remark	mosaic_only	range midpoint used for single-value validation truth
+Y7	chr8	loss	9121398	10295378	0.30	10%-40% / 20%-40%	abnormal_samples.xlsx remark	mosaic_only	conflicting ranges resolved by midpoint of overlap 20%-40%
+Y7	chr8	loss	12551156	14450366	0.65	60%-70%	abnormal_samples.xlsx remark	mosaic_only	range midpoint used for single-value validation truth
+Y8	chr13	gain	21254518	25745639	0.40	30%-50%	abnormal_samples.xlsx remark	mosaic_only	range midpoint used for single-value validation truth
+Y8	chr13	gain	32884647	34098232	0.40	30%-50%	abnormal_samples.xlsx remark	mosaic_only	range midpoint used for single-value validation truth
+Y8	chr13	gain	36257872	37930419	0.65	50%-80%	abnormal_samples.xlsx remark	mosaic_only	range midpoint used for single-value validation truth
