@@ -1,13 +1,14 @@
-#!/usr/bin/env python3
+#!/biosoftware/miniconda/envs/snakemake_env/bin/python
 import argparse
 from pathlib import Path
 
 import numpy as np
 
-from pipeline_logging import setup_logger
+from pgta.predict.branch_b.common import load_sample_bins
+from pgta.core.logging import setup_logger
 
 
-def load_primary_array(npz_path):
+def load_primary_array_legacy(npz_path):
     with np.load(npz_path, allow_pickle=True) as data:
         numeric = []
         for key in data.files:
@@ -21,33 +22,41 @@ def load_primary_array(npz_path):
     return key, values
 
 
-def main():
-    parser = argparse.ArgumentParser(description="QC check for WisecondorX CNV input NPZ.")
-    parser.add_argument("--sample-id", required=True)
-    parser.add_argument("--npz", required=True)
-    parser.add_argument("--output-tsv", required=True)
-    parser.add_argument("--output-plot", required=True)
-    parser.add_argument("--pass-marker", required=True)
-    parser.add_argument("--min-total-counts", type=float, required=True)
-    parser.add_argument("--min-nonzero-fraction", type=float, required=True)
-    parser.add_argument("--max-mad-log1p", type=float, required=True)
-    parser.add_argument("--log", default="", help="Optional log file path")
-    args = parser.parse_args()
-    logger = setup_logger("cnv_qc", args.log or None)
+def load_primary_array(npz_path):
+    npz_path = Path(npz_path)
+    try:
+        bins_df, _, _ = load_sample_bins(npz_path)
+    except Exception:
+        return load_primary_array_legacy(npz_path)
+    values = bins_df["raw_count"].to_numpy(dtype=np.float64)
+    values = np.nan_to_num(values, nan=0.0, posinf=0.0, neginf=0.0)
+    return "sample.raw_count", values
 
-    logger.info("start CNV QC for sample=%s npz=%s", args.sample_id, args.npz)
-    signal_key, values = load_primary_array(Path(args.npz))
+
+def run_cnv_qc(
+    sample_id,
+    npz,
+    output_tsv,
+    output_plot,
+    pass_marker,
+    min_total_counts,
+    min_nonzero_fraction,
+    max_mad_log1p,
+    logger,
+):
+    logger.info("start CNV QC for sample=%s npz=%s", sample_id, npz)
+    signal_key, values = load_primary_array(Path(npz))
     total_counts = float(np.sum(values))
     nonzero_fraction = float(np.mean(values > 0))
     log_values = np.log1p(np.clip(values, a_min=0.0, a_max=None))
     mad_log1p = float(np.median(np.abs(log_values - np.median(log_values))))
 
     fail_reasons = []
-    if total_counts < args.min_total_counts:
+    if total_counts < min_total_counts:
         fail_reasons.append("low_total_counts")
-    if nonzero_fraction < args.min_nonzero_fraction:
+    if nonzero_fraction < min_nonzero_fraction:
         fail_reasons.append("low_nonzero_fraction")
-    if mad_log1p > args.max_mad_log1p:
+    if mad_log1p > max_mad_log1p:
         fail_reasons.append("high_mad_log1p")
 
     passed = len(fail_reasons) == 0
@@ -55,7 +64,7 @@ def main():
     reason_text = "PASS" if passed else ",".join(fail_reasons)
     logger.info(
         "metrics sample=%s signal=%s total=%.0f nonzero=%.6f mad_log1p=%.6f status=%s reason=%s",
-        args.sample_id,
+        sample_id,
         signal_key,
         total_counts,
         nonzero_fraction,
@@ -64,7 +73,7 @@ def main():
         reason_text,
     )
 
-    output_tsv = Path(args.output_tsv)
+    output_tsv = Path(output_tsv)
     output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with open(output_tsv, "w", encoding="utf-8") as handle:
         handle.write(
@@ -72,11 +81,11 @@ def main():
             "threshold_min_total_counts\tthreshold_min_nonzero_fraction\tthreshold_max_mad_log1p\tstatus\treason\n"
         )
         handle.write(
-            f"{args.sample_id}\t{signal_key}\t{total_counts:.0f}\t{nonzero_fraction:.6f}\t{mad_log1p:.6f}\t"
-            f"{args.min_total_counts:.0f}\t{args.min_nonzero_fraction:.6f}\t{args.max_mad_log1p:.6f}\t{status}\t{reason_text}\n"
+            f"{sample_id}\t{signal_key}\t{total_counts:.0f}\t{nonzero_fraction:.6f}\t{mad_log1p:.6f}\t"
+            f"{min_total_counts:.0f}\t{min_nonzero_fraction:.6f}\t{max_mad_log1p:.6f}\t{status}\t{reason_text}\n"
         )
 
-    output_plot = Path(args.output_plot)
+    output_plot = Path(output_plot)
     output_plot.parent.mkdir(parents=True, exist_ok=True)
     width, height = 900, 340
     left, top = 90, 90
@@ -84,9 +93,9 @@ def main():
     gap = 28
     max_w = 640
 
-    tc_ratio = 0.0 if args.min_total_counts <= 0 else min(total_counts / args.min_total_counts, 2.0)
-    nz_ratio = 0.0 if args.min_nonzero_fraction <= 0 else min(nonzero_fraction / args.min_nonzero_fraction, 2.0)
-    mad_ratio = 2.0 if args.max_mad_log1p <= 0 else min(mad_log1p / args.max_mad_log1p, 2.0)
+    tc_ratio = 0.0 if min_total_counts <= 0 else min(total_counts / min_total_counts, 2.0)
+    nz_ratio = 0.0 if min_nonzero_fraction <= 0 else min(nonzero_fraction / min_nonzero_fraction, 2.0)
+    mad_ratio = 2.0 if max_mad_log1p <= 0 else min(mad_log1p / max_mad_log1p, 2.0)
 
     def bar(y, label, value, threshold, ratio, reverse=False):
         fill = "#16a34a"
@@ -104,23 +113,49 @@ def main():
     svg = []
     svg.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">')
     svg.append('<rect width="100%" height="100%" fill="#ffffff"/>')
-    svg.append(f'<text x="20" y="34" font-size="24" font-family="Arial,sans-serif" fill="#111">CNV QC Metrics - {args.sample_id}</text>')
+    svg.append(f'<text x="20" y="34" font-size="24" font-family="Arial,sans-serif" fill="#111">CNV QC Metrics - {sample_id}</text>')
     svg.append(f'<text x="20" y="58" font-size="13" font-family="Arial,sans-serif" fill="#334155">status: {status} ({reason_text})</text>')
-    svg.extend(bar(top, "Total counts / min_total_counts", total_counts, args.min_total_counts, tc_ratio, reverse=False))
-    svg.extend(bar(top + bar_h + gap, "Nonzero fraction / min_nonzero_fraction", nonzero_fraction, args.min_nonzero_fraction, nz_ratio, reverse=False))
-    svg.extend(bar(top + 2 * (bar_h + gap), "MAD(log1p) / max_mad_log1p", mad_log1p, args.max_mad_log1p, mad_ratio, reverse=True))
+    svg.extend(bar(top, "Total counts / min_total_counts", total_counts, min_total_counts, tc_ratio, reverse=False))
+    svg.extend(bar(top + bar_h + gap, "Nonzero fraction / min_nonzero_fraction", nonzero_fraction, min_nonzero_fraction, nz_ratio, reverse=False))
+    svg.extend(bar(top + 2 * (bar_h + gap), "MAD(log1p) / max_mad_log1p", mad_log1p, max_mad_log1p, mad_ratio, reverse=True))
     svg.append('</svg>')
     output_plot.write_text("\n".join(svg), encoding="utf-8")
     logger.info("qc report written: tsv=%s plot=%s", output_tsv, output_plot)
 
     if not passed:
-        logger.error("CNV QC failed for %s: %s", args.sample_id, reason_text)
-        raise SystemExit(f"CNV QC failed for {args.sample_id}: {reason_text}")
+        logger.error("CNV QC failed for %s: %s", sample_id, reason_text)
+        raise SystemExit(f"CNV QC failed for {sample_id}: {reason_text}")
 
-    pass_marker = Path(args.pass_marker)
+    pass_marker = Path(pass_marker)
     pass_marker.parent.mkdir(parents=True, exist_ok=True)
     pass_marker.write_text("PASS\n", encoding="utf-8")
     logger.info("pass marker written: %s", pass_marker)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="QC check for WisecondorX CNV input NPZ.")
+    parser.add_argument("--sample-id", required=True)
+    parser.add_argument("--npz", required=True)
+    parser.add_argument("--output-tsv", required=True)
+    parser.add_argument("--output-plot", required=True)
+    parser.add_argument("--pass-marker", required=True)
+    parser.add_argument("--min-total-counts", type=float, required=True)
+    parser.add_argument("--min-nonzero-fraction", type=float, required=True)
+    parser.add_argument("--max-mad-log1p", type=float, required=True)
+    parser.add_argument("--log", default="", help="Optional log file path")
+    args = parser.parse_args()
+    logger = setup_logger("cnv_qc", args.log or None)
+    run_cnv_qc(
+        sample_id=args.sample_id,
+        npz=args.npz,
+        output_tsv=args.output_tsv,
+        output_plot=args.output_plot,
+        pass_marker=args.pass_marker,
+        min_total_counts=args.min_total_counts,
+        min_nonzero_fraction=args.min_nonzero_fraction,
+        max_mad_log1p=args.max_mad_log1p,
+        logger=logger,
+    )
 
 
 if __name__ == "__main__":
