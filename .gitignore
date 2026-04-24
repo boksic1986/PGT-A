@@ -103,3 +103,5 @@ pgta_refactor_sync_20260419.tar
 
 # Legacy spreadsheets not referenced by current workflow/config
 /sample_info/CNV-seq.xlsx
+/sample_info/reference_samples.xlsx
+/sample_info/abnormal_samples.xlsx
