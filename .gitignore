@@ -75,3 +75,22 @@ config.local.yaml
 # Local temporary scratch files
 tmp_*
 *.tmp
+
+# Codex / handoff / local repo metadata
+.agents/
+skills/
+docs/handoff/
+docs/archive/
+AGENTS.md
+CURRENT_STATE.md
+PLANS.md
+PROMPTS.md
+REPO_MAP.md
+architecture.md
+validation_plan.md
+CHANGELOG.md
+tmux_tut.md
+pgta_refactor_sync_20260419.tar
+
+# Local analysis summaries and reports
+qc/
