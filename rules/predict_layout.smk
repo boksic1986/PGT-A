@@ -114,6 +114,11 @@ CNV_ARTIFACT_MAX_QVALUE = float(CNV_ARTIFACT_CFG.get("max_qvalue", 0.25))
 CNV_ARTIFACT_KEEP_REVIEW = int(bool(CNV_ARTIFACT_CFG.get("keep_review", True)))
 CNV_ARTIFACT_HIGH_CONF_Z = float(CNV_ARTIFACT_CFG.get("high_confidence_z", 4.0))
 CNV_ARTIFACT_HIGH_CONF_QVALUE = float(CNV_ARTIFACT_CFG.get("high_confidence_qvalue", 0.05))
+CNV_ARTIFACT_A_BRANCH_REVIEW_MIN_ABS_Z = float(CNV_ARTIFACT_CFG.get("a_branch_review_min_abs_z", 20.0))
+CNV_ARTIFACT_A_BRANCH_DISCORDANT_PROTECT_MIN_ABS_Z = float(
+    CNV_ARTIFACT_CFG.get("a_branch_discordant_protect_min_abs_z", 50.0)
+)
+CNV_ARTIFACT_BRANCH_B_DIRECTION_MIN_ABS_Z = float(CNV_ARTIFACT_CFG.get("branch_b_direction_min_abs_z", 0.25))
 CNV_ARTIFACT_CNVSEQ_LARGE_EVENT_MIN_BP = int(CNV_ARTIFACT_CFG.get("cnvseq_large_event_min_bp", 10000000))
 CNV_ARTIFACT_CNVSEQ_BOUNDARY_MAX_ABS_Z = float(CNV_ARTIFACT_CFG.get("cnvseq_boundary_max_abs_z", 4.0))
 CNV_ARTIFACT_CNVSEQ_WHOLE_CHROM_AVAILABLE_FRACTION = float(
