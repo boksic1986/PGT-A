@@ -5,13 +5,17 @@ import types
 import unittest
 from pathlib import Path
 
+import pandas as pd
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 try:
+    import pgta.predict.branch_b.artifact_rules as artifact_rules
     from pgta.predict.branch_b.artifact_rules import classify_event
 except ModuleNotFoundError as exc:  # pragma: no cover - environment-dependent skip
+    artifact_rules = None
     classify_event = None
     IMPORT_ERROR = exc
 else:
@@ -47,7 +51,185 @@ class BranchBArtifactRulesTest(unittest.TestCase):
             focal_review_max_overlap_fraction=0.25,
             focal_review_max_region_risk=0.20,
             a_branch_review_min_abs_z=20.0,
+            cnvseq_large_event_min_bp=10_000_000,
+            cnvseq_boundary_max_abs_z=4.0,
+            cnvseq_whole_chrom_available_fraction=0.90,
         )
+
+    def test_cnvseq_context_reports_available_fraction_and_boundary_crossing(self):
+        self.assertTrue(hasattr(artifact_rules, "summarize_cnvseq_event_context"))
+        bins = pd.DataFrame(
+            {
+                "chrom": ["chr7"] * 8,
+                "bin_index": list(range(8)),
+                "mask_label": ["pass", "pass", "pass", "pass", "pass", "hard", "pass", "pass"],
+                "blacklist_overlap_fraction": [0.0] * 8,
+                "gap_centromere_telomere_overlap_fraction": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                "ambiguous_alignment_overlap_fraction": [0.0] * 8,
+                "region_risk_class": ["clean", "clean", "moderate", "high", "clean", "high", "clean", "clean"],
+            }
+        )
+        row = types.SimpleNamespace(chrom="chr7", start_bin=1, end_bin=4)
+
+        result = artifact_rules.summarize_cnvseq_event_context(row, bins)
+
+        self.assertAlmostEqual(result["cnvseq_available_chrom_fraction"], 4 / 7)
+        self.assertEqual(result["cnvseq_crosses_gap_or_centromere"], 1)
+        self.assertGreater(result["cnvseq_gap_centromere_bin_fraction"], 0.0)
+
+    def test_large_subchrom_boundary_event_with_weak_cnvseq_support_is_artifact(self):
+        row = types.SimpleNamespace(
+            chrom="chr7",
+            start=58_000_000,
+            end=104_000_000,
+            start_bin=58,
+            end_bin=103,
+            n_bins=46,
+            state="gain",
+            calibrated_mean_z=3.1,
+            calibrated_median_z=3.0,
+            event_corr_adjusted_z=3.2,
+            empirical_qvalue=0.04,
+            clean_bin_fraction=0.88,
+            moderate_risk_bin_fraction=0.10,
+            high_risk_bin_fraction=0.02,
+            effective_bin_count=42.0,
+            region_risk_score_mean=0.04,
+            region_risk_score_max=0.18,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.0,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.02,
+            repeat_rich_overlap_fraction=0.0,
+            blacklist_overlap_fraction=0.0,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=1,
+            cnvseq_available_chrom_fraction=0.31,
+            cnvseq_crosses_gap_or_centromere=1,
+            cnvseq_gap_centromere_bin_fraction=0.05,
+            caller="wisecondorx_a_branch",
+            a_candidate_id="Y8.A0003",
+            a_abs_zscore=8.5,
+            segment_mean_robust_z=3.0,
+            segment_median_robust_z=3.0,
+            segment_abs_max_robust_z=3.6,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=159,
+            args=self.build_args(),
+            sex_call="XY",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "artifact")
+        self.assertEqual(result["keep_event"], 0)
+        self.assertIn("cnvseq_subchrom_boundary_weak_support", result["filter_reason"])
+
+    def test_cnvseq_boundary_rule_uses_segment_level_support_not_single_bin_spike(self):
+        row = types.SimpleNamespace(
+            chrom="chr17",
+            start=25_000_001,
+            end=81_000_000,
+            start_bin=25,
+            end_bin=80,
+            n_bins=56,
+            state="loss",
+            calibrated_mean_z=-0.7,
+            calibrated_median_z=-0.6,
+            event_corr_adjusted_z=-3.2,
+            empirical_qvalue=0.05,
+            clean_bin_fraction=0.80,
+            moderate_risk_bin_fraction=0.15,
+            high_risk_bin_fraction=0.05,
+            effective_bin_count=49.0,
+            region_risk_score_mean=0.04,
+            region_risk_score_max=0.18,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.0,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.0,
+            repeat_rich_overlap_fraction=0.0,
+            blacklist_overlap_fraction=0.0,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=1,
+            cnvseq_available_chrom_fraction=0.70,
+            cnvseq_crosses_gap_or_centromere=0,
+            cnvseq_gap_centromere_bin_fraction=0.0,
+            cnvseq_region_class_transition=1,
+            caller="wisecondorx_a_branch",
+            a_candidate_id="Y2.A0004",
+            a_abs_zscore=16.4,
+            segment_mean_robust_z=-0.5,
+            segment_median_robust_z=-0.4,
+            segment_abs_max_robust_z=21.6,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=78,
+            args=self.build_args(),
+            sex_call="XX",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "artifact")
+        self.assertEqual(result["keep_event"], 0)
+        self.assertIn("cnvseq_subchrom_boundary_weak_support", result["filter_reason"])
+
+    def test_large_boundary_event_with_strong_a_branch_support_remains_review(self):
+        row = types.SimpleNamespace(
+            chrom="chr21",
+            start=14_000_000,
+            end=42_000_000,
+            start_bin=14,
+            end_bin=41,
+            n_bins=28,
+            state="gain",
+            calibrated_mean_z=1.5,
+            calibrated_median_z=1.4,
+            event_corr_adjusted_z=1.3,
+            empirical_qvalue=0.60,
+            clean_bin_fraction=0.40,
+            moderate_risk_bin_fraction=0.55,
+            high_risk_bin_fraction=0.05,
+            effective_bin_count=22.0,
+            region_risk_score_mean=0.05,
+            region_risk_score_max=0.20,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.0,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.04,
+            repeat_rich_overlap_fraction=0.0,
+            blacklist_overlap_fraction=0.0,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=1,
+            cnvseq_available_chrom_fraction=0.58,
+            cnvseq_crosses_gap_or_centromere=1,
+            cnvseq_gap_centromere_bin_fraction=0.08,
+            caller="wisecondorx_a_branch",
+            a_candidate_id="Y2.A0002",
+            a_abs_zscore=83.9,
+            segment_mean_robust_z=1.2,
+            segment_median_robust_z=1.1,
+            segment_abs_max_robust_z=1.6,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=48,
+            args=self.build_args(),
+            sex_call="XY",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "review")
+        self.assertEqual(result["keep_event"], 1)
+        self.assertIn("a_branch_strong_evidence_preserved_for_review", result["downgrade_reason"])
 
     def test_high_confidence_broad_event_is_preserved_for_review(self):
         row = types.SimpleNamespace(

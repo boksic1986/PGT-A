@@ -45,6 +45,9 @@ def parse_args():
     parser.add_argument("--focal-review-max-overlap-fraction", type=float, default=0.25)
     parser.add_argument("--focal-review-max-region-risk", type=float, default=0.20)
     parser.add_argument("--a-branch-review-min-abs-z", type=float, default=20.0)
+    parser.add_argument("--cnvseq-large-event-min-bp", type=int, default=10_000_000)
+    parser.add_argument("--cnvseq-boundary-max-abs-z", type=float, default=4.0)
+    parser.add_argument("--cnvseq-whole-chrom-available-fraction", type=float, default=0.90)
     parser.add_argument("--log", default="")
     return parser.parse_args()
 
@@ -96,6 +99,57 @@ def safe_float(value, default=np.nan):
         return float(default)
 
 
+def summarize_cnvseq_event_context(row, bins_df):
+    chrom = str(getattr(row, "chrom", ""))
+    chrom_df = bins_df[bins_df["chrom"].astype(str).eq(chrom)].copy()
+    if chrom_df.empty:
+        return {
+            "cnvseq_available_bin_count": 0,
+            "cnvseq_chrom_available_bin_count": 0,
+            "cnvseq_available_chrom_fraction": np.nan,
+            "cnvseq_gap_centromere_bin_fraction": 0.0,
+            "cnvseq_crosses_gap_or_centromere": 0,
+            "cnvseq_region_class_transition": 0,
+        }
+
+    start_bin = int(getattr(row, "start_bin", 0))
+    end_bin = int(getattr(row, "end_bin", start_bin))
+    event_df = chrom_df[chrom_df["bin_index"].between(start_bin, end_bin)].copy()
+    if event_df.empty:
+        return {
+            "cnvseq_available_bin_count": 0,
+            "cnvseq_chrom_available_bin_count": int(len(chrom_df)),
+            "cnvseq_available_chrom_fraction": 0.0,
+            "cnvseq_gap_centromere_bin_fraction": 0.0,
+            "cnvseq_crosses_gap_or_centromere": 0,
+            "cnvseq_region_class_transition": 0,
+        }
+
+    chrom_mask_label = chrom_df.get("mask_label", pd.Series("pass", index=chrom_df.index)).fillna("pass").astype(str)
+    event_mask_label = event_df.get("mask_label", pd.Series("pass", index=event_df.index)).fillna("pass").astype(str)
+    chrom_available = int((chrom_mask_label != "hard").sum())
+    event_available = int((event_mask_label != "hard").sum())
+    available_fraction = event_available / float(max(chrom_available, 1))
+
+    gap_values = pd.to_numeric(
+        event_df.get("gap_centromere_telomere_overlap_fraction", pd.Series(0.0, index=event_df.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    gap_bin_fraction = float((gap_values > 0.0).mean()) if len(gap_values) else 0.0
+
+    risk_classes = event_df.get("region_risk_class", pd.Series("", index=event_df.index)).fillna("").astype(str)
+    region_class_transition = int(len([item for item in risk_classes.unique() if item]) > 1)
+
+    return {
+        "cnvseq_available_bin_count": event_available,
+        "cnvseq_chrom_available_bin_count": chrom_available,
+        "cnvseq_available_chrom_fraction": available_fraction,
+        "cnvseq_gap_centromere_bin_fraction": gap_bin_fraction,
+        "cnvseq_crosses_gap_or_centromere": int(gap_bin_fraction > 0.0),
+        "cnvseq_region_class_transition": region_class_transition,
+    }
+
+
 def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     flags = []
     explanations = []
@@ -136,6 +190,24 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     effective_bin_count = safe_float(getattr(row, "effective_bin_count", np.nan), default=float(row.n_bins))
     region_risk_score_mean = safe_float(getattr(row, "region_risk_score_mean", np.nan), default=0.0)
     region_risk_score_max = safe_float(getattr(row, "region_risk_score_max", np.nan), default=0.0)
+    event_length_bp = max(int(row.end) - int(row.start), 0)
+    cnvseq_available_chrom_fraction = safe_float(
+        getattr(row, "cnvseq_available_chrom_fraction", np.nan), default=chrom_fraction
+    )
+    cnvseq_gap_centromere_bin_fraction = safe_float(
+        getattr(row, "cnvseq_gap_centromere_bin_fraction", np.nan), default=0.0
+    )
+    cnvseq_crosses_gap_or_centromere = int(
+        safe_float(getattr(row, "cnvseq_crosses_gap_or_centromere", 0), default=0.0) > 0.0
+    )
+    cnvseq_region_class_transition = int(
+        safe_float(getattr(row, "cnvseq_region_class_transition", 0), default=0.0) > 0.0
+    )
+    high_risk_boundary_crossing = int(
+        safe_float(getattr(row, "high_risk_boundary_crossing", 0), default=0.0) > 0.0
+    )
+    cnvseq_boundary_like_event = bool(cnvseq_crosses_gap_or_centromere or high_risk_boundary_crossing)
+    cnvseq_segment_level_z = max(mean_z, median_z, adjusted_event_z)
     weighted_non_high_support_fraction = clean_fraction + (0.5 * max(moderate_fraction, 0.0))
     preserve_broad_internal_signal = (
         chrom_fraction > args.max_chrom_fraction
@@ -326,11 +398,25 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         explanations.append("Event has limited clean-bin support relative to high-risk sequence burden.")
         filter_reasons.append("clean_bin_support_too_low")
         hard_artifact = True
-    if int(safe_float(getattr(row, "high_risk_boundary_crossing", 0), default=0.0)) == 1:
+    if high_risk_boundary_crossing == 1:
         flags.append("high_risk_boundary_crossing")
         explanations.append("Event crosses a clean/high-risk boundary and should be manually reviewed.")
         downgrade_reasons.append("high_risk_boundary_crossing")
         review_only = True
+    if (
+        not is_sex_chrom
+        and event_length_bp >= int(getattr(args, "cnvseq_large_event_min_bp", 10_000_000))
+        and cnvseq_boundary_like_event
+        and cnvseq_available_chrom_fraction < float(getattr(args, "cnvseq_whole_chrom_available_fraction", 0.90))
+        and cnvseq_segment_level_z < float(getattr(args, "cnvseq_boundary_max_abs_z", args.high_confidence_z))
+        and not preserve_a_branch_primary_signal
+    ):
+        flags.append("cnvseq_subchrom_boundary_event")
+        explanations.append(
+            "CNVseq-style review marks this as a large subchromosomal boundary event without stable segment-level support."
+        )
+        filter_reasons.append("cnvseq_subchrom_boundary_weak_support")
+        hard_artifact = True
 
     risk_penalty = (
         0.60 * high_fraction
@@ -342,6 +428,8 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     priority_score = base_priority * max(clean_fraction, 0.10) * max(0.10, 1.0 - risk_penalty)
     if np.isfinite(empirical_q):
         priority_score *= max(0.0, 1.0 - empirical_q)
+    if cnvseq_boundary_like_event:
+        priority_score *= max(0.25, 1.0 - (0.50 * min(cnvseq_gap_centromere_bin_fraction, 1.0)))
     if preserve_broad_gain_signal:
         q_confidence = max(0.0, 1.0 - min(empirical_q, args.broad_support_max_qvalue)) if np.isfinite(empirical_q) else 1.0
         support_fraction = np.sqrt(min(max(weighted_non_high_support_fraction, 0.0), 1.0))
@@ -465,6 +553,14 @@ def main():
         return
 
     chrom_sizes = bins_df.groupby("chrom")["bin_index"].max().add(1).to_dict()
+    cnvseq_context = [
+        summarize_cnvseq_event_context(row, bins_df)
+        for row in events_df.itertuples(index=False)
+    ]
+    if cnvseq_context:
+        context_df = pd.DataFrame(cnvseq_context)
+        for column in context_df.columns:
+            events_df[column] = context_df[column]
     decisions = []
     for row in events_df.itertuples(index=False):
         decisions.append(
