@@ -164,6 +164,9 @@ def main():
             mean_z = (float(row.segment_mean_robust_z) - null_median) / null_scale
             median_z = (float(row.segment_median_robust_z) - null_median) / null_scale
             event_metrics = summarize_event_bins(row, bins_df, lag_correlations)
+            if str(getattr(row, "caller", "")) == "raw_chromosome_dosage_detector":
+                event_metrics["event_weighted_z"] = mean_z
+                event_metrics["event_corr_adjusted_z"] = mean_z
             calibrated_mean.append(mean_z)
             calibrated_median.append(median_z)
             weighted_z.append(event_metrics["event_weighted_z"])

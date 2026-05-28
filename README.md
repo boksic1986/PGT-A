@@ -1,9 +1,13 @@
-﻿# PGT-A Snakemake Pipeline
+# PGT-A Snakemake Pipeline
 
 This pipeline is for PGT-A analysis with `fastp + bwa + WisecondorX`.
 
 ## 0. Recent updates
 
+- Build Ref V2 keeps WisecondorX as the primary CNV method: `convert -> newref -> predict -> CBS/segment` remains the main evidence path.
+- Reference mask assets now classify chrM/blacklist/gap regions as hard masks, mapping/repeat/segdup regions as soft masks, and PAR/XY homology as annotation/review labels by default.
+- `WisecondorX predict` passes a configured blacklist BED explicitly when the file exists and is non-empty.
+- Branch B HMM is sidecar by default; standalone HMM segment candidates require `core.wisecondorx.cnv.postprocess.calling.hmm_role: legacy_candidate`.
 - Refactored NPZ parsing to follow official WisecondorX convert format (`binsize + sample + quality`).
 - Added reference prefilter robustness: unusable NPZ samples are logged and excluded before model QC.
 - Improved `WisecondorX convert` throughput with parallel execution (`--threads`) and per-sample logs.
@@ -103,6 +107,13 @@ Notes:
 - `core.wisecondorx.cnv.zscore: 5`
 - `core.wisecondorx.cnv.alpha: 0.001`
 
+Predict branch roles:
+- Branch A is the sensitive first-pass signal scan. Keep `core.wisecondorx.cnv.zscore: 5` for candidate generation so mosaic, low-fraction, and weak positive signals are not filtered before review.
+- Branch B is the refinement layer. It calibrates events, estimates biopsy abnormal-cell fraction where supported, labels gain/loss and confidence, and suppresses or downgrades likely false positives.
+- Branch B HMM is sidecar evidence by default. It may write bin-level HMM state and consistency information, but it must not act as a standalone final CNV caller unless a comparison run explicitly sets `hmm_role: legacy_candidate`.
+- Do not use a stricter Branch A scan threshold such as `zscore: 10` as the first-pass filter. Higher z-score tiers may be used only for reporting/ranking high-confidence Branch A support after candidates have already been generated.
+- Copy-neutral UPD is out of scope for this CNV-depth workflow unless SNP/BAF or parental haplotype evidence is added.
+
 ## 3. Reference output layout
 
 Default root: `core.wisecondorx.reference_model_root: reference`
@@ -123,6 +134,9 @@ Default root: `core.wisecondorx.reference_model_root: reference`
 Use Snakemake in your server env:
 `/biosoftware/miniconda/envs/snakemake_env/bin/snakemake`
 
+Production dry-run and real workflow validation must run on remote `fengxian`.
+Local runs are suitable only for static inspection, planning, or lightweight unit checks and must not be reported as final workflow validation.
+
 ### 4.1 Mapping
 
 ```bash
@@ -142,6 +156,14 @@ Reference build now follows this order:
 4. run one global tuning on merged inliers using autosomes only (`chr1-22`)
 5. write one shared `best binsize`
 6. build `XX ref`, `XY ref`, and `gender ref` with that same binsize
+
+Build Ref V2 method boundaries:
+
+- `WisecondorX newref` remains the reference builder.
+- Project-level PCA/tuning metrics are diagnostic unless the active WisecondorX executable exposes and verifies a matching runtime parameter.
+- chrM is excluded by mask policy.
+- Autosomal reference/tuning may use mixed XX+XY samples; sex chromosome interpretation remains sex-aware.
+- PAR and XY homology are annotation/review labels by default, not global hard masks.
 
 Run reference QC stage first:
 
@@ -178,7 +200,7 @@ Predict now follows this order in dual-reference mode:
 2. `WisecondorX gender` with the mixed `gender ref`
 3. CNV input QC
 4. choose `XX ref` or `XY ref` from the gender result
-5. `WisecondorX predict --gender ...`
+5. `WisecondorX predict --gender ...` with `--blacklist` when a configured blacklist BED exists and is non-empty
 
 ```bash
 /biosoftware/miniconda/envs/snakemake_env/bin/snakemake \
@@ -284,6 +306,9 @@ The workflow is now organized into modular rule files:
 
 This keeps common preprocessing and downstream analysis modes separated while preserving existing rule names, outputs, and DAG behavior.
 
+The top-level `scripts/*.py` files are compatibility dispatchers for workflow-facing entry paths.
+The main implementation lives under the `pgta/` package.
+
 ## 10. Config entry points
 
 The workflow now uses build and predict base configs plus stage overlays:
@@ -337,6 +362,33 @@ Main workflow and test workflow are intentionally separate:
 - local planning helper:
   - `python cli/pgta.py plan --stage qc|reference|predict`
   - `python cli/pgta.py test-plan`
+
+### 10.1 Re-sequencing failed reference samples
+
+Failed baseline/reference samples can re-enter modeling after re-sequencing, but they should not be inserted into the reference cohort by hand.
+
+Expected path:
+
+1. record re-sequenced FASTQ paths in a manifest
+2. regenerate or update the build-reference sample config
+3. run `mapping` and `baseline_qc`
+4. review retained/excluded/cohort files
+5. promote only QC-supported samples into reference cohort candidates
+6. rerun `reference_qc reference`
+7. rerun predict/report validation if the new reference is promoted for Branch B conclusions
+
+Reference cohort selection can consume an optional manifest through:
+
+```yaml
+build_reference:
+  resequencing:
+    manifest: "/absolute/path/to/resequencing_manifest.tsv"
+    allowed_statuses_for_reference: ["promoted"]
+```
+
+Only manifest rows with an allowed status enter reference cohort selection. With `replacement_policy: replace_original`, the promoted re-sequenced sample replaces its `source_sample_id` during cohort selection.
+
+See `docs/cohort_resequencing_reentry.md` for the design contract.
 
 ## 11. PGT-A algorithm notes
 

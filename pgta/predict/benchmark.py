@@ -7,6 +7,14 @@ import numpy as np
 import pandas as pd
 
 from pgta.core.logging import setup_logger
+from pgta.predict.truth import (
+    event_detected,
+    event_detection_threshold,
+    event_support_z,
+    normalize_chrom,
+    normalize_state,
+    overlap_fraction,
+)
 
 
 def parse_args():
@@ -29,29 +37,6 @@ def ensure_parent(path_value):
     path = Path(path_value)
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def normalize_chrom(value):
-    chrom = str(value).strip()
-    if not chrom:
-        return chrom
-    return chrom if chrom.startswith("chr") else f"chr{chrom}"
-
-
-def normalize_state(value):
-    text = str(value).strip().lower()
-    mapping = {
-        "gain": "gain",
-        "dup": "gain",
-        "duplication": "gain",
-        "amplification": "gain",
-        "+": "gain",
-        "loss": "loss",
-        "del": "loss",
-        "deletion": "loss",
-        "-": "loss",
-    }
-    return mapping.get(text, text)
 
 
 def safe_float(value, default=np.nan):
@@ -126,16 +111,6 @@ def top_branch_b_row(frame):
     return ordered.iloc[0]
 
 
-def event_support_z(frame):
-    support_columns = [
-        column for column in ["calibrated_mean_z", "calibrated_median_z", "event_corr_adjusted_z"] if column in frame.columns
-    ]
-    if not support_columns or frame.empty:
-        return pd.Series(np.nan, index=frame.index, dtype=float)
-    support_frame = frame[support_columns].apply(pd.to_numeric, errors="coerce").abs()
-    return support_frame.max(axis=1, skipna=True)
-
-
 def extract_branch_b_fraction(row):
     if row is None:
         return {
@@ -189,14 +164,6 @@ def load_a_branch_events(paths):
     if not rows:
         return pd.DataFrame()
     return pd.concat(rows, ignore_index=True)
-
-
-def overlap_fraction(left_start, left_end, right_start, right_end):
-    if any(pd.isna(value) for value in [left_start, left_end, right_start, right_end]):
-        return np.nan
-    overlap = max(0.0, min(float(left_end), float(right_end)) - max(float(left_start), float(right_start)) + 1.0)
-    length = max(float(left_end) - float(left_start) + 1.0, 1.0)
-    return overlap / length
 
 
 def select_matches(df, sample_id, chrom, state, truth_start, truth_end, start_col, end_col):
@@ -313,6 +280,16 @@ def main():
         branch_b_fraction = extract_branch_b_fraction(branch_b_top_row)
 
         branch_b_top_z = float(event_support_z(branch_b_matches).max()) if not branch_b_matches.empty else np.nan
+        branch_b_detected = int(event_detected(branch_b_matches, standard_z_threshold=args.branch_b_z_threshold).max()) if not branch_b_matches.empty else 0
+        if branch_b_top_row is not None:
+            branch_b_top_threshold = float(
+                event_detection_threshold(
+                    branch_b_top_row.to_frame().T,
+                    standard_z_threshold=args.branch_b_z_threshold,
+                ).iloc[0]
+            )
+        else:
+            branch_b_top_threshold = float(args.branch_b_z_threshold)
         branch_a_top_z = float(branch_a_matches["abs_zscore"].max()) if not branch_a_matches.empty else np.nan
         fraction_error = (
             branch_b_fraction["point"] - truth_fraction
@@ -336,7 +313,7 @@ def main():
                 "truth_fraction_source": truth_fraction_source,
                 "branch_b_match_count": int(len(branch_b_matches)),
                 "branch_b_top_abs_z": branch_b_top_z,
-                "branch_b_detected": int(np.isfinite(branch_b_top_z) and branch_b_top_z >= args.branch_b_z_threshold),
+                "branch_b_detected": branch_b_detected,
                 "branch_b_top_fraction": branch_b_fraction["point"],
                 "branch_b_top_fraction_ci_low": branch_b_fraction["ci_low"],
                 "branch_b_top_fraction_ci_high": branch_b_fraction["ci_high"],
@@ -378,7 +355,7 @@ def main():
                     "expected_state": state,
                     "admixture_level": float(admixture_level),
                     "simulated_branch_b_abs_z": simulated_branch_b,
-                    "branch_b_detected": int(np.isfinite(simulated_branch_b) and simulated_branch_b >= args.branch_b_z_threshold),
+                    "branch_b_detected": int(np.isfinite(simulated_branch_b) and simulated_branch_b >= branch_b_top_threshold),
                     "simulated_a_branch_abs_z": simulated_branch_a,
                     "a_branch_detected": int(np.isfinite(simulated_branch_a) and simulated_branch_a >= args.branch_a_z_threshold),
                     "simulated_truth_fraction": simulated_truth_fraction,

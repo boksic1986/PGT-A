@@ -108,10 +108,11 @@ if CNV_ENABLED:
 
         rule wisecondorx_predict_cnv:
             input:
-                npz=CNV_NPZ,
+                npz=CNV_PREDICT_INPUT_NPZ,
                 gender_tsv=CNV_GENDER_TSV,
                 qc_report=CNV_QC_TSV,
                 qc_pass=CNV_QC_PASS,
+                blacklist=([CNV_POSTPROCESS_BLACKLIST_BED] if CNV_POSTPROCESS_BLACKLIST_BED else []),
                 metadata=RUN_METADATA
             output:
                 a_branch_bed=CNV_A_ABERRATIONS_BED,
@@ -129,6 +130,7 @@ if CNV_ENABLED:
                 maskrepeats=CNV_MASKREPEATS,
                 minrefbins=CNV_MINREFBINS,
                 seed=CNV_PREDICT_SEED,
+                blacklist=CNV_POSTPROCESS_BLACKLIST_BED,
                 output_prefix=lambda wildcards: str(Path(CNV_PREDICT_DIR) / wildcards.sample)
             threads: 2
             shell:
@@ -144,6 +146,16 @@ if CNV_ENABLED:
                     cat {input.qc_report:q}
                     echo "=== COMMAND ==="
                 ) > {log:q}
+                blacklist_args=""
+                if [ -n {params.blacklist:q} ]; then
+                    if [ -s {params.blacklist:q} ]; then
+                        blacklist_args="--blacklist {params.blacklist}"
+                    else
+                        echo "blacklist not passed because file missing or empty: {params.blacklist}" >> {log:q}
+                    fi
+                else
+                    echo "blacklist not passed because path is empty" >> {log:q}
+                fi
                 {params.wise:q} predict {input.npz:q} {params.ref:q} {params.output_prefix:q} \
                     --gender {params.gender} \
                     --bed \
@@ -152,193 +164,9 @@ if CNV_ENABLED:
                     --alpha {params.alpha} \
                     --maskrepeats {params.maskrepeats} \
                     --minrefbins {params.minrefbins} \
-                    --seed {params.seed} >> {log:q} 2>&1
+                    --seed {params.seed} $blacklist_args >> {log:q} 2>&1
                 touch {output.done:q}
                 """
-
-        if CNV_POSTPROCESS_ENABLE_BRANCH_B:
-            rule cnv_correction_branch_b:
-                input:
-                    npz=CNV_NPZ,
-                    qc_pass=CNV_QC_PASS,
-                    annotations=REFERENCE_ANALYSIS_BIN_ANNOTATIONS,
-                    combined_mask=REFERENCE_COMBINED_MASK_TSV,
-                    metadata=RUN_METADATA
-                output:
-                    bins=CNV_B_CORRECTED_BINS,
-                    summary=CNV_B_CORRECTION_SUMMARY
-                log:
-                    project_path("logs", "cnv", "{sample}.branch_b.correction.log")
-                threads: 1
-                run:
-                    from pgta.core.logging import write_rule_audit_log
-                    import subprocess
-
-                    write_rule_audit_log(log[0], input.metadata, extra_sections=[("QC PASS", open(input.qc_pass, "r", encoding="utf-8").read())])
-                    command = [
-                        config["biosoft"]["python"],
-                        SCRIPT_CNV_CORRECTION,
-                        SCRIPT_CNV_CORRECTION_ACTION,
-                        "--sample-id", wildcards.sample,
-                        "--npz", input.npz,
-                        "--annotations", input.annotations,
-                        "--combined-mask", input.combined_mask,
-                        "--output-bins", output.bins,
-                        "--output-summary", output.summary,
-                        "--correction-model", CNV_POSTPROCESS_CORRECTION_MODEL,
-                        "--loess-frac", str(CNV_CORRECTION_LOESS_FRAC),
-                        "--min-valid-bins", str(CNV_CORRECTION_MIN_VALID_BINS),
-                        "--robust-iters", str(CNV_CORRECTION_ROBUST_ITERS),
-                        "--log", log[0],
-                    ]
-                    for label in CNV_CORRECTION_INCLUDE_MASK_LABELS:
-                        command.extend(["--include-mask-label", label])
-                    subprocess.run(command, check=True)
-
-            rule cnv_calling_branch_b:
-                input:
-                    bins=CNV_B_CORRECTED_BINS,
-                    qc_pass=CNV_QC_PASS,
-                    metadata=RUN_METADATA
-                output:
-                    bins=CNV_B_BINS,
-                    candidates=CNV_B_CANDIDATES,
-                    summary=CNV_B_CALLING_SUMMARY
-                log:
-                    project_path("logs", "cnv", "{sample}.branch_b.calling.log")
-                threads: 1
-                run:
-                    from pgta.core.logging import write_rule_audit_log
-                    import subprocess
-
-                    write_rule_audit_log(log[0], input.metadata, extra_sections=[("QC PASS", open(input.qc_pass, "r", encoding="utf-8").read())])
-                    subprocess.run(
-                        [
-                            config["biosoft"]["python"],
-                            SCRIPT_CNV_CALLING,
-                            SCRIPT_CNV_CALLING_ACTION,
-                            "--sample-id", wildcards.sample,
-                            "--input-bins", input.bins,
-                            "--output-bins", output.bins,
-                            "--output-candidates", output.candidates,
-                            "--output-summary", output.summary,
-                            "--branch", "B",
-                            "--correction-model", CNV_POSTPROCESS_CORRECTION_MODEL,
-                            "--min-bins", str(CNV_CALLING_MIN_BINS),
-                            "--max-segments-per-chrom", str(CNV_CALLING_MAX_SEGMENTS),
-                            "--split-threshold", str(CNV_CALLING_SPLIT_THRESHOLD),
-                            "--hmm-state-shift", str(CNV_CALLING_HMM_SHIFT),
-                            "--hmm-stay-prob", str(CNV_CALLING_HMM_STAY_PROB),
-                            "--min-event-bins", str(CNV_CALLING_MIN_EVENT_BINS),
-                            "--min-event-z", str(CNV_CALLING_MIN_EVENT_Z),
-                            "--log", log[0],
-                        ],
-                        check=True,
-                    )
-
-            rule cnv_calibration_branch_b:
-                input:
-                    bins=CNV_B_BINS,
-                    candidates=CNV_B_CANDIDATES,
-                    metadata=RUN_METADATA
-                output:
-                    bins=CNV_B_CALIBRATED_BINS,
-                    candidates=CNV_B_CALIBRATED_CANDIDATES,
-                    summary=CNV_B_CALIBRATION_SUMMARY
-                log:
-                    project_path("logs", "cnv", "{sample}.branch_b.calibration.log")
-                threads: 1
-                run:
-                    from pgta.core.logging import write_rule_audit_log
-                    import subprocess
-
-                    write_rule_audit_log(log[0], input.metadata)
-                    subprocess.run(
-                        [
-                            config["biosoft"]["python"],
-                            SCRIPT_CNV_CALIBRATION,
-                            SCRIPT_CNV_CALIBRATION_ACTION,
-                            "--sample-id", wildcards.sample,
-                            "--input-bins", input.bins,
-                            "--input-candidates", input.candidates,
-                            "--output-bins", output.bins,
-                            "--output-candidates", output.candidates,
-                            "--output-summary", output.summary,
-                            "--null-quantile-low", str(CNV_CAL_NULL_LOW),
-                            "--null-quantile-high", str(CNV_CAL_NULL_HIGH),
-                            "--min-null-bins", str(CNV_CAL_MIN_NULL_BINS),
-                            "--event-z-threshold", str(CNV_CAL_EVENT_Z_THRESHOLD),
-                            "--log", log[0],
-                        ],
-                        check=True,
-                    )
-
-            rule cnv_artifact_rules_branch_b:
-                input:
-                    bins=CNV_B_CALIBRATED_BINS,
-                    candidates=CNV_B_CALIBRATED_CANDIDATES,
-                    gender_tsv=CNV_GENDER_TSV,
-                    metadata=RUN_METADATA
-                output:
-                    mosaic_candidates=CNV_B_MOSAIC_CANDIDATES,
-                    mosaic_summary=CNV_B_MOSAIC_SUMMARY,
-                    events=CNV_B_FINAL_EVENTS,
-                    summary=CNV_B_ARTIFACT_SUMMARY,
-                    json=CNV_B_FINAL_JSON
-                log:
-                    project_path("logs", "cnv", "{sample}.branch_b.artifact_rules.log")
-                threads: 1
-                run:
-                    from pgta.core.logging import write_rule_audit_log
-                    import subprocess
-
-                    write_rule_audit_log(log[0], input.metadata)
-                    subprocess.run(
-                        [
-                            config["biosoft"]["python"],
-                            SCRIPT_CNV_MOSAIC_FRACTION,
-                            SCRIPT_CNV_MOSAIC_FRACTION_ACTION,
-                            "--sample-id", wildcards.sample,
-                            "--input-bins", input.bins,
-                            "--input-candidates", input.candidates,
-                            "--output-candidates", output.mosaic_candidates,
-                            "--output-summary", output.mosaic_summary,
-                            "--min-effective-bins", str(CNV_MOSAIC_MIN_EFFECTIVE_BINS),
-                            "--min-clean-fraction", str(CNV_MOSAIC_MIN_CLEAN_FRACTION),
-                            "--max-high-risk-fraction", str(CNV_MOSAIC_MAX_HIGH_RISK_FRACTION),
-                            "--min-abs-log2-ratio", str(CNV_MOSAIC_MIN_ABS_LOG2_RATIO),
-                            "--low-fraction-threshold", str(CNV_MOSAIC_LOW_FRACTION_THRESHOLD),
-                            "--baseline-min-bins", str(CNV_MOSAIC_BASELINE_MIN_BINS),
-                            "--ci-zscore", str(CNV_MOSAIC_CI_ZSCORE),
-                            "--log", log[0],
-                        ],
-                        check=True,
-                    )
-                    command = [
-                        config["biosoft"]["python"],
-                        SCRIPT_CNV_ARTIFACT_RULES,
-                        SCRIPT_CNV_ARTIFACT_RULES_ACTION,
-                        "--sample-id", wildcards.sample,
-                        "--input-bins", input.bins,
-                        "--input-candidates", output.mosaic_candidates,
-                        "--gender-tsv", input.gender_tsv,
-                        "--output-events", output.events,
-                        "--output-summary", output.summary,
-                        "--output-json", output.json,
-                        "--genome-build", CNV_POSTPROCESS_GENOME_BUILD,
-                        "--min-event-bins", str(CNV_ARTIFACT_MIN_BINS),
-                        "--min-abs-calibrated-z", str(CNV_ARTIFACT_MIN_ABS_Z),
-                        "--max-chrom-fraction", str(CNV_ARTIFACT_MAX_CHROM_FRAC),
-                        "--edge-bin-window", str(CNV_ARTIFACT_EDGE_WINDOW),
-                        "--max-qvalue", str(CNV_ARTIFACT_MAX_QVALUE),
-                        "--keep-review", str(CNV_ARTIFACT_KEEP_REVIEW),
-                        "--high-confidence-z", str(CNV_ARTIFACT_HIGH_CONF_Z),
-                        "--high-confidence-qvalue", str(CNV_ARTIFACT_HIGH_CONF_QVALUE),
-                        "--log", log[0],
-                    ]
-                    for region in CNV_POSTPROCESS_PAR_REGIONS:
-                        command.extend(["--par-region", region])
-                    subprocess.run(command, check=True)
 
     else:
         rule wisecondorx_convert_for_cnv:
@@ -403,10 +231,11 @@ if CNV_ENABLED:
 
         rule wisecondorx_predict_cnv:
             input:
-                npz=CNV_NPZ,
+                npz=CNV_PREDICT_INPUT_NPZ,
                 ref=REF_OUTPUT,
                 qc_report=CNV_QC_TSV,
                 qc_pass=CNV_QC_PASS,
+                blacklist=([CNV_POSTPROCESS_BLACKLIST_BED] if CNV_POSTPROCESS_BLACKLIST_BED else []),
                 metadata=RUN_METADATA
             output:
                 a_branch_bed=CNV_A_ABERRATIONS_BED,
@@ -422,6 +251,7 @@ if CNV_ENABLED:
                 maskrepeats=CNV_MASKREPEATS,
                 minrefbins=CNV_MINREFBINS,
                 seed=CNV_PREDICT_SEED,
+                blacklist=CNV_POSTPROCESS_BLACKLIST_BED,
                 output_prefix=lambda wildcards: str(Path(CNV_PREDICT_DIR) / wildcards.sample)
             threads: 2
             shell:
@@ -435,6 +265,16 @@ if CNV_ENABLED:
                     cat {input.qc_report:q}
                     echo "=== COMMAND ==="
                 ) > {log:q}
+                blacklist_args=""
+                if [ -n {params.blacklist:q} ]; then
+                    if [ -s {params.blacklist:q} ]; then
+                        blacklist_args="--blacklist {params.blacklist}"
+                    else
+                        echo "blacklist not passed because file missing or empty: {params.blacklist}" >> {log:q}
+                    fi
+                else
+                    echo "blacklist not passed because path is empty" >> {log:q}
+                fi
                 {params.wise:q} predict {input.npz:q} {input.ref:q} {params.output_prefix:q} \
                     --bed \
                     --plot \
@@ -442,191 +282,257 @@ if CNV_ENABLED:
                     --alpha {params.alpha} \
                     --maskrepeats {params.maskrepeats} \
                     --minrefbins {params.minrefbins} \
-                    --seed {params.seed} >> {log:q} 2>&1
+                    --seed {params.seed} $blacklist_args >> {log:q} 2>&1
                 touch {output.done:q}
                 """
 
-        if CNV_POSTPROCESS_ENABLE_BRANCH_B:
-            rule cnv_correction_branch_b:
-                input:
-                    npz=CNV_NPZ,
-                    qc_pass=CNV_QC_PASS,
-                    annotations=REFERENCE_ANALYSIS_BIN_ANNOTATIONS,
-                    combined_mask=REFERENCE_COMBINED_MASK_TSV,
-                    metadata=RUN_METADATA
-                output:
-                    bins=CNV_B_CORRECTED_BINS,
-                    summary=CNV_B_CORRECTION_SUMMARY
-                log:
-                    project_path("logs", "cnv", "{sample}.branch_b.correction.log")
-                threads: 1
-                run:
-                    from pgta.core.logging import write_rule_audit_log
-                    import subprocess
+    if CNV_PREPROCESS_STRATEGY == "mask_only":
+        rule cnv_mask_npz_for_predict:
+            input:
+                npz=CNV_NPZ,
+                combined_mask=REFERENCE_COMBINED_MASK_TSV,
+                metadata=RUN_METADATA
+            output:
+                npz=CNV_MASKED_NPZ,
+                summary=CNV_MASK_SUMMARY
+            log:
+                project_path("logs", "cnv", "{sample}.mask_npz.log")
+            params:
+                python_bin=config["biosoft"]["python"]
+            threads: 1
+            shell:
+                r"""
+                mkdir -p "$(dirname {output.npz})" "$(dirname {log})"
+                (
+                    echo "=== PIPELINE AUDIT ==="
+                    cat {input.metadata:q}
+                    echo "=== COMMAND ==="
+                ) > {log:q}
+                {params.python_bin:q} -m pgta.reference.preprocess mask_npz \
+                    --input-npz {input.npz:q} \
+                    --combined-mask {input.combined_mask:q} \
+                    --output-npz {output.npz:q} \
+                    --output-summary {output.summary:q} \
+                    >> {log:q} 2>&1
+                """
 
-                    write_rule_audit_log(log[0], input.metadata, extra_sections=[("QC PASS", open(input.qc_pass, "r", encoding="utf-8").read())])
-                    command = [
+    rule a_branch_candidate_assembly:
+        input:
+            bed=CNV_A_ABERRATIONS_BED,
+            done=CNV_DONE,
+            metadata=RUN_METADATA
+        output:
+            candidates=CNV_A_CANDIDATES,
+            summary=CNV_A_CANDIDATE_SUMMARY
+        log:
+            project_path("logs", "cnv", "{sample}.a_branch_candidates.log")
+        threads: 1
+        run:
+            from pgta.core.logging import write_rule_audit_log
+            import subprocess
+
+            write_rule_audit_log(log[0], input.metadata)
+            subprocess.run(
+                [
+                    config["biosoft"]["python"],
+                    SCRIPT_A_BRANCH_CANDIDATES,
+                    SCRIPT_A_BRANCH_CANDIDATES_ACTION,
+                    "--sample-id", wildcards.sample,
+                    "--input-bed", input.bed,
+                    "--output-candidates", output.candidates,
+                    "--output-summary", output.summary,
+                    "--log", log[0],
+                ],
+                check=True,
+            )
+
+    if CNV_POSTPROCESS_ENABLE_BRANCH_B:
+        rule cnv_correction_branch_b:
+            input:
+                npz=CNV_NPZ,
+                qc_pass=CNV_QC_PASS,
+                annotations=REFERENCE_ANALYSIS_BIN_ANNOTATIONS,
+                combined_mask=REFERENCE_COMBINED_MASK_TSV,
+                metadata=RUN_METADATA
+            output:
+                bins=CNV_B_CORRECTED_BINS,
+                summary=CNV_B_CORRECTION_SUMMARY
+            log:
+                project_path("logs", "cnv", "{sample}.branch_b.correction.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata, extra_sections=[("QC PASS", open(input.qc_pass, "r", encoding="utf-8").read())])
+                command = [
+                    config["biosoft"]["python"],
+                    SCRIPT_CNV_CORRECTION,
+                    SCRIPT_CNV_CORRECTION_ACTION,
+                    "--sample-id", wildcards.sample,
+                    "--npz", input.npz,
+                    "--annotations", input.annotations,
+                    "--combined-mask", input.combined_mask,
+                    "--output-bins", output.bins,
+                    "--output-summary", output.summary,
+                    "--correction-model", CNV_POSTPROCESS_CORRECTION_MODEL,
+                    "--loess-frac", str(CNV_CORRECTION_LOESS_FRAC),
+                    "--min-valid-bins", str(CNV_CORRECTION_MIN_VALID_BINS),
+                    "--robust-iters", str(CNV_CORRECTION_ROBUST_ITERS),
+                    "--log", log[0],
+                ]
+                for label in CNV_CORRECTION_INCLUDE_MASK_LABELS:
+                    command.extend(["--include-mask-label", label])
+                subprocess.run(command, check=True)
+
+        rule cnv_calling_branch_b:
+            input:
+                bins=CNV_B_CORRECTED_BINS,
+                a_candidates=CNV_A_CANDIDATES,
+                qc_pass=CNV_QC_PASS,
+                metadata=RUN_METADATA
+            output:
+                bins=CNV_B_BINS,
+                candidates=CNV_B_CANDIDATES,
+                summary=CNV_B_CALLING_SUMMARY
+            log:
+                project_path("logs", "cnv", "{sample}.branch_b.calling.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata, extra_sections=[("QC PASS", open(input.qc_pass, "r", encoding="utf-8").read())])
+                subprocess.run(
+                    [
                         config["biosoft"]["python"],
-                        SCRIPT_CNV_CORRECTION,
-                        SCRIPT_CNV_CORRECTION_ACTION,
-                        "--sample-id", wildcards.sample,
-                        "--npz", input.npz,
-                        "--annotations", input.annotations,
-                        "--combined-mask", input.combined_mask,
-                        "--output-bins", output.bins,
-                        "--output-summary", output.summary,
-                        "--correction-model", CNV_POSTPROCESS_CORRECTION_MODEL,
-                        "--loess-frac", str(CNV_CORRECTION_LOESS_FRAC),
-                        "--min-valid-bins", str(CNV_CORRECTION_MIN_VALID_BINS),
-                        "--robust-iters", str(CNV_CORRECTION_ROBUST_ITERS),
-                        "--log", log[0],
-                    ]
-                    for label in CNV_CORRECTION_INCLUDE_MASK_LABELS:
-                        command.extend(["--include-mask-label", label])
-                    subprocess.run(command, check=True)
-
-            rule cnv_calling_branch_b:
-                input:
-                    bins=CNV_B_CORRECTED_BINS,
-                    qc_pass=CNV_QC_PASS,
-                    metadata=RUN_METADATA
-                output:
-                    bins=CNV_B_BINS,
-                    candidates=CNV_B_CANDIDATES,
-                    summary=CNV_B_CALLING_SUMMARY
-                log:
-                    project_path("logs", "cnv", "{sample}.branch_b.calling.log")
-                threads: 1
-                run:
-                    from pgta.core.logging import write_rule_audit_log
-                    import subprocess
-
-                    write_rule_audit_log(log[0], input.metadata, extra_sections=[("QC PASS", open(input.qc_pass, "r", encoding="utf-8").read())])
-                    subprocess.run(
-                        [
-                            config["biosoft"]["python"],
-                            SCRIPT_CNV_CALLING,
-                            SCRIPT_CNV_CALLING_ACTION,
-                            "--sample-id", wildcards.sample,
-                            "--input-bins", input.bins,
-                            "--output-bins", output.bins,
-                            "--output-candidates", output.candidates,
-                            "--output-summary", output.summary,
-                            "--branch", "B",
-                            "--correction-model", CNV_POSTPROCESS_CORRECTION_MODEL,
-                            "--min-bins", str(CNV_CALLING_MIN_BINS),
-                            "--max-segments-per-chrom", str(CNV_CALLING_MAX_SEGMENTS),
-                            "--split-threshold", str(CNV_CALLING_SPLIT_THRESHOLD),
-                            "--hmm-state-shift", str(CNV_CALLING_HMM_SHIFT),
-                            "--hmm-stay-prob", str(CNV_CALLING_HMM_STAY_PROB),
-                            "--min-event-bins", str(CNV_CALLING_MIN_EVENT_BINS),
-                            "--min-event-z", str(CNV_CALLING_MIN_EVENT_Z),
-                            "--log", log[0],
-                        ],
-                        check=True,
-                    )
-
-            rule cnv_calibration_branch_b:
-                input:
-                    bins=CNV_B_BINS,
-                    candidates=CNV_B_CANDIDATES,
-                    metadata=RUN_METADATA
-                output:
-                    bins=CNV_B_CALIBRATED_BINS,
-                    candidates=CNV_B_CALIBRATED_CANDIDATES,
-                    summary=CNV_B_CALIBRATION_SUMMARY
-                log:
-                    project_path("logs", "cnv", "{sample}.branch_b.calibration.log")
-                threads: 1
-                run:
-                    from pgta.core.logging import write_rule_audit_log
-                    import subprocess
-
-                    write_rule_audit_log(log[0], input.metadata)
-                    subprocess.run(
-                        [
-                            config["biosoft"]["python"],
-                            SCRIPT_CNV_CALIBRATION,
-                            SCRIPT_CNV_CALIBRATION_ACTION,
-                            "--sample-id", wildcards.sample,
-                            "--input-bins", input.bins,
-                            "--input-candidates", input.candidates,
-                            "--output-bins", output.bins,
-                            "--output-candidates", output.candidates,
-                            "--output-summary", output.summary,
-                            "--null-quantile-low", str(CNV_CAL_NULL_LOW),
-                            "--null-quantile-high", str(CNV_CAL_NULL_HIGH),
-                            "--min-null-bins", str(CNV_CAL_MIN_NULL_BINS),
-                            "--event-z-threshold", str(CNV_CAL_EVENT_Z_THRESHOLD),
-                            "--log", log[0],
-                        ],
-                        check=True,
-                    )
-
-            rule cnv_artifact_rules_branch_b:
-                input:
-                    bins=CNV_B_CALIBRATED_BINS,
-                    candidates=CNV_B_CALIBRATED_CANDIDATES,
-                    metadata=RUN_METADATA
-                output:
-                    mosaic_candidates=CNV_B_MOSAIC_CANDIDATES,
-                    mosaic_summary=CNV_B_MOSAIC_SUMMARY,
-                    events=CNV_B_FINAL_EVENTS,
-                    summary=CNV_B_ARTIFACT_SUMMARY,
-                    json=CNV_B_FINAL_JSON
-                log:
-                    project_path("logs", "cnv", "{sample}.branch_b.artifact_rules.log")
-                threads: 1
-                run:
-                    from pgta.core.logging import write_rule_audit_log
-                    import subprocess
-
-                    write_rule_audit_log(log[0], input.metadata)
-                    subprocess.run(
-                        [
-                            config["biosoft"]["python"],
-                            SCRIPT_CNV_MOSAIC_FRACTION,
-                            SCRIPT_CNV_MOSAIC_FRACTION_ACTION,
-                            "--sample-id", wildcards.sample,
-                            "--input-bins", input.bins,
-                            "--input-candidates", input.candidates,
-                            "--output-candidates", output.mosaic_candidates,
-                            "--output-summary", output.mosaic_summary,
-                            "--min-effective-bins", str(CNV_MOSAIC_MIN_EFFECTIVE_BINS),
-                            "--min-clean-fraction", str(CNV_MOSAIC_MIN_CLEAN_FRACTION),
-                            "--max-high-risk-fraction", str(CNV_MOSAIC_MAX_HIGH_RISK_FRACTION),
-                            "--min-abs-log2-ratio", str(CNV_MOSAIC_MIN_ABS_LOG2_RATIO),
-                            "--low-fraction-threshold", str(CNV_MOSAIC_LOW_FRACTION_THRESHOLD),
-                            "--baseline-min-bins", str(CNV_MOSAIC_BASELINE_MIN_BINS),
-                            "--ci-zscore", str(CNV_MOSAIC_CI_ZSCORE),
-                            "--log", log[0],
-                        ],
-                        check=True,
-                    )
-                    command = [
-                        config["biosoft"]["python"],
-                        SCRIPT_CNV_ARTIFACT_RULES,
-                        SCRIPT_CNV_ARTIFACT_RULES_ACTION,
+                        SCRIPT_CNV_CALLING,
+                        SCRIPT_CNV_CALLING_ACTION,
                         "--sample-id", wildcards.sample,
                         "--input-bins", input.bins,
-                        "--input-candidates", output.mosaic_candidates,
-                        "--output-events", output.events,
+                        "--input-a-candidates", input.a_candidates,
+                        "--output-bins", output.bins,
+                        "--output-candidates", output.candidates,
                         "--output-summary", output.summary,
-                        "--output-json", output.json,
-                        "--genome-build", CNV_POSTPROCESS_GENOME_BUILD,
-                        "--min-event-bins", str(CNV_ARTIFACT_MIN_BINS),
-                        "--min-abs-calibrated-z", str(CNV_ARTIFACT_MIN_ABS_Z),
-                        "--max-chrom-fraction", str(CNV_ARTIFACT_MAX_CHROM_FRAC),
-                        "--edge-bin-window", str(CNV_ARTIFACT_EDGE_WINDOW),
-                        "--max-qvalue", str(CNV_ARTIFACT_MAX_QVALUE),
-                        "--keep-review", str(CNV_ARTIFACT_KEEP_REVIEW),
-                        "--high-confidence-z", str(CNV_ARTIFACT_HIGH_CONF_Z),
-                        "--high-confidence-qvalue", str(CNV_ARTIFACT_HIGH_CONF_QVALUE),
+                        "--branch", "B",
+                        "--correction-model", CNV_POSTPROCESS_CORRECTION_MODEL,
+                        "--min-bins", str(CNV_CALLING_MIN_BINS),
+                        "--max-segments-per-chrom", str(CNV_CALLING_MAX_SEGMENTS),
+                        "--split-threshold", str(CNV_CALLING_SPLIT_THRESHOLD),
+                        "--hmm-state-shift", str(CNV_CALLING_HMM_SHIFT),
+                        "--hmm-stay-prob", str(CNV_CALLING_HMM_STAY_PROB),
+                        "--hmm-role", CNV_CALLING_HMM_ROLE,
+                        "--min-event-bins", str(CNV_CALLING_MIN_EVENT_BINS),
+                        "--min-event-z", str(CNV_CALLING_MIN_EVENT_Z),
                         "--log", log[0],
-                    ]
-                    for region in CNV_POSTPROCESS_PAR_REGIONS:
-                        command.extend(["--par-region", region])
-                    subprocess.run(command, check=True)
+                    ],
+                    check=True,
+                )
+
+        rule cnv_calibration_branch_b:
+            input:
+                bins=CNV_B_BINS,
+                candidates=CNV_B_CANDIDATES,
+                metadata=RUN_METADATA
+            output:
+                bins=CNV_B_CALIBRATED_BINS,
+                candidates=CNV_B_CALIBRATED_CANDIDATES,
+                summary=CNV_B_CALIBRATION_SUMMARY
+            log:
+                project_path("logs", "cnv", "{sample}.branch_b.calibration.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                subprocess.run(
+                    [
+                        config["biosoft"]["python"],
+                        SCRIPT_CNV_CALIBRATION,
+                        SCRIPT_CNV_CALIBRATION_ACTION,
+                        "--sample-id", wildcards.sample,
+                        "--input-bins", input.bins,
+                        "--input-candidates", input.candidates,
+                        "--output-bins", output.bins,
+                        "--output-candidates", output.candidates,
+                        "--output-summary", output.summary,
+                        "--null-quantile-low", str(CNV_CAL_NULL_LOW),
+                        "--null-quantile-high", str(CNV_CAL_NULL_HIGH),
+                        "--min-null-bins", str(CNV_CAL_MIN_NULL_BINS),
+                        "--event-z-threshold", str(CNV_CAL_EVENT_Z_THRESHOLD),
+                        "--log", log[0],
+                    ],
+                    check=True,
+                )
+
+        rule cnv_artifact_rules_branch_b:
+            input:
+                bins=CNV_B_CALIBRATED_BINS,
+                candidates=CNV_B_CALIBRATED_CANDIDATES,
+                gender_tsv=([CNV_GENDER_TSV] if PREDICT_BY_SEX_ENABLED else []),
+                metadata=RUN_METADATA
+            output:
+                mosaic_candidates=CNV_B_MOSAIC_CANDIDATES,
+                mosaic_summary=CNV_B_MOSAIC_SUMMARY,
+                events=CNV_B_FINAL_EVENTS,
+                summary=CNV_B_ARTIFACT_SUMMARY,
+                json=CNV_B_FINAL_JSON
+            log:
+                project_path("logs", "cnv", "{sample}.branch_b.artifact_rules.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                subprocess.run(
+                    [
+                        config["biosoft"]["python"],
+                        SCRIPT_CNV_MOSAIC_FRACTION,
+                        SCRIPT_CNV_MOSAIC_FRACTION_ACTION,
+                        "--sample-id", wildcards.sample,
+                        "--input-bins", input.bins,
+                        "--input-candidates", input.candidates,
+                        "--output-candidates", output.mosaic_candidates,
+                        "--output-summary", output.mosaic_summary,
+                        "--min-effective-bins", str(CNV_MOSAIC_MIN_EFFECTIVE_BINS),
+                        "--min-clean-fraction", str(CNV_MOSAIC_MIN_CLEAN_FRACTION),
+                        "--max-high-risk-fraction", str(CNV_MOSAIC_MAX_HIGH_RISK_FRACTION),
+                        "--min-abs-log2-ratio", str(CNV_MOSAIC_MIN_ABS_LOG2_RATIO),
+                        "--low-fraction-threshold", str(CNV_MOSAIC_LOW_FRACTION_THRESHOLD),
+                        "--baseline-min-bins", str(CNV_MOSAIC_BASELINE_MIN_BINS),
+                        "--ci-zscore", str(CNV_MOSAIC_CI_ZSCORE),
+                        "--log", log[0],
+                    ],
+                    check=True,
+                )
+                command = [
+                    config["biosoft"]["python"],
+                    SCRIPT_CNV_ARTIFACT_RULES,
+                    SCRIPT_CNV_ARTIFACT_RULES_ACTION,
+                    "--sample-id", wildcards.sample,
+                    "--input-bins", input.bins,
+                    "--input-candidates", output.mosaic_candidates,
+                    "--output-events", output.events,
+                    "--output-summary", output.summary,
+                    "--output-json", output.json,
+                    "--genome-build", CNV_POSTPROCESS_GENOME_BUILD,
+                    "--min-event-bins", str(CNV_ARTIFACT_MIN_BINS),
+                    "--min-abs-calibrated-z", str(CNV_ARTIFACT_MIN_ABS_Z),
+                    "--max-chrom-fraction", str(CNV_ARTIFACT_MAX_CHROM_FRAC),
+                    "--edge-bin-window", str(CNV_ARTIFACT_EDGE_WINDOW),
+                    "--max-qvalue", str(CNV_ARTIFACT_MAX_QVALUE),
+                    "--keep-review", str(CNV_ARTIFACT_KEEP_REVIEW),
+                    "--high-confidence-z", str(CNV_ARTIFACT_HIGH_CONF_Z),
+                    "--high-confidence-qvalue", str(CNV_ARTIFACT_HIGH_CONF_QVALUE),
+                    "--log", log[0],
+                ]
+                if input.gender_tsv:
+                    command.extend(["--gender-tsv", input.gender_tsv[0]])
+                for region in CNV_POSTPROCESS_PAR_REGIONS:
+                    command.extend(["--par-region", region])
+                subprocess.run(command, check=True)
 
     if CNV_MOSAIC_FRACTION_TRUTH_TSV and ("cnv_benchmark" in AVAILABLE_TARGETS or "cnv_report" in AVAILABLE_TARGETS):
         rule cnv_mosaic_truth_validation:

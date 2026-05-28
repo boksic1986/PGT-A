@@ -32,6 +32,8 @@ def parse_args():
     parser.add_argument("--broad-support-max-qvalue", type=float, default=0.25)
     parser.add_argument("--broad-support-min-clean-fraction", type=float, default=0.30)
     parser.add_argument("--broad-support-min-effective-bins", type=float, default=10.0)
+    parser.add_argument("--broad-gain-rescue-min-abs-z", type=float, default=1.8)
+    parser.add_argument("--broad-gain-rescue-min-support-fraction", type=float, default=0.35)
     parser.add_argument("--edge-review-min-priority", type=float, default=2.0)
     parser.add_argument("--ultra-pass-z", type=float, default=15.0)
     parser.add_argument("--ultra-pass-qvalue", type=float, default=0.001)
@@ -42,6 +44,7 @@ def parse_args():
     parser.add_argument("--focal-review-min-support-z", type=float, default=6.0)
     parser.add_argument("--focal-review-max-overlap-fraction", type=float, default=0.25)
     parser.add_argument("--focal-review-max-region-risk", type=float, default=0.20)
+    parser.add_argument("--a-branch-review-min-abs-z", type=float, default=20.0)
     parser.add_argument("--log", default="")
     return parser.parse_args()
 
@@ -102,6 +105,15 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     hard_artifact = False
     review_only = False
     chrom = str(row.chrom)
+    state = str(getattr(row, "state", "")).strip().lower()
+    caller = str(getattr(row, "caller", ""))
+    a_candidate_id = str(getattr(row, "a_candidate_id", "") or "").strip()
+    a_abs_z = abs(safe_float(getattr(row, "a_abs_zscore", np.nan), default=0.0))
+    a_branch_review_min_abs_z = safe_float(getattr(args, "a_branch_review_min_abs_z", 20.0), default=20.0)
+    preserve_a_branch_primary_signal = (
+        (caller == "wisecondorx_a_branch" or bool(a_candidate_id))
+        and a_abs_z >= a_branch_review_min_abs_z
+    )
     is_sex_chrom = chrom in {"chrX", "chrY"}
     chrom_fraction = float(row.n_bins) / max(chrom_bin_count, 1)
     overlap_bp, par_fraction = compute_par_overlap(chrom, int(row.start), int(row.end), par_regions)
@@ -124,11 +136,23 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     effective_bin_count = safe_float(getattr(row, "effective_bin_count", np.nan), default=float(row.n_bins))
     region_risk_score_mean = safe_float(getattr(row, "region_risk_score_mean", np.nan), default=0.0)
     region_risk_score_max = safe_float(getattr(row, "region_risk_score_max", np.nan), default=0.0)
+    weighted_non_high_support_fraction = clean_fraction + (0.5 * max(moderate_fraction, 0.0))
     preserve_broad_internal_signal = (
         chrom_fraction > args.max_chrom_fraction
         and internal_support_z >= args.broad_support_min_abs_z
         and effective_bin_count >= args.broad_support_min_effective_bins
         and clean_fraction >= args.broad_support_min_clean_fraction
+        and (not np.isfinite(empirical_q) or empirical_q <= args.broad_support_max_qvalue)
+    )
+    preserve_broad_gain_signal = (
+        chrom_fraction > args.max_chrom_fraction
+        and state == "gain"
+        and not is_sex_chrom
+        and caller in {"chromosome_dosage_detector", "raw_chromosome_dosage_detector"}
+        and internal_support_z >= args.broad_gain_rescue_min_abs_z
+        and effective_bin_count >= args.broad_support_min_effective_bins
+        and weighted_non_high_support_fraction >= args.broad_gain_rescue_min_support_fraction
+        and high_fraction < 0.50
         and (not np.isfinite(empirical_q) or empirical_q <= args.broad_support_max_qvalue)
     )
     overlap_metrics = {
@@ -148,7 +172,6 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         ),
     }
     max_overlap_fraction = max(overlap_metrics.values()) if overlap_metrics else 0.0
-    weighted_non_high_support_fraction = clean_fraction + (0.5 * max(moderate_fraction, 0.0))
     preserve_clean_internal_signal = (
         internal_support_z >= args.high_confidence_z
         and weighted_non_high_support_fraction >= args.clean_review_min_support_fraction
@@ -182,17 +205,31 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     if max_calibrated_z < args.min_abs_calibrated_z:
         flags.append("low_calibrated_signal")
         explanations.append("Calibrated signal amplitude is below the minimum support threshold.")
-        filter_reasons.append("signal_support_below_minimum")
-        hard_artifact = True
+        if preserve_a_branch_primary_signal:
+            downgrade_reasons.append("a_branch_strong_evidence_preserved_for_review")
+            review_only = True
+        elif preserve_broad_gain_signal:
+            downgrade_reasons.append("broad_gain_preserved_by_raw_or_chromosome_support")
+            review_only = True
+        else:
+            filter_reasons.append("signal_support_below_minimum")
+            hard_artifact = True
     if chrom_fraction > args.max_chrom_fraction:
         flags.append("broad_chrom_fraction")
         if is_sex_chrom and sex_call in {"XX", "XY"}:
             explanations.append("Large sex-chromosome event requires sex-aware review.")
             downgrade_reasons.append("broad_sex_chromosome_event")
             review_only = True
-        elif preserve_broad_internal_signal:
+        elif preserve_a_branch_primary_signal:
+            explanations.append("Broad event is preserved for review because Branch A has very strong WisecondorX support.")
+            downgrade_reasons.append("a_branch_strong_evidence_preserved_for_review")
+            review_only = True
+        elif preserve_broad_internal_signal or preserve_broad_gain_signal:
             explanations.append("Broad event is preserved for review because Branch B shows high-confidence chromosome-scale support.")
-            downgrade_reasons.append("broad_event_preserved_by_internal_support")
+            if preserve_broad_gain_signal and not preserve_broad_internal_signal:
+                downgrade_reasons.append("broad_gain_preserved_by_raw_or_chromosome_support")
+            else:
+                downgrade_reasons.append("broad_event_preserved_by_internal_support")
             review_only = True
         else:
             explanations.append("Event spans too much of one chromosome and is likely technical.")
@@ -305,6 +342,24 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     priority_score = base_priority * max(clean_fraction, 0.10) * max(0.10, 1.0 - risk_penalty)
     if np.isfinite(empirical_q):
         priority_score *= max(0.0, 1.0 - empirical_q)
+    if preserve_broad_gain_signal:
+        q_confidence = max(0.0, 1.0 - min(empirical_q, args.broad_support_max_qvalue)) if np.isfinite(empirical_q) else 1.0
+        support_fraction = np.sqrt(min(max(weighted_non_high_support_fraction, 0.0), 1.0))
+        high_risk_adjustment = max(0.50, 1.0 - high_fraction)
+        broad_gain_level_z = max(
+            max_calibrated_z,
+            abs(safe_float(getattr(row, "segment_mean_robust_z", np.nan), default=0.0)),
+            abs(safe_float(getattr(row, "segment_median_robust_z", np.nan), default=0.0)),
+        )
+        broad_gain_priority_floor = (
+            broad_gain_level_z
+            * np.log1p(max(effective_bin_count, 1.0))
+            * support_fraction
+            * q_confidence
+            * high_risk_adjustment
+            * 1.30
+        )
+        priority_score = max(priority_score, broad_gain_priority_floor)
 
     edge_only_review = review_only and set(flags) == {"edge_event"}
     if edge_only_review and priority_score < args.edge_review_min_priority:

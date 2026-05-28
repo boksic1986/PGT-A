@@ -1,13 +1,20 @@
 #!/biosoftware/miniconda/envs/snakemake_env/bin/python
 import argparse
+import json
 import re
 import shlex
 import subprocess
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from pgta.core.logging import setup_logger
+from pgta.reference.preprocess import (
+    load_wisecondorx_npz,
+    mask_npz_sample,
+    write_wisecondorx_npz,
+)
 
 
 def run_command(command, logger):
@@ -128,6 +135,57 @@ def build_reference_from_npz_paths(
     )
 
 
+def prepare_mask_only_npz_paths(npz_paths, inlier_ids, binsize, tuning_workdir, combined_mask, logger):
+    if not combined_mask:
+        return npz_paths
+    mask_path = Path(combined_mask)
+    if not mask_path.exists():
+        raise FileNotFoundError(f"Combined mask table does not exist: {mask_path}")
+    combined_mask_df = pd.read_csv(mask_path, sep="\t")
+    output_dir = Path(tuning_workdir) / f"bin_{binsize}" / "mask_only_for_newref"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    masked_paths = []
+    summaries = []
+    for sample_id, npz_path in zip(inlier_ids, npz_paths):
+        payload = load_wisecondorx_npz(npz_path)
+        masked_sample, metadata = mask_npz_sample(payload["sample"], payload["binsize"], combined_mask_df)
+        output_npz = output_dir / f"{sample_id}.npz"
+        output_summary = output_dir / f"{sample_id}.mask_summary.json"
+        write_wisecondorx_npz(
+            output_npz,
+            payload["binsize"],
+            masked_sample,
+            quality=payload.get("quality"),
+            metadata=metadata,
+        )
+        output_summary.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        masked_paths.append(output_npz)
+        summaries.append(metadata)
+    aggregate = {
+        "source_npz_type": "wisecondorx_convert_npz",
+        "output_npz_type": "pgta_mask_only_npz",
+        "preprocess_strategy": "mask_only",
+        "mask_policy": "hard_mask_to_zero_soft_keep",
+        "wisecondorx_newref_supports_blacklist": False,
+        "binsize": int(binsize),
+        "sample_count": int(len(masked_paths)),
+        "hard_masked_bin_count_total": int(sum(item["hard_masked_bin_count"] for item in summaries)),
+        "soft_masked_bin_count_total": int(sum(item["soft_masked_bin_count"] for item in summaries)),
+        "pca_is_wisecondorx_parameter": False,
+    }
+    (output_dir / "mask_only_reference_preprocess_summary.json").write_text(
+        json.dumps(aggregate, indent=2),
+        encoding="utf-8",
+    )
+    logger.info(
+        "prepared mask-only NPZ inputs for newref: samples=%d output_dir=%s combined_mask=%s",
+        len(masked_paths),
+        output_dir,
+        mask_path,
+    )
+    return masked_paths
+
+
 def build_reference_from_tuning(
     wisecondorx,
     best_yaml,
@@ -137,6 +195,8 @@ def build_reference_from_tuning(
     threads,
     logger,
     allowed_samples="",
+    combined_mask="",
+    preprocess_strategy="none",
 ):
     binsize, inlier_ids, npz_paths = resolve_inlier_npz_paths(
         best_yaml=best_yaml,
@@ -174,6 +234,17 @@ def build_reference_from_tuning(
                     manual_yfrac = None
     logger.info("loaded best binsize=%s from %s", binsize, best_yaml)
     logger.info("loaded inlier sample ids=%d", len(inlier_ids))
+    if str(preprocess_strategy) == "mask_only":
+        npz_paths = prepare_mask_only_npz_paths(
+            npz_paths=npz_paths,
+            inlier_ids=inlier_ids,
+            binsize=binsize,
+            tuning_workdir=tuning_workdir,
+            combined_mask=combined_mask,
+            logger=logger,
+        )
+    elif str(preprocess_strategy) not in {"", "none"}:
+        raise ValueError(f"Unsupported reference preprocess strategy: {preprocess_strategy}")
     build_reference_from_npz_paths(
         wisecondorx=wisecondorx,
         npz_paths=npz_paths,
@@ -194,6 +265,8 @@ def main():
     parser.add_argument("--tuning-workdir", required=True)
     parser.add_argument("--reference-output", required=True)
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--combined-mask", default="")
+    parser.add_argument("--preprocess-strategy", choices=["none", "mask_only"], default="none")
     parser.add_argument("--log", required=True)
     args = parser.parse_args()
     logger = setup_logger("build_reference_from_tuning", args.log)
@@ -205,6 +278,8 @@ def main():
         tuning_workdir=args.tuning_workdir,
         reference_output=args.reference_output,
         threads=args.threads,
+        combined_mask=args.combined_mask,
+        preprocess_strategy=args.preprocess_strategy,
         logger=logger,
     )
 

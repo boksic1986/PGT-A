@@ -1,0 +1,62 @@
+base_config: "/data/project/CNV/PGT-A/test_project/build_config.yaml"
+
+pipeline:
+  mode: "build_ref"
+  targets: ["metadata", "baseline_qc", "reference_qc", "reference"]
+
+core:
+  project_path: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only"
+  wisecondorx:
+    reference_build_threads: 60
+    tuning:
+      threads: 60
+    reference_preprocess:
+      strategy: "mask_only"
+    cnv:
+      preprocess:
+        strategy: "mask_only"
+      postprocess:
+        calling:
+          hmm_role: "sidecar"
+
+build_reference:
+  active_reference_sets: ["pass_warn"]
+  reference_sets:
+    pass_only:
+      decisions: ["PASS"]
+      publish_as_default: false
+      min_reference_samples_override: 6
+    pass_warn:
+      decisions: ["PASS", "WARN"]
+      publish_as_default: true
+
+baseline_qc:
+  bin_size: 1000000
+  bin_sizes: [500000, 750000, 1000000, 1500000, 2000000]
+  threads: 32
+  samtools_threads: 4
+  gc_correction:
+    method: "loess"
+    loess_frac: 0.2
+    poly_degree: 2
+    min_valid_bins: 200
+    robust_iters: 1
+  thresholds:
+    min_mapped_warn: 2000000
+    min_mapped_fail: 1000000
+    max_zero_frac_warn: 0.15
+    max_zero_frac_fail: 0.30
+    max_bin_cv_warn: 1.50
+    max_bin_cv_fail: 2.50
+    max_adj_mad_warn: 0.35
+    max_adj_mad_fail: 0.55
+    max_gini_warn: 0.28
+    max_gini_fail: 0.35
+    min_pearson_warn: 0.92
+    min_pearson_fail: 0.85
+    min_spearman_warn: 0.90
+    min_spearman_fail: 0.83
+    max_median_abs_z_warn: 1.0
+    max_median_abs_z_fail: 1.5
+    max_outlier3_warn: 0.15
+    max_outlier3_fail: 0.30

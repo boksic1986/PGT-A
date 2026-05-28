@@ -13,6 +13,7 @@ SCRIPT_MODULE_MAP = {
 
 DISPATCHER_MODULE_MAP = {
     "predict.py": {
+        "a_branch_candidates": "pgta.predict.branch_a",
         "cnv_artifact_rules": "pgta.predict.branch_b.artifact_rules",
         "cnv_benchmark": "pgta.predict.benchmark",
         "cnv_calibration": "pgta.predict.branch_b.calibration",
@@ -35,6 +36,7 @@ DISPATCHER_MODULE_MAP = {
     "reference.py": {
         "build_bin_annotations": "pgta.reference.assets",
         "build_frozen_reference_package": "pgta.reference.package",
+        "preprocess_npz": "pgta.reference.preprocess",
         "build_reference_from_tuning": "pgta.reference.build",
         "reference_prefilter_qc": "pgta.reference.prefilter",
         "select_reference_cohorts": "pgta.reference.cohort",

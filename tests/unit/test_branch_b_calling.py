@@ -22,17 +22,81 @@ else:
     from pgta.predict.branch_b.common import load_sample_bins
     from pgta.predict.branch_b.calling import (
         annotate_calling_z_scores,
+        build_a_refined_candidate_events,
         build_candidate_events,
         build_chromosome_dosage_event,
         build_segment_level_events,
         iter_seed_blocks,
         merge_adjacent_segment_calls,
         reconcile_segment_state,
+        segment_events_for_hmm_role,
     )
 
 
 @unittest.skipIf(IMPORT_ERROR is not None, f"optional dependency missing: {IMPORT_ERROR}")
 class BranchBCallingSignalTest(unittest.TestCase):
+    def test_sidecar_hmm_does_not_emit_standalone_candidate(self):
+        hmm_segments = [
+            {
+                "chrom": "chr1",
+                "start": 1,
+                "end": 1000000,
+                "state": "gain",
+                "caller": "segment_level_detector",
+            }
+        ]
+
+        self.assertEqual(segment_events_for_hmm_role(hmm_segments, "sidecar"), [])
+        self.assertEqual(segment_events_for_hmm_role(hmm_segments, "disabled"), [])
+        self.assertEqual(segment_events_for_hmm_role(hmm_segments, "legacy_candidate"), hmm_segments)
+
+    def test_a_candidates_are_refined_without_independent_branch_b_discovery(self):
+        bins_df = pd.DataFrame(
+            {
+                "chrom": ["chr14"] * 5,
+                "start": [0, 100, 200, 300, 400],
+                "end": [100, 200, 300, 400, 500],
+                "bin_index": [0, 1, 2, 3, 4],
+                "signal_for_calling": [10.0, 10.1, 10.0, 10.1, 10.0],
+                "normalized_signal": [10.0, 10.1, 10.0, 10.1, 10.0],
+                "robust_z": [0.1, 0.2, 0.1, 0.2, 0.1],
+                "calling_weight": [1.0] * 5,
+                "bin_weight": [1.0] * 5,
+                "region_risk_weight": [1.0] * 5,
+            }
+        )
+        a_candidates = pd.DataFrame(
+            [
+                {
+                    "candidate_id": "Y2.A0001",
+                    "sample_id": "Y2",
+                    "chrom": "chr14",
+                    "start": 100,
+                    "end": 400,
+                    "state": "gain",
+                    "svtype": "DUP",
+                    "a_zscore": 121.5,
+                    "a_abs_zscore": 121.5,
+                    "a_ratio": 0.09,
+                    "a_rank": 1,
+                    "a_support_level": "strong",
+                    "a_source_event_count": 1,
+                }
+            ]
+        )
+        args = types.SimpleNamespace(sample_id="Y2", branch="B", correction_model="2d_loess_gc_mappability")
+
+        events = build_a_refined_candidate_events(args, bins_df, a_candidates)
+
+        self.assertEqual(len(events), 1)
+        event = events[0]
+        self.assertEqual(event["caller"], "wisecondorx_a_branch")
+        self.assertEqual(event["caller_stage"], "a_branch_refinement")
+        self.assertEqual(event["a_candidate_id"], "Y2.A0001")
+        self.assertEqual(event["state"], "gain")
+        self.assertEqual((int(event["start_bin"]), int(event["end_bin"])), (1, 3))
+        self.assertEqual(int(event["n_bins"]), 3)
+
     def test_chromosome_shift_survives_chrom_local_normalization(self):
         neutral_values = [10.0, 10.1, 9.9, 10.0, 10.2, 9.8]
         bins_df = pd.DataFrame(
@@ -128,6 +192,119 @@ class BranchBCallingSignalTest(unittest.TestCase):
         self.assertEqual(event["chrom"], "chr21")
         self.assertEqual(event["start_bin"], 0)
         self.assertEqual(event["end_bin"], 5)
+
+    def test_raw_chromosome_dosage_detector_recovers_shift_flattened_by_correction(self):
+        neutral_values = [10.0, 10.1, 9.9, 10.0, 10.2, 9.8]
+        corrected_neutral = [10.0, 10.0, 10.0, 10.0, 10.1, 9.9]
+        bins_df = pd.DataFrame(
+            {
+                "chrom": (["chr1"] * 6 + ["chr2"] * 6 + ["chr3"] * 6 + ["chr4"] * 6 + ["chr5"] * 6 + ["chr21"] * 6),
+                "start": [index * 10 for index in range(36)],
+                "end": [(index + 1) * 10 for index in range(36)],
+                "bin_index": [0, 1, 2, 3, 4, 5] * 6,
+                "signal_for_calling": corrected_neutral * 6,
+                "normalized_signal": neutral_values * 5 + [13.0, 13.1, 12.9, 13.0, 13.2, 12.8],
+                "bin_weight": [1.0] * 36,
+                "region_risk_weight": [1.0] * 36,
+                "variance_inflation": [1.0] * 36,
+                "calling_weight": [1.0] * 36,
+                "calling_seed_eligible": [1] * 36,
+                "is_autosome": [1] * 36,
+                "region_risk_class": ["clean"] * 30 + ["moderate", "moderate", "moderate", "moderate", "moderate", "high"],
+                "mask_label": ["pass"] * 36,
+                "gap_centromere_telomere_overlap_fraction": [0.0] * 36,
+                "segment_id": [""] * 36,
+                "hmm_state": ["neutral"] * 36,
+            }
+        )
+
+        scored_df, background = annotate_calling_z_scores(bins_df, "signal_for_calling")
+        args = types.SimpleNamespace(
+            sample_id="TEST_RAW_BROAD",
+            branch="B",
+            correction_model="2d_loess_gc_mappability",
+            min_bins=2,
+            split_threshold=1.0,
+            max_segments_per_chrom=8,
+            hmm_state_shift=0.3,
+            hmm_stay_prob=0.90,
+            min_event_bins=2,
+            min_event_z=0.6,
+            chromosome_z_threshold=2.5,
+            chromosome_min_effective_bins=5.0,
+            chromosome_min_clean_fraction=0.30,
+            masked_gap_rescue_min_abs_local_z=1.0,
+            masked_gap_rescue_min_median_z=2.0,
+            masked_gap_rescue_min_chrom_shift_z=0.75,
+            fusion_iou_threshold=0.8,
+        )
+        logger = types.SimpleNamespace(info=lambda *args, **kwargs: None)
+
+        chr21 = scored_df[scored_df["chrom"] == "chr21"].copy()
+        _, events = build_candidate_events(args, chr21, logger)
+
+        self.assertLess(abs(background["chrom_shift_z"]["chr21"]), 1.0)
+        raw_broad_events = [event for event in events if event["caller"] == "raw_chromosome_dosage_detector"]
+        self.assertEqual(len(raw_broad_events), 1)
+        event = raw_broad_events[0]
+        self.assertEqual(event["state"], "gain")
+        self.assertEqual(event["chrom"], "chr21")
+        self.assertEqual(event["start_bin"], 0)
+        self.assertEqual(event["end_bin"], 5)
+
+    def test_raw_chromosome_dosage_detector_blocks_low_clean_raw_loss(self):
+        neutral_values = [10.0, 10.1, 9.9, 10.0, 10.2, 9.8]
+        corrected_neutral = [10.0, 10.0, 10.0, 10.0, 10.1, 9.9]
+        bins_df = pd.DataFrame(
+            {
+                "chrom": (["chr1"] * 6 + ["chr2"] * 6 + ["chr3"] * 6 + ["chr4"] * 6 + ["chr5"] * 6 + ["chr21"] * 6),
+                "start": [index * 10 for index in range(36)],
+                "end": [(index + 1) * 10 for index in range(36)],
+                "bin_index": [0, 1, 2, 3, 4, 5] * 6,
+                "signal_for_calling": corrected_neutral * 6,
+                "normalized_signal": neutral_values * 5 + [6.0, 6.1, 5.9, 6.0, 6.2, 5.8],
+                "bin_weight": [1.0] * 36,
+                "region_risk_weight": [1.0] * 36,
+                "variance_inflation": [1.0] * 36,
+                "calling_weight": [1.0] * 36,
+                "calling_seed_eligible": [1] * 36,
+                "is_autosome": [1] * 36,
+                "region_risk_class": ["clean"] * 30 + ["moderate", "moderate", "moderate", "moderate", "moderate", "high"],
+                "mask_label": ["pass"] * 36,
+                "gap_centromere_telomere_overlap_fraction": [0.0] * 36,
+                "segment_id": [""] * 36,
+                "hmm_state": ["neutral"] * 36,
+            }
+        )
+
+        scored_df, background = annotate_calling_z_scores(bins_df, "signal_for_calling")
+        args = types.SimpleNamespace(
+            sample_id="TEST_RAW_LOW_CLEAN_LOSS",
+            branch="B",
+            correction_model="2d_loess_gc_mappability",
+            min_bins=2,
+            split_threshold=1.0,
+            max_segments_per_chrom=8,
+            hmm_state_shift=0.3,
+            hmm_stay_prob=0.90,
+            min_event_bins=2,
+            min_event_z=0.6,
+            chromosome_z_threshold=2.5,
+            chromosome_min_effective_bins=5.0,
+            chromosome_min_clean_fraction=0.30,
+            masked_gap_rescue_min_abs_local_z=1.0,
+            masked_gap_rescue_min_median_z=2.0,
+            masked_gap_rescue_min_chrom_shift_z=0.75,
+            fusion_iou_threshold=0.8,
+        )
+        logger = types.SimpleNamespace(info=lambda *args, **kwargs: None)
+
+        chr21 = scored_df[scored_df["chrom"] == "chr21"].copy()
+        _, events = build_candidate_events(args, chr21, logger)
+
+        self.assertLess(abs(background["chrom_shift_z"]["chr21"]), 1.0)
+        self.assertLess(background["raw_chrom_shift_z"]["chr21"], -2.0)
+        self.assertFalse([event for event in events if event["caller"] == "raw_chromosome_dosage_detector"])
 
     def test_segment_level_detector_emits_focal_event_without_large_chromosome_shift(self):
         focal_signal = [7.0, 7.1, 7.0, 7.2, 12.8, 13.0, 12.9, 13.1, 7.0, 7.1, 7.0, 7.2]
