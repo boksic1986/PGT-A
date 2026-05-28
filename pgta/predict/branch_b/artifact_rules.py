@@ -45,6 +45,8 @@ def parse_args():
     parser.add_argument("--focal-review-max-overlap-fraction", type=float, default=0.25)
     parser.add_argument("--focal-review-max-region-risk", type=float, default=0.20)
     parser.add_argument("--a-branch-review-min-abs-z", type=float, default=20.0)
+    parser.add_argument("--a-branch-discordant-protect-min-abs-z", type=float, default=50.0)
+    parser.add_argument("--branch-b-direction-min-abs-z", type=float, default=0.25)
     parser.add_argument("--cnvseq-large-event-min-bp", type=int, default=10_000_000)
     parser.add_argument("--cnvseq-boundary-max-abs-z", type=float, default=4.0)
     parser.add_argument("--cnvseq-whole-chrom-available-fraction", type=float, default=0.90)
@@ -97,6 +99,27 @@ def safe_float(value, default=np.nan):
         return float(value)
     except (TypeError, ValueError):
         return float(default)
+
+
+def state_direction(state):
+    normalized = str(state).strip().lower()
+    if normalized == "gain":
+        return 1
+    if normalized == "loss":
+        return -1
+    return 0
+
+
+def has_branch_b_direction_discordance(state, evidence_values, min_abs_z=0.25):
+    expected_direction = state_direction(state)
+    if expected_direction == 0:
+        return False
+    informative_values = [
+        float(value)
+        for value in evidence_values
+        if np.isfinite(value) and abs(float(value)) >= min_abs_z
+    ]
+    return len(informative_values) >= 2 and all(value * expected_direction < 0 for value in informative_values)
 
 
 def summarize_cnvseq_event_context(row, bins_df):
@@ -171,14 +194,19 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     is_sex_chrom = chrom in {"chrX", "chrY"}
     chrom_fraction = float(row.n_bins) / max(chrom_bin_count, 1)
     overlap_bp, par_fraction = compute_par_overlap(chrom, int(row.start), int(row.end), par_regions)
-    mean_z = abs(safe_float(getattr(row, "calibrated_mean_z", np.nan)))
-    median_z = abs(safe_float(getattr(row, "calibrated_median_z", np.nan)))
-    adjusted_event_z = abs(safe_float(getattr(row, "event_corr_adjusted_z", np.nan)))
+    signed_mean_z = safe_float(getattr(row, "calibrated_mean_z", np.nan))
+    signed_median_z = safe_float(getattr(row, "calibrated_median_z", np.nan))
+    signed_adjusted_event_z = safe_float(getattr(row, "event_corr_adjusted_z", np.nan))
+    signed_segment_mean_z = safe_float(getattr(row, "segment_mean_robust_z", np.nan), default=np.nan)
+    signed_segment_median_z = safe_float(getattr(row, "segment_median_robust_z", np.nan), default=np.nan)
+    mean_z = abs(signed_mean_z)
+    median_z = abs(signed_median_z)
+    adjusted_event_z = abs(signed_adjusted_event_z)
     max_calibrated_z = max(mean_z, median_z, adjusted_event_z)
     internal_support_z = max(
         max_calibrated_z,
-        abs(safe_float(getattr(row, "segment_mean_robust_z", np.nan), default=0.0)),
-        abs(safe_float(getattr(row, "segment_median_robust_z", np.nan), default=0.0)),
+        abs(signed_segment_mean_z) if np.isfinite(signed_segment_mean_z) else 0.0,
+        abs(signed_segment_median_z) if np.isfinite(signed_segment_median_z) else 0.0,
         abs(safe_float(getattr(row, "segment_abs_max_robust_z", np.nan), default=0.0)),
     )
     empirical_q = safe_float(getattr(row, "empirical_qvalue", np.nan))
@@ -416,6 +444,27 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
             "CNVseq-style review marks this as a large subchromosomal boundary event without stable segment-level support."
         )
         filter_reasons.append("cnvseq_subchrom_boundary_weak_support")
+        hard_artifact = True
+
+    branch_b_direction_discordant = has_branch_b_direction_discordance(
+        state,
+        [
+            signed_mean_z,
+            signed_median_z,
+            signed_adjusted_event_z,
+            signed_segment_mean_z,
+            signed_segment_median_z,
+        ],
+        min_abs_z=float(getattr(args, "branch_b_direction_min_abs_z", 0.25)),
+    )
+    a_branch_discordant_protect_min_abs_z = safe_float(
+        getattr(args, "a_branch_discordant_protect_min_abs_z", 50.0),
+        default=50.0,
+    )
+    if branch_b_direction_discordant and a_abs_z < a_branch_discordant_protect_min_abs_z:
+        flags.append("branch_b_direction_discordant")
+        explanations.append("Branch B signed evidence is consistently opposite to the candidate state.")
+        filter_reasons.append("branch_b_direction_discordant_with_candidate_state")
         hard_artifact = True
 
     risk_penalty = (
