@@ -13,12 +13,31 @@ REF_MODEL_ROOT = resolve_path(WISE_CFG.get("reference_model_root", "reference"))
 GENDER_REF_OUTPUT = resolve_path(WISE_CFG.get("gender_reference_output", str(Path(REF_MODEL_ROOT) / "gender" / "result" / "ref_gender_best.npz")))
 COMMON_REF_BINSIZE = resolve_path(WISE_CFG.get("common_reference_binsize_output", str(Path(REF_MODEL_ROOT) / "gender" / "common_best_binsize.txt")))
 REF_GROUPS = BUILD_REF_CFG.get("groups", {})
+RESEQUENCING_CFG = BUILD_REF_CFG.get("resequencing", {})
+RESEQUENCING_MANIFEST_CFG = BUILD_REF_CFG.get("resequencing_manifest", RESEQUENCING_CFG.get("manifest", ""))
+RESEQUENCING_MANIFEST = resolve_path(RESEQUENCING_MANIFEST_CFG) if RESEQUENCING_MANIFEST_CFG else ""
+RESEQUENCING_ALLOWED_STATUSES_FOR_REFERENCE = [
+    str(item).strip().lower()
+    for item in RESEQUENCING_CFG.get("allowed_statuses_for_reference", ["promoted"])
+    if str(item).strip()
+]
 AVAILABLE_REF_SEXES = [sex for sex in ("XX", "XY") if REF_OUTPUT_BY_SEX_CFG.get(sex)]
 REF_OUTPUTS_BY_SEX = {sex: resolve_path(REF_OUTPUT_BY_SEX_CFG[sex]) for sex in AVAILABLE_REF_SEXES}
 REF_GROUPS_BY_SEX_AVAILABLE = all(REF_GROUPS.get(sex) for sex in ("XX", "XY"))
 BUILD_REF_BY_SEX_ENABLED = SEX_SPECIFIC_REF_CONFIGURED and REF_GROUPS_BY_SEX_AVAILABLE
 PREDICT_BY_SEX_ENABLED = SEX_SPECIFIC_REF_CONFIGURED
 REF_SEXES = [sex for sex in AVAILABLE_REF_SEXES if REF_GROUPS.get(sex)] if BUILD_REF_BY_SEX_ENABLED else []
+if REF_GROUPS:
+    missing_ref_group_samples = []
+    for group_name in sorted(REF_GROUPS):
+        for sample_id in REF_GROUPS.get(group_name, []):
+            if sample_id not in SAMPLES:
+                missing_ref_group_samples.append(f"{group_name}:{sample_id}")
+    if missing_ref_group_samples:
+        raise ValueError(
+            "build_reference.groups references samples absent from config['samples']: "
+            + ",".join(missing_ref_group_samples)
+        )
 REF_SAMPLE_IDS_BY_SEX = {}
 for sex in REF_SEXES:
     ids = [sample_id for sample_id in REF_GROUPS.get(sex, []) if sample_id in SAMPLES]
@@ -121,6 +140,7 @@ REFERENCE_ANALYSIS_BIN_ANNOTATIONS = str(Path(REFERENCE_BINS_DIR) / "analysis_bi
 REFERENCE_QC_BIN_ANNOTATIONS = str(Path(REFERENCE_BINS_DIR) / "qc_bin_annotations.tsv")
 REFERENCE_BIN_SUMMARY_JSON = str(Path(REFERENCE_BINS_DIR) / "bin_summary.json")
 REFERENCE_HARD_MASK_TSV = str(Path(REFERENCE_MASK_DIR) / "hard_mask.tsv")
+REFERENCE_HARD_MASK_BED = str(Path(REFERENCE_MASK_DIR) / "hard_mask.bed")
 REFERENCE_SOFT_MASK_TSV = str(Path(REFERENCE_MASK_DIR) / "soft_mask.tsv")
 REFERENCE_DYNAMIC_MASK_TSV = str(Path(REFERENCE_MASK_DIR) / "dynamic_mask.tsv")
 REFERENCE_COMBINED_MASK_TSV = str(Path(REFERENCE_MASK_DIR) / "combined_mask.tsv")
@@ -135,6 +155,8 @@ REFERENCE_PACKAGE_MANIFEST = str(Path(REFERENCE_PACKAGE_DIR) / "manifest.json")
 REFERENCE_PACKAGE_INVENTORY = str(Path(REFERENCE_PACKAGE_DIR) / "inventory.tsv")
 REFERENCE_PACKAGE_README = str(Path(REFERENCE_PACKAGE_DIR) / "README.md")
 REFERENCE_PACKAGE_DONE = str(Path(REFERENCE_PACKAGE_DIR) / "package.done")
+REFERENCE_PREPROCESS_CFG = WISE_CFG.get("reference_preprocess", {})
+REFERENCE_PREPROCESS_STRATEGY = str(REFERENCE_PREPROCESS_CFG.get("strategy", "mask_only"))
 QC_FRAMEWORK_DIR = project_path("qc", "framework")
 RUN_QC_TSV = project_path("qc", "framework", "run_qc.tsv")
 RUN_QC_JSON = project_path("qc", "framework", "run_qc.json")
@@ -149,6 +171,7 @@ QC_FRAMEWORK_FIG_EVENT = project_path("qc", "framework", "figures", "event_statu
 QC_FRAMEWORK_FIG_MASK = project_path("qc", "framework", "figures", "mask_status_counts.png")
 QC_FRAMEWORK_FIG_METRIC = project_path("qc", "framework", "figures", "metric_scatter.png")
 PREFILTER_BINSIZE = int(PREFILTER_CFG.get("binsize", 100000))
+PREFILTER_THREADS = int(PREFILTER_CFG.get("threads", 4))
 PREFILTER_MAX_ITER = int(PREFILTER_CFG.get("max_iterations", 3))
 ATOMIC_BINSIZE = int(
     REFERENCE_ASSETS_CFG.get(
@@ -166,6 +189,8 @@ DYNAMIC_MASK_MEDIAN_ABS_Z = float(REFERENCE_ASSETS_CFG.get("dynamic_median_abs_z
 
 TUNING_ENABLED = bool(TUNE_CFG.get("enable", False))
 TUNING_BIN_SIZES = [int(item) for item in TUNE_CFG.get("bin_sizes", [int(WISE_CFG["binsize"])])]
+TUNING_THREADS = int(TUNE_CFG.get("threads", 4))
+REFERENCE_BUILD_THREADS = int(WISE_CFG.get("reference_build_threads", TUNING_THREADS))
 TUNING_WORKDIR = project_path("wisecondorx", "tuning")
 TUNING_SUMMARY = project_path("wisecondorx", "tuning", "bin_pca_grid.tsv")
 TUNING_BINSIZE_SUMMARY = project_path("wisecondorx", "tuning", "binsize_ranking.tsv")

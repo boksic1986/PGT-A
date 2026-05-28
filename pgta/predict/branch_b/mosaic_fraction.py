@@ -47,6 +47,12 @@ def choose_signal_column(bins_df):
     raise ValueError("Neither signal_for_calling nor normalized_signal is available in bins table.")
 
 
+def choose_event_signal_column(row, bins_df, default_signal_column):
+    if str(getattr(row, "caller", "")) == "raw_chromosome_dosage_detector" and "normalized_signal" in bins_df.columns:
+        return "normalized_signal"
+    return default_signal_column
+
+
 def weighted_std(values, weights, mean_value):
     values = np.asarray(values, dtype=np.float64)
     weights = np.asarray(weights, dtype=np.float64)
@@ -81,7 +87,9 @@ def build_baseline(bins_df, signal_column, args):
     return float(np.median(baseline_df[signal_column].to_numpy(dtype=np.float64))), int(len(baseline_df))
 
 
-def estimate_fraction_for_event(row, bins_df, signal_column, baseline_signal, args):
+def estimate_fraction_for_event(row, bins_df, default_signal_column, baseline_by_signal_column, args):
+    signal_column = choose_event_signal_column(row, bins_df, default_signal_column)
+    baseline_signal = baseline_by_signal_column[signal_column][0]
     default_result = {
         "event_copy_ratio": np.nan,
         "event_log2_ratio": np.nan,
@@ -207,6 +215,9 @@ def main():
     )
     signal_column = choose_signal_column(bins_df)
     baseline_signal, baseline_bins = build_baseline(bins_df, signal_column, args)
+    baseline_by_signal_column = {signal_column: (baseline_signal, baseline_bins)}
+    if "normalized_signal" in bins_df.columns and signal_column != "normalized_signal":
+        baseline_by_signal_column["normalized_signal"] = build_baseline(bins_df, "normalized_signal", args)
 
     if events_df.empty:
         write_table(args.output_candidates, events_df)
@@ -223,7 +234,10 @@ def main():
         logger.info("no candidate events to estimate fraction")
         return
 
-    estimates = [estimate_fraction_for_event(row, bins_df, signal_column, baseline_signal, args) for row in events_df.itertuples(index=False)]
+    estimates = [
+        estimate_fraction_for_event(row, bins_df, signal_column, baseline_by_signal_column, args)
+        for row in events_df.itertuples(index=False)
+    ]
     estimate_df = pd.DataFrame(estimates)
     output_df = pd.concat([events_df.reset_index(drop=True), estimate_df], axis=1)
 

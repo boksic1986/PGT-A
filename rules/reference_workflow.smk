@@ -40,6 +40,7 @@ if TUNING_ENABLED:
     rule select_reference_cohort:
         input:
             summary=BASELINE_QC_SUMMARY,
+            resequencing_manifest=([RESEQUENCING_MANIFEST] if RESEQUENCING_MANIFEST else []),
             metadata=RUN_METADATA
         output:
             sample_list=project_path("reference", "cohorts", "{cohort}", "selected_samples.txt")
@@ -48,15 +49,35 @@ if TUNING_ENABLED:
         benchmark:
             str(Path(BENCHMARK_ROOT) / "reference" / "select_cohort" / "{cohort}.tsv")
         params:
-            decisions=lambda wildcards: ",".join(REF_SET_CFG[wildcards.cohort]["decisions"])
+            decisions=lambda wildcards: ",".join(REF_SET_CFG[wildcards.cohort]["decisions"]),
+            resequencing_allowed_statuses=",".join(RESEQUENCING_ALLOWED_STATUSES_FOR_REFERENCE)
         threads: 1
         run:
             from pgta.core.logging import setup_logger, write_rule_audit_log
             from pgta.reference.cohort import load_selected_samples, parse_decisions
 
-            write_rule_audit_log(log[0], input.metadata, [("REFERENCE COHORT", wildcards.cohort), ("QC DECISIONS", params.decisions)])
+            resequencing_manifest = input.resequencing_manifest[0] if input.resequencing_manifest else None
+            write_rule_audit_log(
+                log[0],
+                input.metadata,
+                [
+                    ("REFERENCE COHORT", wildcards.cohort),
+                    ("QC DECISIONS", params.decisions),
+                    ("RESEQUENCING MANIFEST", resequencing_manifest or "none"),
+                    ("RESEQUENCING ALLOWED STATUSES", params.resequencing_allowed_statuses or "none"),
+                ],
+            )
             logger = setup_logger("select_reference_cohort", log[0])
-            selected = load_selected_samples(input.summary, parse_decisions(params.decisions))
+            selected = load_selected_samples(
+                input.summary,
+                parse_decisions(params.decisions),
+                resequencing_manifest=resequencing_manifest,
+                resequencing_allowed_statuses=[
+                    item.strip()
+                    for item in params.resequencing_allowed_statuses.split(",")
+                    if item.strip()
+                ],
+            )
             output_path = Path(output.sample_list)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text("".join(f"{sample_id}\n" for sample_id in selected), encoding="utf-8")
@@ -95,7 +116,7 @@ if TUNING_ENABLED:
                 max_noise_z=TUNING_MAX_NOISE_Z,
                 max_iter=PREFILTER_MAX_ITER,
                 allowed_samples=lambda wildcards: REF_SAMPLE_IDS_BY_SEX[wildcards.sex]
-            threads: 4
+            threads: PREFILTER_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
                 from pgta.reference.prefilter import run_reference_prefilter_qc
@@ -185,7 +206,7 @@ if TUNING_ENABLED:
                 min_corr=TUNING_MIN_CORR,
                 max_recon_z=TUNING_MAX_RECON_Z,
                 max_noise_z=TUNING_MAX_NOISE_Z
-            threads: 4
+            threads: TUNING_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
                 from pgta.reference.tune import run_tune_wisecondorx
@@ -254,6 +275,7 @@ if TUNING_ENABLED:
             input:
                 best=project_path("wisecondorx", "tuning", "{cohort}", "best_params.yaml"),
                 inliers=project_path("wisecondorx", "tuning", "{cohort}", "reference_inlier_samples.txt"),
+                combined_mask=REFERENCE_COMBINED_MASK_TSV,
                 metadata=RUN_METADATA
             output:
                 ref=project_path("reference", "cohorts", "{cohort}", "{sex}", "result", "ref_{sex}_best.npz")
@@ -264,7 +286,7 @@ if TUNING_ENABLED:
             params:
                 wise=config["biosoft"]["WisecondorX"],
                 allowed_samples=lambda wildcards: ",".join(REF_SAMPLE_IDS_BY_SEX[wildcards.sex])
-            threads: 4
+            threads: REFERENCE_BUILD_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
                 from pgta.reference.build import build_reference_from_tuning
@@ -284,6 +306,8 @@ if TUNING_ENABLED:
                     tuning_workdir=REF_SET_TUNING_WORKDIR[wildcards.cohort],
                     reference_output=output.ref,
                     threads=threads,
+                    combined_mask=input.combined_mask,
+                    preprocess_strategy=REFERENCE_PREPROCESS_STRATEGY,
                     logger=logger,
                 )
 
@@ -292,6 +316,7 @@ if TUNING_ENABLED:
                 best=project_path("wisecondorx", "tuning", "{cohort}", "best_params.yaml"),
                 inliers=project_path("wisecondorx", "tuning", "{cohort}", "reference_inlier_samples.txt"),
                 common_binsize=project_path("reference", "cohorts", "{cohort}", "gender", "common_best_binsize.txt"),
+                combined_mask=REFERENCE_COMBINED_MASK_TSV,
                 metadata=RUN_METADATA
             output:
                 ref=project_path("reference", "cohorts", "{cohort}", "gender", "result", "ref_gender_best.npz")
@@ -301,10 +326,10 @@ if TUNING_ENABLED:
                 str(Path(BENCHMARK_ROOT) / "reference" / "build_gender_reference" / "{cohort}.tsv")
             params:
                 wise=config["biosoft"]["WisecondorX"]
-            threads: 4
+            threads: REFERENCE_BUILD_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
-                from pgta.reference.build import build_reference_from_npz_paths, resolve_inlier_npz_paths
+                from pgta.reference.build import build_reference_from_npz_paths, prepare_mask_only_npz_paths, resolve_inlier_npz_paths
 
                 write_rule_audit_log(log[0], input.metadata, [("REFERENCE COHORT", wildcards.cohort), ("REFERENCE SAMPLES", REFERENCE_SAMPLE_TEXT)])
                 logger = setup_logger("build_gender_reference_from_tuning", log[0])
@@ -319,6 +344,15 @@ if TUNING_ENABLED:
                         f"Common binsize mismatch for cohort={wildcards.cohort}: expected={expected_binsize}, best={best_binsize}"
                     )
                 logger.info("building gender reference for cohort=%s from inlier samples=%d", wildcards.cohort, len(inlier_ids))
+                if REFERENCE_PREPROCESS_STRATEGY == "mask_only":
+                    npz_paths = prepare_mask_only_npz_paths(
+                        npz_paths=npz_paths,
+                        inlier_ids=inlier_ids,
+                        binsize=expected_binsize,
+                        tuning_workdir=REF_SET_TUNING_WORKDIR[wildcards.cohort],
+                        combined_mask=input.combined_mask,
+                        logger=logger,
+                    )
                 build_reference_from_npz_paths(
                     wisecondorx=params.wise,
                     npz_paths=npz_paths,
@@ -419,7 +453,7 @@ if TUNING_ENABLED:
                 workdir=REF_PREFILTER_DIR,
                 sample_ids=REF_SAMPLE_IDS,
                 sample_text=REFERENCE_SAMPLE_TEXT
-            threads: 4
+            threads: PREFILTER_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
                 from pgta.reference.prefilter import run_reference_prefilter_qc
@@ -481,7 +515,7 @@ if TUNING_ENABLED:
                 workdir=TUNING_WORKDIR,
                 reference_output=REF_OUTPUT,
                 sample_text=REFERENCE_SAMPLE_TEXT
-            threads: 4
+            threads: TUNING_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
                 from pgta.reference.tune import run_tune_wisecondorx
@@ -521,6 +555,7 @@ if TUNING_ENABLED:
             input:
                 best=TUNING_BEST,
                 inliers=TUNING_INLIERS,
+                combined_mask=REFERENCE_COMBINED_MASK_TSV,
                 metadata=RUN_METADATA
             output:
                 ref=REF_OUTPUT
@@ -533,7 +568,7 @@ if TUNING_ENABLED:
                 workdir=TUNING_WORKDIR,
                 allowed_samples=",".join(REF_SAMPLE_IDS),
                 sample_text=REFERENCE_SAMPLE_TEXT
-            threads: 4
+            threads: REFERENCE_BUILD_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
                 from pgta.reference.build import build_reference_from_tuning
@@ -548,6 +583,8 @@ if TUNING_ENABLED:
                     tuning_workdir=params.workdir,
                     reference_output=output.ref,
                     threads=threads,
+                    combined_mask=input.combined_mask,
+                    preprocess_strategy=REFERENCE_PREPROCESS_STRATEGY,
                     logger=logger,
                 )
 else:
@@ -588,7 +625,7 @@ else:
                 converted_dir=project_path("wisecondorx", "converted", "XX"),
                 sample_ids=REF_SAMPLE_IDS_BY_SEX["XX"],
                 sample_text="\n".join(REF_SAMPLE_IDS_BY_SEX["XX"])
-            threads: 4
+            threads: REFERENCE_BUILD_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
                 from pgta.reference.tune import build_reference, convert_all_bams
@@ -629,7 +666,7 @@ else:
                 converted_dir=project_path("wisecondorx", "converted", "XY"),
                 sample_ids=REF_SAMPLE_IDS_BY_SEX["XY"],
                 sample_text="\n".join(REF_SAMPLE_IDS_BY_SEX["XY"])
-            threads: 4
+            threads: REFERENCE_BUILD_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
                 from pgta.reference.tune import build_reference, convert_all_bams
@@ -670,7 +707,7 @@ else:
                 converted_dir=project_path("wisecondorx", "converted", "gender"),
                 sample_ids=REF_SAMPLE_IDS,
                 sample_text=REFERENCE_SAMPLE_TEXT
-            threads: 4
+            threads: REFERENCE_BUILD_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
                 from pgta.reference.tune import build_reference, convert_all_bams
@@ -711,7 +748,7 @@ else:
                 converted_dir=project_path("wisecondorx", "converted"),
                 sample_ids=REF_SAMPLE_IDS,
                 sample_text=REFERENCE_SAMPLE_TEXT
-            threads: 4
+            threads: REFERENCE_BUILD_THREADS
             run:
                 from pgta.core.logging import setup_logger, write_rule_audit_log
                 from pgta.reference.tune import build_reference, convert_all_bams

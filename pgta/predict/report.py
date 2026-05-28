@@ -9,6 +9,13 @@ from pgta.core.logging import setup_logger
 
 
 SEX_CHROMS = {"chrX", "chrY"}
+A_BRANCH_REVIEW_SHORTLIST_SIZE = 3
+A_BRANCH_STRONG_SIGNAL_Z = 10.0
+A_BRANCH_INTERNAL_COLUMNS = {
+    "a_branch_review_candidate_count",
+    "a_branch_review_shortlist",
+    "a_branch_strong_signal_count",
+}
 
 
 def parse_args():
@@ -64,6 +71,69 @@ def load_one_row_tables(paths):
     return pd.DataFrame(rows)
 
 
+def format_a_branch_event(row, include_z=False):
+    chrom = str(row["chr"])
+    if not chrom.startswith("chr"):
+        chrom = f"chr{chrom}"
+    event = f"{chrom}:{int(row['start'])}-{int(row['end'])} {row['type']}"
+    if include_z and pd.notna(row.get("abs_zscore")):
+        event = f"{event} z={float(row['abs_zscore']):.2f}"
+    return event
+
+
+def merge_a_branch_events(df):
+    required_columns = {"chr", "start", "end", "type", "zscore"}
+    if df.empty or not required_columns.issubset(df.columns):
+        return pd.DataFrame(columns=["chr", "start", "end", "type", "abs_zscore", "source_event_count"])
+
+    normalized = df.copy()
+    normalized["start"] = pd.to_numeric(normalized["start"], errors="coerce")
+    normalized["end"] = pd.to_numeric(normalized["end"], errors="coerce")
+    normalized["zscore"] = pd.to_numeric(normalized["zscore"], errors="coerce")
+    normalized = normalized.dropna(subset=["start", "end", "zscore", "chr", "type"]).copy()
+    if normalized.empty:
+        return pd.DataFrame(columns=["chr", "start", "end", "type", "abs_zscore", "source_event_count"])
+
+    normalized["abs_zscore"] = normalized["zscore"].abs()
+    normalized = normalized.sort_values(["chr", "type", "start", "end"])
+    merged_rows = []
+    current = None
+    for row in normalized.itertuples(index=False):
+        row_chr = str(getattr(row, "chr"))
+        row_type = str(getattr(row, "type"))
+        row_start = int(getattr(row, "start"))
+        row_end = int(getattr(row, "end"))
+        row_abs_z = float(getattr(row, "abs_zscore"))
+        if (
+            current is None
+            or current["chr"] != row_chr
+            or current["type"] != row_type
+            or row_start > current["end"] + 1
+        ):
+            if current is not None:
+                merged_rows.append(current)
+            current = {
+                "chr": row_chr,
+                "start": row_start,
+                "end": row_end,
+                "type": row_type,
+                "abs_zscore": row_abs_z,
+                "source_event_count": 1,
+            }
+            continue
+        current["end"] = max(current["end"], row_end)
+        current["abs_zscore"] = max(current["abs_zscore"], row_abs_z)
+        current["source_event_count"] += 1
+    if current is not None:
+        merged_rows.append(current)
+
+    merged_df = pd.DataFrame(merged_rows)
+    if merged_df.empty:
+        return merged_df
+    merged_df["span"] = merged_df["end"] - merged_df["start"] + 1
+    return merged_df.sort_values(["abs_zscore", "span"], ascending=[False, False]).drop(columns=["span"])
+
+
 def load_a_branch(paths):
     rows = []
     for path_value in paths:
@@ -73,14 +143,44 @@ def load_a_branch(paths):
         df = pd.read_csv(path, sep="\t")
         sample_id = path.name.split("_")[0]
         if df.empty:
-            rows.append({"sample_id": sample_id, "a_branch_event_count": 0, "a_branch_top_event": ""})
+            rows.append(
+                {
+                    "sample_id": sample_id,
+                    "a_branch_event_count": 0,
+                    "a_branch_top_event": "",
+                    "a_branch_review_candidate_count": 0,
+                    "a_branch_review_shortlist": "",
+                    "a_branch_strong_signal_count": 0,
+                }
+            )
             continue
-        top = df.assign(abs_z=df["zscore"].abs()).sort_values(["abs_z", "end"], ascending=[False, False]).iloc[0]
+        merged_df = merge_a_branch_events(df)
+        if merged_df.empty:
+            rows.append(
+                {
+                    "sample_id": sample_id,
+                    "a_branch_event_count": 0,
+                    "a_branch_top_event": "",
+                    "a_branch_review_candidate_count": 0,
+                    "a_branch_review_shortlist": "",
+                    "a_branch_strong_signal_count": 0,
+                }
+            )
+            continue
+        shortlist = merged_df.head(A_BRANCH_REVIEW_SHORTLIST_SIZE).copy()
+        top = shortlist.iloc[0]
         rows.append(
             {
                 "sample_id": sample_id,
-                "a_branch_event_count": int(len(df)),
-                "a_branch_top_event": f"chr{top['chr']}:{int(top['start'])}-{int(top['end'])} {top['type']}",
+                "a_branch_event_count": int(len(merged_df)),
+                "a_branch_top_event": format_a_branch_event(top),
+                "a_branch_review_candidate_count": int(len(shortlist)),
+                "a_branch_review_shortlist": "; ".join(
+                    shortlist.apply(lambda row: format_a_branch_event(row, include_z=True), axis=1).tolist()
+                ),
+                "a_branch_strong_signal_count": int(
+                    (merged_df["abs_zscore"].astype(float) >= A_BRANCH_STRONG_SIGNAL_Z).sum()
+                ),
             }
         )
     return pd.DataFrame(rows)
@@ -233,6 +333,11 @@ def format_technical_conclusion(row):
     top_fraction = text_or_empty(row.get("branch_b_top_fraction", "")) or "not_estimated"
     top_flags = text_or_empty(row.get("branch_b_top_flags", "")) or ("sex_chromosome_event" if suppressed_count > 0 else "none")
     top_downgrade = text_or_empty(row.get("branch_b_top_downgrade_reason", "")) or ("sex_chromosome_review_suppressed" if suppressed_count > 0 else "none")
+    a_branch_count = int(row.get("a_branch_event_count", 0) or 0)
+    a_branch_top_event = text_or_empty(row.get("a_branch_top_event", "")) or "none"
+    a_branch_review_count = int(row.get("a_branch_review_candidate_count", 0) or 0)
+    a_branch_strong_count = int(row.get("a_branch_strong_signal_count", 0) or 0)
+    a_branch_shortlist = text_or_empty(row.get("a_branch_review_shortlist", "")) or "none"
     return (
         f"Branch B kept {int(row['branch_b_kept_events'])} events; "
         f"top event: {top_event}; "
@@ -240,6 +345,11 @@ def format_technical_conclusion(row):
         f"flags={top_flags}; "
         f"downgrade={top_downgrade}; "
         f"sex_review_suppressed={suppressed_count}; "
+        f"A-branch_sensitive_candidates={a_branch_count}; "
+        f"A-branch_review_shortlist_top{A_BRANCH_REVIEW_SHORTLIST_SIZE}={a_branch_review_count}; "
+        f"A-branch_strong_signals_z{A_BRANCH_STRONG_SIGNAL_Z:g}={a_branch_strong_count}; "
+        f"A-branch_top_signal={a_branch_top_event}; "
+        f"A-branch_review_shortlist={a_branch_shortlist}; "
         f"QC={text_or_empty(row.get('qc_status', 'NA')) or 'NA'}; sex={text_or_empty(row.get('sex_call', 'NA')) or 'NA'}"
     )
 
@@ -250,7 +360,9 @@ def format_biological_candidate_conclusion(row):
         return branch_b_top_event
     a_branch_top_event = text_or_empty(row.get("a_branch_top_event", ""))
     if a_branch_top_event:
-        return a_branch_top_event
+        if int(row.get("a_branch_strong_signal_count", 0) or 0) > 0:
+            return f"A-branch strong sensitive signal only: {a_branch_top_event}; requires Branch B review"
+        return f"A-branch sensitive signal only: {a_branch_top_event}; requires Branch B review"
     if int(row.get("branch_b_suppressed_sex_review_events", 0) or 0) > 0:
         return "Branch B top event suppressed (sex-chromosome review only)"
     return "No A-branch event"
@@ -302,6 +414,7 @@ def main():
 
     sample_df["technical_conclusion"] = sample_df.apply(format_technical_conclusion, axis=1)
     sample_df["biological_candidate_conclusion"] = sample_df.apply(format_biological_candidate_conclusion, axis=1)
+    sample_df = sample_df.drop(columns=[column for column in A_BRANCH_INTERNAL_COLUMNS if column in sample_df.columns])
 
     ensure_parent(args.output_tsv)
     sample_df.to_csv(args.output_tsv, sep="\t", index=False)

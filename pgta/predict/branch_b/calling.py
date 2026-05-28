@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument("--sample-id", required=True)
     parser.add_argument("--npz", default="")
     parser.add_argument("--input-bins", default="")
+    parser.add_argument("--input-a-candidates", default="")
     parser.add_argument("--output-bins", required=True)
     parser.add_argument("--output-candidates", required=True)
     parser.add_argument("--output-summary", required=True)
@@ -33,11 +34,13 @@ def parse_args():
     parser.add_argument("--split-threshold", type=float, default=2.5)
     parser.add_argument("--hmm-state-shift", type=float, default=2.5)
     parser.add_argument("--hmm-stay-prob", type=float, default=0.995)
+    parser.add_argument("--hmm-role", choices=["sidecar", "disabled", "legacy_candidate"], default="sidecar")
     parser.add_argument("--min-event-bins", type=int, default=3)
     parser.add_argument("--min-event-z", type=float, default=1.5)
-    parser.add_argument("--chromosome-z-threshold", type=float, default=2.5)
+    parser.add_argument("--chromosome-z-threshold", type=float, default=1.8)
     parser.add_argument("--chromosome-min-effective-bins", type=float, default=10.0)
     parser.add_argument("--chromosome-min-clean-fraction", type=float, default=0.30)
+    parser.add_argument("--raw-chromosome-z-threshold", type=float, default=1.8)
     parser.add_argument("--masked-gap-rescue-min-abs-local-z", type=float, default=1.8)
     parser.add_argument("--masked-gap-rescue-min-median-z", type=float, default=4.0)
     parser.add_argument("--masked-gap-rescue-min-chrom-shift-z", type=float, default=0.75)
@@ -74,6 +77,16 @@ def robust_center_scale(values):
     return center, scale
 
 
+def allow_low_clean_broad_gain(args, chrom_df, shift_z, effective_bins):
+    if float(shift_z) <= 0:
+        return False
+    if effective_bins < float(args.chromosome_min_effective_bins):
+        return False
+    if "is_autosome" not in chrom_df.columns:
+        return False
+    return bool(chrom_df["is_autosome"].fillna(0).astype(int).iloc[0] == 1)
+
+
 def select_background_signal(bins_df, signal_column):
     selector_candidates = [
         bins_df["is_autosome"].fillna(0).astype(int).eq(1) & bins_df["calling_seed_eligible"].fillna(1).astype(int).eq(1),
@@ -94,6 +107,7 @@ def annotate_calling_z_scores(bins_df, signal_column):
     background_center, background_scale = robust_center_scale(select_background_signal(frame, signal_column))
     frame["global_robust_z"] = 0.0
     chrom_signal_means = {}
+    raw_chrom_signal_means = {}
     chrom_is_autosome = {}
     for chrom, chrom_df in frame.groupby("chrom", sort=False):
         chrom_key = str(chrom)
@@ -101,10 +115,16 @@ def annotate_calling_z_scores(bins_df, signal_column):
             pd.to_numeric(chrom_df[signal_column], errors="coerce").to_numpy(dtype=np.float64),
             chrom_df["calling_weight"].to_numpy(dtype=np.float64),
         )
+        if "normalized_signal" in chrom_df.columns:
+            raw_chrom_signal_means[chrom_key] = weighted_mean(
+                pd.to_numeric(chrom_df["normalized_signal"], errors="coerce").to_numpy(dtype=np.float64),
+                chrom_df["calling_weight"].to_numpy(dtype=np.float64),
+            )
         chrom_is_autosome[chrom_key] = bool(chrom_df["is_autosome"].fillna(0).astype(int).iloc[0])
 
     chrom_frames = []
     chrom_shift_summary = {}
+    raw_chrom_shift_summary = {}
     for chrom, chrom_df in frame.groupby("chrom", sort=False):
         chrom_df = chrom_df.copy()
         background_source = frame[frame["chrom"].astype(str) != str(chrom)].copy()
@@ -135,13 +155,38 @@ def annotate_calling_z_scores(bins_df, signal_column):
         chrom_mean_signal = chrom_signal_means.get(chrom_key, np.nan)
         shift_z = (chrom_mean_signal - shift_center) / shift_scale if np.isfinite(chrom_mean_signal) else np.nan
         shift_z = 0.0 if not np.isfinite(shift_z) else float(shift_z)
+        raw_shift_z = 0.0
+        if raw_chrom_signal_means:
+            raw_background_means = [
+                mean_value
+                for other_chrom, mean_value in raw_chrom_signal_means.items()
+                if other_chrom != chrom_key
+                and np.isfinite(mean_value)
+                and (
+                    (chrom_is_autosome.get(chrom_key, False) and chrom_is_autosome.get(other_chrom, False))
+                    or not chrom_is_autosome.get(chrom_key, False)
+                )
+            ]
+            if not raw_background_means:
+                raw_background_means = [
+                    mean_value
+                    for other_chrom, mean_value in raw_chrom_signal_means.items()
+                    if other_chrom != chrom_key and np.isfinite(mean_value)
+                ]
+            raw_shift_center, raw_shift_scale = robust_center_scale(raw_background_means)
+            raw_chrom_mean_signal = raw_chrom_signal_means.get(chrom_key, np.nan)
+            if np.isfinite(raw_chrom_mean_signal):
+                raw_shift_z = (raw_chrom_mean_signal - raw_shift_center) / max(float(raw_shift_scale), 1e-6)
+            raw_shift_z = 0.0 if not np.isfinite(raw_shift_z) else float(raw_shift_z)
         chrom_df["raw_local_robust_z"] = local_robust_z
         chrom_df["chrom_shift_z"] = shift_z
+        chrom_df["raw_chrom_shift_z"] = raw_shift_z
         chrom_df["raw_robust_z"] = chrom_df["raw_local_robust_z"] + chrom_df["chrom_shift_z"]
         chrom_df["robust_z"] = chrom_df["raw_robust_z"] / chrom_df["variance_inflation"].to_numpy(dtype=np.float64)
         chrom_df.loc[chrom_df["calling_seed_eligible"] == 0, "calling_weight"] *= 0.5
         chrom_frames.append(chrom_df)
         chrom_shift_summary[str(chrom)] = shift_z
+        raw_chrom_shift_summary[str(chrom)] = raw_shift_z
 
     return (
         pd.concat(chrom_frames, ignore_index=True),
@@ -149,6 +194,7 @@ def annotate_calling_z_scores(bins_df, signal_column):
             "background_center": background_center,
             "background_scale": background_scale,
             "chrom_shift_z": chrom_shift_summary,
+            "raw_chrom_shift_z": raw_chrom_shift_summary,
         },
     )
 
@@ -163,11 +209,13 @@ def build_chromosome_dosage_event(args, chrom_df):
     if effective_bins < float(args.chromosome_min_effective_bins):
         return []
 
+    state = "gain" if chrom_shift_z > 0 else "loss"
     clean_fraction = float(chrom_df["region_risk_class"].eq("clean").mean()) if "region_risk_class" in chrom_df.columns else 1.0
-    if clean_fraction < float(args.chromosome_min_clean_fraction):
+    if clean_fraction < float(args.chromosome_min_clean_fraction) and not allow_low_clean_broad_gain(
+        args, chrom_df, chrom_shift_z, effective_bins
+    ):
         return []
 
-    state = "gain" if chrom_shift_z > 0 else "loss"
     mean_robust_z = float(np.average(chrom_df["robust_z"], weights=weights))
     median_robust_z = float(np.median(chrom_df["robust_z"]))
     signal_values = pd.to_numeric(chrom_df["normalized_signal"], errors="coerce").to_numpy(dtype=np.float64)
@@ -194,6 +242,55 @@ def build_chromosome_dosage_event(args, chrom_df):
         segment_mean_robust_z=mean_robust_z,
         segment_median_robust_z=median_robust_z,
         segment_abs_max_robust_z=float(np.max(np.abs(chrom_df["robust_z"].to_numpy(dtype=np.float64)))),
+    )
+    return [event.to_dict()]
+
+
+def build_raw_chromosome_dosage_event(args, chrom_df):
+    if "normalized_signal" not in chrom_df.columns or "raw_chrom_shift_z" not in chrom_df.columns:
+        return []
+    weights = np.clip(chrom_df["calling_weight"].to_numpy(dtype=np.float64), 1e-6, None)
+    raw_chrom_shift_z = float(chrom_df["raw_chrom_shift_z"].iloc[0])
+    raw_threshold = float(getattr(args, "raw_chromosome_z_threshold", getattr(args, "chromosome_z_threshold", 2.5)))
+    if not np.isfinite(raw_chrom_shift_z) or abs(raw_chrom_shift_z) < raw_threshold:
+        return []
+
+    effective_bins = effective_sample_size(weights)
+    if effective_bins < float(args.chromosome_min_effective_bins):
+        return []
+
+    state = "gain" if raw_chrom_shift_z > 0 else "loss"
+    clean_fraction = float(chrom_df["region_risk_class"].eq("clean").mean()) if "region_risk_class" in chrom_df.columns else 1.0
+    if clean_fraction < float(args.chromosome_min_clean_fraction) and not allow_low_clean_broad_gain(
+        args, chrom_df, raw_chrom_shift_z, effective_bins
+    ):
+        return []
+
+    raw_values = pd.to_numeric(chrom_df["normalized_signal"], errors="coerce").to_numpy(dtype=np.float64)
+    raw_local_z = robust_z(raw_values)
+    chrom = str(chrom_df["chrom"].iloc[0])
+    event = CandidateEvent(
+        event_id=f"{args.sample_id}.{chrom}.raw_chr_dosage.{state}",
+        sample_id=args.sample_id,
+        branch=args.branch,
+        correction_model=args.correction_model,
+        caller="raw_chromosome_dosage_detector",
+        caller_stage="raw_chromosome_dosage",
+        chrom=chrom,
+        start=int(chrom_df["start"].iloc[0]),
+        end=int(chrom_df["end"].iloc[-1]),
+        start_bin=int(chrom_df["bin_index"].iloc[0]),
+        end_bin=int(chrom_df["bin_index"].iloc[-1]),
+        n_bins=int(len(chrom_df)),
+        state=state,
+        svtype=STATE_TO_SVTYPE[state],
+        segment_id=f"{chrom}_raw_chr_dosage",
+        segment_weight=float(weights.sum()),
+        segment_mean_signal=float(weighted_mean(raw_values, weights)),
+        segment_median_signal=float(np.median(raw_values)),
+        segment_mean_robust_z=float(raw_chrom_shift_z),
+        segment_median_robust_z=float(raw_chrom_shift_z),
+        segment_abs_max_robust_z=float(max(abs(raw_chrom_shift_z), np.max(np.abs(raw_local_z)) if raw_local_z.size else 0.0)),
     )
     return [event.to_dict()]
 
@@ -269,6 +366,107 @@ def build_masked_gap_rescue_events(args, chrom_df):
     return rescue_events
 
 
+def load_a_candidates(path_value):
+    if not path_value:
+        return pd.DataFrame()
+    path = str(path_value)
+    frame = pd.read_csv(path, sep="\t")
+    if frame.empty:
+        return frame
+    required = {"candidate_id", "sample_id", "chrom", "start", "end", "state"}
+    missing = sorted(required.difference(frame.columns))
+    if missing:
+        raise ValueError(f"Branch A candidate table missing columns: {','.join(missing)}")
+    frame = frame.copy()
+    frame["chrom"] = frame["chrom"].astype(str).map(lambda value: value if value.startswith("chr") else f"chr{value}")
+    frame["state"] = frame["state"].astype(str).str.lower()
+    frame["start"] = pd.to_numeric(frame["start"], errors="coerce")
+    frame["end"] = pd.to_numeric(frame["end"], errors="coerce")
+    frame = frame.dropna(subset=["start", "end", "chrom", "state"]).copy()
+    frame["start"] = frame["start"].astype(int)
+    frame["end"] = frame["end"].astype(int)
+    return frame[frame["end"] > frame["start"]].copy()
+
+
+def _numeric_or_default(row, column, default=np.nan):
+    try:
+        value = getattr(row, column)
+    except AttributeError:
+        return default
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return default
+    return value if np.isfinite(value) else default
+
+
+def build_a_refined_candidate_events(args, chrom_df, a_candidates_df):
+    if a_candidates_df is None or a_candidates_df.empty or chrom_df.empty:
+        return []
+    chrom = str(chrom_df["chrom"].iloc[0])
+    chrom_candidates = a_candidates_df[a_candidates_df["chrom"].astype(str).eq(chrom)].copy()
+    if chrom_candidates.empty:
+        return []
+    signal_column = "signal_for_calling" if "signal_for_calling" in chrom_df.columns else "normalized_signal"
+    events = []
+    for row in chrom_candidates.sort_values(["start", "end"]).itertuples(index=False):
+        start = int(row.start)
+        end = int(row.end)
+        subset = chrom_df[(chrom_df["start"].astype(int) < end) & (chrom_df["end"].astype(int) > start)].copy()
+        if subset.empty:
+            start_bin = int(np.floor(start / max(int(chrom_df["end"].sub(chrom_df["start"]).median()), 1)))
+            end_bin = start_bin
+            weights = np.ones(1, dtype=np.float64)
+            signal_values = np.array([np.nan], dtype=np.float64)
+            robust_values = np.array([0.0], dtype=np.float64)
+            n_bins = 0
+        else:
+            start_bin = int(subset["bin_index"].min())
+            end_bin = int(subset["bin_index"].max())
+            weights = np.clip(subset.get("calling_weight", pd.Series(1.0, index=subset.index)).to_numpy(dtype=np.float64), 1e-6, None)
+            signal_values = pd.to_numeric(subset[signal_column], errors="coerce").to_numpy(dtype=np.float64)
+            robust_values = pd.to_numeric(subset.get("robust_z", pd.Series(0.0, index=subset.index)), errors="coerce").fillna(0.0).to_numpy(dtype=np.float64)
+            n_bins = int(len(subset))
+        state = str(row.state).lower()
+        event = CandidateEvent(
+            event_id=f"{args.sample_id}.{getattr(row, 'candidate_id', f'{chrom}_{start}_{end}_{state}')}.B_refined",
+            sample_id=args.sample_id,
+            branch=args.branch,
+            correction_model=args.correction_model,
+            caller="wisecondorx_a_branch",
+            caller_stage="a_branch_refinement",
+            chrom=chrom,
+            start=start,
+            end=end,
+            start_bin=start_bin,
+            end_bin=end_bin,
+            n_bins=n_bins,
+            state=state,
+            svtype=STATE_TO_SVTYPE.get(state, ""),
+            segment_id=str(getattr(row, "candidate_id", f"{chrom}_{start}_{end}_{state}")),
+            segment_weight=float(weights.sum()) if weights.size else 0.0,
+            segment_mean_signal=weighted_mean(signal_values, weights) if signal_values.size == weights.size else np.nan,
+            segment_median_signal=float(np.nanmedian(signal_values)) if signal_values.size and np.any(np.isfinite(signal_values)) else np.nan,
+            segment_mean_robust_z=float(np.average(robust_values, weights=weights)) if robust_values.size == weights.size and weights.size else 0.0,
+            segment_median_robust_z=float(np.median(robust_values)) if robust_values.size else 0.0,
+            segment_abs_max_robust_z=float(np.max(np.abs(robust_values))) if robust_values.size else 0.0,
+        ).to_dict()
+        event.update(
+            {
+                "a_candidate_id": str(getattr(row, "candidate_id", "")),
+                "a_event_id": str(getattr(row, "event_id", getattr(row, "candidate_id", ""))),
+                "a_ratio": _numeric_or_default(row, "a_ratio"),
+                "a_zscore": _numeric_or_default(row, "a_zscore"),
+                "a_abs_zscore": _numeric_or_default(row, "a_abs_zscore", abs(_numeric_or_default(row, "a_zscore", 0.0))),
+                "a_rank": int(_numeric_or_default(row, "a_rank", 0.0)),
+                "a_support_level": str(getattr(row, "a_support_level", "")),
+                "a_source_event_count": int(_numeric_or_default(row, "a_source_event_count", 1.0)),
+            }
+        )
+        events.append(event)
+    return events
+
+
 def event_interval_iou(left_event, right_event):
     overlap_left = max(int(left_event.get("start_bin", -1)), int(right_event.get("start_bin", -1)))
     overlap_right = min(int(left_event.get("end_bin", -1)), int(right_event.get("end_bin", -1)))
@@ -286,6 +484,8 @@ def event_priority(event):
     max_z = abs(float(event.get("segment_abs_max_robust_z", 0.0) or 0.0))
     support = max(mean_z, median_z, max_z)
     if caller == "chromosome_dosage_detector":
+        return (2, support, int(event.get("n_bins", 0)))
+    if caller == "raw_chromosome_dosage_detector":
         return (2, support, int(event.get("n_bins", 0)))
     if caller == "segment_level_detector":
         return (1, support, -int(event.get("n_bins", 0)))
@@ -557,22 +757,49 @@ def build_segment_level_events(args, chrom_df, logger):
     return chrom_df, segment_events, segment_rows
 
 
-def build_candidate_events(args, chrom_df, logger):
-    chrom_df, segment_events, segment_rows = build_segment_level_events(args, chrom_df, logger)
+def segment_events_for_hmm_role(segment_events, hmm_role):
+    if str(hmm_role) == "legacy_candidate":
+        return list(segment_events)
+    return []
+
+
+def build_candidate_events(args, chrom_df, logger, a_candidates_df=None):
+    hmm_role = getattr(args, "hmm_role", "sidecar")
+    if hmm_role == "disabled":
+        segment_events = []
+        segment_rows = []
+    else:
+        chrom_df, segment_events, segment_rows = build_segment_level_events(args, chrom_df, logger)
+    if a_candidates_df is not None and not a_candidates_df.empty:
+        events = build_a_refined_candidate_events(args, chrom_df, a_candidates_df)
+        logger.info(
+            "chrom=%s hmm_role=%s segments=%d segment_events=%d a_refined_events=%d",
+            chrom_df["chrom"].iloc[0],
+            hmm_role,
+            len(segment_rows),
+            len(segment_events),
+            len(events),
+        )
+        return chrom_df, events
     chromosome_events = build_chromosome_dosage_event(args, chrom_df)
+    raw_chromosome_events = build_raw_chromosome_dosage_event(args, chrom_df)
     masked_gap_rescue_events = build_masked_gap_rescue_events(args, chrom_df)
+    hmm_candidate_events = segment_events_for_hmm_role(segment_events, hmm_role)
     events = fuse_candidate_events(
-        segment_events + masked_gap_rescue_events,
-        chromosome_events,
+        hmm_candidate_events + masked_gap_rescue_events,
+        chromosome_events + raw_chromosome_events,
         iou_threshold=args.fusion_iou_threshold,
     )
     logger.info(
-        "chrom=%s segments=%d segment_events=%d masked_gap_rescue_events=%d chromosome_events=%d candidate_events=%d",
+        "chrom=%s hmm_role=%s segments=%d segment_events=%d hmm_candidate_events=%d masked_gap_rescue_events=%d chromosome_events=%d raw_chromosome_events=%d candidate_events=%d",
         chrom_df["chrom"].iloc[0],
+        hmm_role,
         len(segment_rows),
         len(segment_events),
+        len(hmm_candidate_events),
         len(masked_gap_rescue_events),
         len(chromosome_events),
+        len(raw_chromosome_events),
         len(events),
     )
     return chrom_df, events
@@ -593,12 +820,13 @@ def main():
         None,
     )
     bins_df, calling_background = annotate_calling_z_scores(bins_df, signal_column)
+    a_candidates_df = load_a_candidates(args.input_a_candidates)
 
     chrom_frames = []
     all_events = []
     for _, chrom_df in bins_df.groupby("chrom", sort=False):
         chrom_df = chrom_df.copy()
-        chrom_df, chrom_events = build_candidate_events(args, chrom_df, logger)
+        chrom_df, chrom_events = build_candidate_events(args, chrom_df, logger, a_candidates_df=a_candidates_df)
         chrom_frames.append(chrom_df)
         all_events.extend(chrom_events)
 
@@ -611,10 +839,13 @@ def main():
         "sample_id": args.sample_id,
         "branch": args.branch,
         "correction_model": args.correction_model,
+        "hmm_role": args.hmm_role,
         "binsize": binsize,
         "quality": None if not np.isfinite(quality) else float(quality),
         "bin_count": int(len(output_bins)),
         "candidate_event_count": int(len(output_events)),
+        "candidate_source": "branch_a" if not a_candidates_df.empty else "branch_b_discovery",
+        "a_candidate_count": int(len(a_candidates_df)),
         "median_effective_bin_count_per_chrom": float(
             np.median(
                 [

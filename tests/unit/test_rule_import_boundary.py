@@ -48,6 +48,16 @@ class RuleImportBoundaryTest(unittest.TestCase):
         snakefile = (REPO_ROOT / "Snakefile").read_text(encoding="utf-8")
         self.assertIn('include: "rules/target_assembly.smk"', snakefile)
 
+    def test_predict_branch_b_rules_are_defined_once(self):
+        workflow = (REPO_ROOT / "rules" / "predict_workflow.smk").read_text(encoding="utf-8")
+        for rule_name in [
+            "cnv_correction_branch_b",
+            "cnv_calling_branch_b",
+            "cnv_calibration_branch_b",
+            "cnv_artifact_rules_branch_b",
+        ]:
+            self.assertEqual(workflow.count(f"rule {rule_name}:"), 1, rule_name)
+
 
 if __name__ == "__main__":
     unittest.main()

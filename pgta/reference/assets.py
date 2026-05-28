@@ -53,11 +53,20 @@ def add_mask_parser(subparsers):
     parser.set_defaults(command="mask")
 
 
+def add_hard_mask_bed_parser(subparsers):
+    parser = subparsers.add_parser("hard-mask-bed", help="Export hard-mask TSV intervals as a BED blacklist.")
+    parser.add_argument("--hard-mask-tsv", required=True)
+    parser.add_argument("--output-bed", required=True)
+    parser.add_argument("--log", default="")
+    parser.set_defaults(command="hard-mask-bed")
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Build reference bin annotations or masks.")
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_annotations_parser(subparsers)
     add_mask_parser(subparsers)
+    add_hard_mask_bed_parser(subparsers)
     return parser.parse_args()
 
 
@@ -172,6 +181,41 @@ def overlap_fractions_for_bins(bins_df, interval_map):
                 scan_idx += 1
             fractions[int(row.Index)] = min(float(overlap_bp) / float(event_length), 1.0)
     return fractions
+
+
+def _fraction_value(row, key, default=0.0):
+    value = row.get(key, default)
+    try:
+        if value is None or value != value:
+            return float(default)
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def classify_reference_mask(row):
+    """Classify static reference mask labels before dynamic sample QC."""
+    chrom = str(row.get("chrom", ""))
+    chrom_no_prefix = chrom[3:] if chrom.startswith("chr") else chrom
+    if chrom in {"chrM", "MT", "M"} or chrom_no_prefix.upper() in {"M", "MT"}:
+        return "hard", "chrM_excluded"
+
+    if _fraction_value(row, "blacklist_overlap_fraction") > 0.0:
+        return "hard", "blacklist"
+
+    if _fraction_value(row, "gap_centromere_telomere_overlap_fraction") >= 0.50:
+        return "hard", "gap_centromere_telomere"
+
+    if _fraction_value(row, "low_mappability_overlap_fraction") >= 0.25:
+        return "soft", "low_mappability"
+
+    if _fraction_value(row, "segmental_duplication_overlap_fraction") >= 0.25:
+        return "soft", "segmental_duplication"
+
+    if _fraction_value(row, "repeat_rich_overlap_fraction") >= 0.25:
+        return "soft", "repeat_rich"
+
+    return "pass", ""
 
 
 def annotate_bins(fasta, bins_df, region_maps):
@@ -349,23 +393,59 @@ def write_tsv_json(tsv_path, json_path, df):
     Path(json_path).write_text(df.to_json(orient="records", indent=2), encoding="utf-8")
 
 
+def write_hard_mask_bed(path_value, hard_mask_df):
+    """Write atomic hard-mask intervals as strict BED3 for WisecondorX predict."""
+    path = Path(path_value)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if hard_mask_df.empty:
+        path.write_text("", encoding="utf-8")
+        return
+    bed_df = hard_mask_df.copy()
+    if "bin_level" in bed_df.columns:
+        atomic_df = bed_df[bed_df["bin_level"].astype(str).eq("atomic")].copy()
+        if not atomic_df.empty:
+            bed_df = atomic_df
+    bed_df = bed_df[["chrom", "start", "end"]].copy()
+    bed_df["start"] = bed_df["start"].astype(int)
+    bed_df["end"] = bed_df["end"].astype(int)
+    bed_df = bed_df.sort_values(["chrom", "start", "end"])
+    bed_df.to_csv(path, sep="\t", index=False, header=False)
+
+
 def run_mask(args):
     annotations = read_annotations(args.annotation_tsvs)
     dynamic_metrics = build_dynamic_metrics(args.profile_tsvs)
     merged = annotations.merge(dynamic_metrics, on=["chrom", "start", "end"], how="left")
 
-    hard_mask = merged[merged["n_fraction"].fillna(0.0) >= args.hard_n_fraction].copy()
+    static_labels = merged.apply(classify_reference_mask, axis=1)
+    merged["static_mask_label"] = [label for label, _reason in static_labels]
+    merged["static_mask_reason"] = [reason for _label, reason in static_labels]
+
+    hard_condition = (
+        merged["n_fraction"].fillna(0.0).ge(args.hard_n_fraction)
+        | merged["static_mask_label"].eq("hard")
+    )
+    hard_mask = merged[hard_condition].copy()
     hard_mask["mask_type"] = "hard"
-    hard_mask["mask_reason"] = hard_mask["n_fraction"].map(lambda value: f"n_fraction>={args.hard_n_fraction}: {value:.4f}")
+    hard_mask["mask_reason"] = hard_mask.apply(
+        lambda row: row["static_mask_reason"]
+        if row["static_mask_label"] == "hard" and row["static_mask_reason"]
+        else f"n_fraction>={args.hard_n_fraction}: {row['n_fraction']:.4f}",
+        axis=1,
+    )
 
     soft_condition = (
         merged["gc_fraction"].fillna(0.5).lt(args.soft_gc_low)
         | merged["gc_fraction"].fillna(0.5).gt(args.soft_gc_high)
+        | merged["static_mask_label"].eq("soft")
     )
     soft_mask = merged[soft_condition].copy()
     soft_mask["mask_type"] = "soft"
-    soft_mask["mask_reason"] = soft_mask["gc_fraction"].map(
-        lambda value: f"gc_fraction_outside_[{args.soft_gc_low},{args.soft_gc_high}]: {value:.4f}"
+    soft_mask["mask_reason"] = soft_mask.apply(
+        lambda row: row["static_mask_reason"]
+        if row["static_mask_label"] == "soft" and row["static_mask_reason"]
+        else f"gc_fraction_outside_[{args.soft_gc_low},{args.soft_gc_high}]: {row['gc_fraction']:.4f}",
+        axis=1,
     )
 
     dynamic_condition = (
@@ -411,6 +491,13 @@ def run_mask(args):
     Path(args.summary_json_output).write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
 
+def run_hard_mask_bed(args):
+    import pandas as pd
+
+    hard_mask = pd.read_csv(args.hard_mask_tsv, sep="\t")
+    write_hard_mask_bed(args.output_bed, hard_mask)
+
+
 def main():
     args = parse_args()
     if args.command == "annotations":
@@ -418,6 +505,9 @@ def main():
         return
     if args.command == "mask":
         run_mask(args)
+        return
+    if args.command == "hard-mask-bed":
+        run_hard_mask_bed(args)
         return
     raise ValueError(f"Unsupported command: {args.command}")
 

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from pgta.core.logging import setup_logger
+from pgta.predict.truth import event_detected, event_support_z, normalize_chrom, normalize_state, overlap_fraction
 
 
 def parse_args():
@@ -48,29 +49,6 @@ def sample_id_from_path(path_value):
     return Path(path_value).stem.split(".")[0]
 
 
-def normalize_chrom(value):
-    chrom = str(value).strip()
-    if not chrom:
-        return chrom
-    return chrom if chrom.startswith("chr") else f"chr{chrom}"
-
-
-def normalize_state(value):
-    text = str(value).strip().lower()
-    mapping = {
-        "gain": "gain",
-        "dup": "gain",
-        "duplication": "gain",
-        "amplification": "gain",
-        "+": "gain",
-        "loss": "loss",
-        "del": "loss",
-        "deletion": "loss",
-        "-": "loss",
-    }
-    return mapping.get(text, text)
-
-
 def load_gender_tables(paths):
     rows = []
     for path_value in paths:
@@ -99,24 +77,6 @@ def load_qc_tables(paths):
         row.setdefault("sample_id", sample_id_from_path(path_value))
         rows.append(row)
     return pd.DataFrame(rows)
-
-
-def overlap_fraction(left_start, left_end, right_start, right_end):
-    if any(pd.isna(value) for value in [left_start, left_end, right_start, right_end]):
-        return np.nan
-    overlap = max(0.0, min(float(left_end), float(right_end)) - max(float(left_start), float(right_start)) + 1.0)
-    length = max(float(left_end) - float(left_start) + 1.0, 1.0)
-    return overlap / length
-
-
-def event_support_z(frame):
-    support_columns = [
-        column for column in ["calibrated_mean_z", "calibrated_median_z", "event_corr_adjusted_z"] if column in frame.columns
-    ]
-    if not support_columns or frame.empty:
-        return pd.Series(np.nan, index=frame.index, dtype=float)
-    support_frame = frame[support_columns].apply(pd.to_numeric, errors="coerce").abs()
-    return support_frame.max(axis=1, skipna=True)
 
 
 def compute_truth_metrics(events_df, truth_tsv, branch_b_z_threshold):
@@ -148,6 +108,7 @@ def compute_truth_metrics(events_df, truth_tsv, branch_b_z_threshold):
     kept["chrom"] = kept["chrom"].map(normalize_chrom)
     kept["state"] = kept["state"].map(normalize_state)
     kept["support_z"] = event_support_z(kept)
+    kept["detected_by_branch_b"] = event_detected(kept, standard_z_threshold=branch_b_z_threshold).astype(int)
     rows = []
     for truth in truth_df.itertuples(index=False):
         sample_events = kept[
@@ -162,13 +123,14 @@ def compute_truth_metrics(events_df, truth_tsv, branch_b_z_threshold):
             )
             sample_events = sample_events[sample_events["truth_overlap_fraction"].fillna(0.0) > 0.0].copy()
         top_support = float(sample_events["support_z"].max()) if not sample_events.empty else np.nan
+        detected = int(sample_events["detected_by_branch_b"].max()) if not sample_events.empty else 0
         rows.append(
             {
                 "sample_id": truth.sample_id,
                 "chrom": truth.chrom,
                 "expected_state": truth.expected_state,
                 "matched": int(not sample_events.empty),
-                "detected": int(np.isfinite(top_support) and top_support >= float(branch_b_z_threshold)),
+                "detected": detected,
                 "top_support_z": top_support,
             }
         )

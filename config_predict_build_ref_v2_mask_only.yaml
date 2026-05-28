@@ -1,0 +1,33 @@
+base_config: "/data/project/CNV/PGT-A/test_project/predict_samples.yaml"
+
+pipeline:
+  mode: "predict"
+  targets:
+    - "metadata"
+    - "cnv_qc"
+    - "cnv"
+    - "cnv_eval"
+    - "cnv_benchmark"
+    - "cnv_report"
+
+core:
+  project_path: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only"
+  wisecondorx:
+    reference_output_by_sex:
+      XX: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only/reference/XX/result/ref_xx_best.npz"
+      XY: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only/reference/XY/result/ref_xy_best.npz"
+    gender_reference_output: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only/reference/gender/result/ref_gender_best.npz"
+    common_reference_binsize_output: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only/reference/gender/common_best_binsize.txt"
+    cnv:
+      preprocess:
+        strategy: "mask_only"
+      evaluation:
+        truth_tsv: "/data/project/CNV/PGT-A/test_project/sample_info/positive_truth_events.tsv"
+      benchmark:
+        truth_tsv: "/data/project/CNV/PGT-A/test_project/sample_info/positive_truth_events.tsv"
+        mosaic_fraction_truth_tsv: "/data/project/CNV/PGT-A/refactor_validation_20260419/sample_info/mosaic_fraction_validation_y7_y8.tsv"
+      postprocess:
+        calling:
+          hmm_role: "sidecar"
+        annotation:
+          blacklist_bed: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only/reference/assets/mask/hard_mask.bed"

@@ -34,6 +34,8 @@ class BranchBArtifactRulesTest(unittest.TestCase):
             broad_support_max_qvalue=0.25,
             broad_support_min_clean_fraction=0.30,
             broad_support_min_effective_bins=10.0,
+            broad_gain_rescue_min_abs_z=1.8,
+            broad_gain_rescue_min_support_fraction=0.35,
             edge_review_min_priority=2.0,
             ultra_pass_z=15.0,
             ultra_pass_qvalue=0.001,
@@ -44,6 +46,7 @@ class BranchBArtifactRulesTest(unittest.TestCase):
             focal_review_min_support_z=6.0,
             focal_review_max_overlap_fraction=0.25,
             focal_review_max_region_risk=0.20,
+            a_branch_review_min_abs_z=20.0,
         )
 
     def test_high_confidence_broad_event_is_preserved_for_review(self):
@@ -89,6 +92,192 @@ class BranchBArtifactRulesTest(unittest.TestCase):
         self.assertEqual(result["artifact_status"], "review")
         self.assertEqual(result["keep_event"], 1)
         self.assertIn("broad_event_preserved_by_internal_support", result["downgrade_reason"])
+
+    def test_low_clean_broad_gain_detector_event_is_preserved_for_review(self):
+        row = types.SimpleNamespace(
+            chrom="chr21",
+            start=1,
+            end=48000000,
+            start_bin=0,
+            end_bin=48,
+            n_bins=49,
+            state="gain",
+            calibrated_mean_z=2.2,
+            calibrated_median_z=2.2,
+            event_corr_adjusted_z=2.1,
+            empirical_qvalue=0.04,
+            clean_bin_fraction=0.18,
+            moderate_risk_bin_fraction=0.45,
+            high_risk_bin_fraction=0.37,
+            effective_bin_count=33.0,
+            region_risk_score_mean=0.04,
+            region_risk_score_max=0.12,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.0,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.05,
+            repeat_rich_overlap_fraction=0.0,
+            blacklist_overlap_fraction=0.0,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=0,
+            caller="raw_chromosome_dosage_detector",
+            segment_mean_robust_z=2.17,
+            segment_median_robust_z=2.17,
+            segment_abs_max_robust_z=2.17,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=49,
+            args=self.build_args(),
+            sex_call="XY",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "review")
+        self.assertEqual(result["keep_event"], 1)
+        self.assertIn("broad_gain_preserved_by_raw_or_chromosome_support", result["downgrade_reason"])
+
+    def test_low_level_raw_whole_chromosome_gain_gets_report_priority_floor(self):
+        row = types.SimpleNamespace(
+            chrom="chr14",
+            start=0,
+            end=108000000,
+            start_bin=0,
+            end_bin=107,
+            n_bins=108,
+            state="gain",
+            calibrated_mean_z=1.863,
+            calibrated_median_z=1.863,
+            event_corr_adjusted_z=1.863,
+            empirical_qvalue=0.062,
+            clean_bin_fraction=0.220,
+            moderate_risk_bin_fraction=0.774,
+            high_risk_bin_fraction=0.006,
+            effective_bin_count=86.3,
+            region_risk_score_mean=0.04,
+            region_risk_score_max=0.12,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.0,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.05,
+            repeat_rich_overlap_fraction=0.0,
+            blacklist_overlap_fraction=0.0,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=0,
+            caller="raw_chromosome_dosage_detector",
+            segment_mean_robust_z=1.863,
+            segment_median_robust_z=1.863,
+            segment_abs_max_robust_z=1.863,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=108,
+            args=self.build_args(),
+            sex_call="XY",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "review")
+        self.assertEqual(result["keep_event"], 1)
+        self.assertGreater(result["priority_score"], 7.0)
+
+    def test_low_clean_broad_raw_loss_stays_artifact(self):
+        row = types.SimpleNamespace(
+            chrom="chr22",
+            start=1,
+            end=51000000,
+            start_bin=0,
+            end_bin=51,
+            n_bins=52,
+            state="loss",
+            calibrated_mean_z=-2.6,
+            calibrated_median_z=-2.6,
+            event_corr_adjusted_z=-2.5,
+            empirical_qvalue=0.02,
+            clean_bin_fraction=0.12,
+            moderate_risk_bin_fraction=0.48,
+            high_risk_bin_fraction=0.40,
+            effective_bin_count=31.0,
+            region_risk_score_mean=0.05,
+            region_risk_score_max=0.14,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.0,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.05,
+            repeat_rich_overlap_fraction=0.0,
+            blacklist_overlap_fraction=0.0,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=0,
+            caller="raw_chromosome_dosage_detector",
+            segment_mean_robust_z=-2.6,
+            segment_median_robust_z=-2.6,
+            segment_abs_max_robust_z=2.6,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=52,
+            args=self.build_args(),
+            sex_call="XY",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "artifact")
+        self.assertEqual(result["keep_event"], 0)
+        self.assertIn("chromosome_fraction_too_large", result["filter_reason"])
+
+    def test_strong_a_branch_event_is_preserved_for_review_when_b_signal_is_weak(self):
+        row = types.SimpleNamespace(
+            chrom="chr21",
+            start=15000001,
+            end=42000000,
+            start_bin=15,
+            end_bin=42,
+            n_bins=28,
+            state="gain",
+            calibrated_mean_z=1.2,
+            calibrated_median_z=1.1,
+            event_corr_adjusted_z=1.0,
+            empirical_qvalue=0.70,
+            clean_bin_fraction=0.22,
+            moderate_risk_bin_fraction=0.74,
+            high_risk_bin_fraction=0.04,
+            effective_bin_count=24.0,
+            region_risk_score_mean=0.04,
+            region_risk_score_max=0.12,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.0,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.0,
+            repeat_rich_overlap_fraction=0.0,
+            blacklist_overlap_fraction=0.0,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=0,
+            caller="wisecondorx_a_branch",
+            a_candidate_id="Y2.A0002",
+            a_abs_zscore=83.9,
+            segment_mean_robust_z=1.1,
+            segment_median_robust_z=1.0,
+            segment_abs_max_robust_z=1.3,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=48,
+            args=self.build_args(),
+            sex_call="XY",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "review")
+        self.assertEqual(result["keep_event"], 1)
+        self.assertIn("a_branch_strong_evidence_preserved_for_review", result["downgrade_reason"])
 
     def test_clean_non_ultra_event_with_internal_support_is_review_not_artifact(self):
         row = types.SimpleNamespace(
