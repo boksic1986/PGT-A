@@ -114,6 +114,11 @@ CNV_ARTIFACT_MAX_QVALUE = float(CNV_ARTIFACT_CFG.get("max_qvalue", 0.25))
 CNV_ARTIFACT_KEEP_REVIEW = int(bool(CNV_ARTIFACT_CFG.get("keep_review", True)))
 CNV_ARTIFACT_HIGH_CONF_Z = float(CNV_ARTIFACT_CFG.get("high_confidence_z", 4.0))
 CNV_ARTIFACT_HIGH_CONF_QVALUE = float(CNV_ARTIFACT_CFG.get("high_confidence_qvalue", 0.05))
+CNV_ARTIFACT_CNVSEQ_LARGE_EVENT_MIN_BP = int(CNV_ARTIFACT_CFG.get("cnvseq_large_event_min_bp", 10000000))
+CNV_ARTIFACT_CNVSEQ_BOUNDARY_MAX_ABS_Z = float(CNV_ARTIFACT_CFG.get("cnvseq_boundary_max_abs_z", 4.0))
+CNV_ARTIFACT_CNVSEQ_WHOLE_CHROM_AVAILABLE_FRACTION = float(
+    CNV_ARTIFACT_CFG.get("cnvseq_whole_chrom_available_fraction", 0.90)
+)
 CNV_ML_BACKEND = str(CNV_ML_CFG.get("backend", "auto"))
 CNV_ML_CV_FOLDS = int(CNV_ML_CFG.get("cv_folds", 5))
 CNV_ML_LABELS_TSV = resolve_path(CNV_ML_CFG.get("labels_tsv", "")) if str(CNV_ML_CFG.get("labels_tsv", "")).strip() else ""
