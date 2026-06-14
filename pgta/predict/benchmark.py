@@ -11,6 +11,7 @@ from pgta.predict.truth import (
     event_detected,
     event_detection_threshold,
     event_support_z,
+    filter_truth_to_samples,
     normalize_chrom,
     normalize_state,
     overlap_fraction,
@@ -246,6 +247,12 @@ def main():
     truth_df = load_truth_table(args.truth_tsv)
     branch_b_df = load_branch_b_events(args.event_tsv)
     branch_a_df = load_a_branch_events(args.a_branch_bed)
+    sample_ids = set()
+    if not branch_b_df.empty and "sample_id" in branch_b_df.columns:
+        sample_ids.update(branch_b_df["sample_id"].dropna().astype(str).tolist())
+    if not branch_a_df.empty and "sample_id" in branch_a_df.columns:
+        sample_ids.update(branch_a_df["sample_id"].dropna().astype(str).tolist())
+    truth_df = filter_truth_to_samples(truth_df, sample_ids)
     admixture_levels = args.admixture_level or [1.0, 0.75, 0.5, 0.3, 0.2, 0.1]
     low_fraction_thresholds = sorted(
         {float(item) for item in (args.low_fraction_threshold or [0.05, 0.10, 0.15, 0.20, 0.30])}

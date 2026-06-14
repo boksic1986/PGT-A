@@ -7,7 +7,14 @@ import numpy as np
 import pandas as pd
 
 from pgta.core.logging import setup_logger
-from pgta.predict.truth import event_detected, event_support_z, normalize_chrom, normalize_state, overlap_fraction
+from pgta.predict.truth import (
+    event_detected,
+    event_support_z,
+    filter_truth_to_samples,
+    normalize_chrom,
+    normalize_state,
+    overlap_fraction,
+)
 
 
 def parse_args():
@@ -87,6 +94,15 @@ def compute_truth_metrics(events_df, truth_tsv, branch_b_z_threshold):
     if truth_df.empty or not {"sample_id", "chrom", "expected_state"}.issubset(truth_df.columns):
         return pd.DataFrame(), {}
     truth_df = truth_df.copy()
+    truth_df = filter_truth_to_samples(truth_df, events_df["sample_id"].dropna().astype(str).unique())
+    if truth_df.empty:
+        return pd.DataFrame(), {
+            "truth_row_count": 0,
+            "truth_match_count": 0,
+            "truth_detected_count": 0,
+            "truth_match_rate": None,
+            "truth_recall": None,
+        }
     truth_df["chrom"] = truth_df["chrom"].map(normalize_chrom)
     truth_df["expected_state"] = truth_df["expected_state"].map(normalize_state)
     for column in ["start", "end"]:

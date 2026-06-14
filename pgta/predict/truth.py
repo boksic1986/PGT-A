@@ -29,6 +29,15 @@ def normalize_state(value):
     return mapping.get(text, text)
 
 
+def filter_truth_to_samples(truth_df, sample_ids):
+    if truth_df is None or truth_df.empty or "sample_id" not in truth_df.columns:
+        return truth_df
+    sample_set = {str(sample_id) for sample_id in sample_ids if str(sample_id)}
+    if not sample_set:
+        return truth_df.iloc[0:0].copy()
+    return truth_df[truth_df["sample_id"].astype(str).isin(sample_set)].copy()
+
+
 def _is_missing(value):
     try:
         return bool(math.isnan(float(value)))

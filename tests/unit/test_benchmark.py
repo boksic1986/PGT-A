@@ -117,6 +117,39 @@ class BenchmarkOverlapTest(unittest.TestCase):
         self.assertAlmostEqual(float(metrics_df.loc[0, "top_support_z"]), 1.86)
         self.assertEqual(summary["truth_detected_count"], 1)
 
+    def test_evaluation_ignores_truth_rows_outside_current_cohort(self):
+        events_df = pd.DataFrame(
+            [
+                {
+                    "sample_id": "Y1",
+                    "event_id": "Y1.chr21.loss",
+                    "chrom": "chr21",
+                    "state": "loss",
+                    "start": 1,
+                    "end": 48_000_000,
+                    "keep_event": 1,
+                    "calibrated_mean_z": -10.0,
+                    "calibrated_median_z": -10.0,
+                    "event_corr_adjusted_z": -10.0,
+                }
+            ]
+        )
+        truth_df = pd.DataFrame(
+            [
+                {"sample_id": "Y1", "chrom": "chr21", "expected_state": "loss"},
+                {"sample_id": "H1", "chrom": "chr16", "expected_state": "gain"},
+            ]
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            truth_tsv = Path(tmpdir) / "truth.tsv"
+            truth_df.to_csv(truth_tsv, sep="\t", index=False)
+            metrics_df, summary = evaluation.compute_truth_metrics(events_df, str(truth_tsv), branch_b_z_threshold=2.5)
+
+        self.assertEqual(metrics_df["sample_id"].tolist(), ["Y1"])
+        self.assertEqual(summary["truth_row_count"], 1)
+        self.assertEqual(summary["truth_detected_count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
