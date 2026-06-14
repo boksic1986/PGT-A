@@ -527,9 +527,28 @@ if CNV_ENABLED:
                     "--high-confidence-z", str(CNV_ARTIFACT_HIGH_CONF_Z),
                     "--high-confidence-qvalue", str(CNV_ARTIFACT_HIGH_CONF_QVALUE),
                     "--a-branch-review-min-abs-z", str(CNV_ARTIFACT_A_BRANCH_REVIEW_MIN_ABS_Z),
+                    "--a-branch-sensitive-review-min-abs-z",
+                    str(CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MIN_ABS_Z),
+                    "--a-branch-sensitive-review-min-bins",
+                    str(CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MIN_BINS),
+                    "--a-branch-sensitive-review-max-high-risk-fraction",
+                    str(CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MAX_HIGH_RISK_FRAC),
+                    "--a-branch-sensitive-review-max-region-risk",
+                    str(CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MAX_REGION_RISK),
+                    "--a-branch-sensitive-review-min-same-direction-z",
+                    str(CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MIN_SAME_DIRECTION_Z),
                     "--a-branch-discordant-protect-min-abs-z",
                     str(CNV_ARTIFACT_A_BRANCH_DISCORDANT_PROTECT_MIN_ABS_Z),
                     "--branch-b-direction-min-abs-z", str(CNV_ARTIFACT_BRANCH_B_DIRECTION_MIN_ABS_Z),
+                    "--narrow-boundary-artifact-max-bins", str(CNV_ARTIFACT_NARROW_BOUNDARY_MAX_BINS),
+                    "--narrow-boundary-artifact-max-available-chrom-fraction",
+                    str(CNV_ARTIFACT_NARROW_BOUNDARY_MAX_AVAILABLE_CHROM_FRACTION),
+                    "--narrow-boundary-artifact-protect-min-a-abs-z",
+                    str(CNV_ARTIFACT_NARROW_BOUNDARY_PROTECT_MIN_A_ABS_Z),
+                    "--sca-xy-xgain-max-bam-x-relative", str(CNV_ARTIFACT_SCA_XY_XGAIN_MAX_BAM_X_REL),
+                    "--sca-xy-xgain-focal-edge-max-bins", str(CNV_ARTIFACT_SCA_XY_XGAIN_FOCAL_EDGE_MAX_BINS),
+                    "--cnvseq-reportable-min-bp", str(CNV_ARTIFACT_CNVSEQ_REPORTABLE_MIN_BP),
+                    "--cnvseq-review-min-bp", str(CNV_ARTIFACT_CNVSEQ_REVIEW_MIN_BP),
                     "--cnvseq-large-event-min-bp", str(CNV_ARTIFACT_CNVSEQ_LARGE_EVENT_MIN_BP),
                     "--cnvseq-boundary-max-abs-z", str(CNV_ARTIFACT_CNVSEQ_BOUNDARY_MAX_ABS_Z),
                     "--cnvseq-whole-chrom-available-fraction", str(CNV_ARTIFACT_CNVSEQ_WHOLE_CHROM_AVAILABLE_FRACTION),
@@ -539,6 +558,36 @@ if CNV_ENABLED:
                     command.extend(["--gender-tsv", input.gender_tsv[0]])
                 for region in CNV_POSTPROCESS_PAR_REGIONS:
                     command.extend(["--par-region", region])
+                subprocess.run(command, check=True)
+
+        rule cnv_branch_ab_plot:
+            input:
+                bins=CNV_B_CALIBRATED_BINS,
+                events=CNV_B_FINAL_EVENTS,
+                a_branch=([CNV_A_ABERRATIONS_BED] if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
+                metadata=RUN_METADATA
+            output:
+                svg=CNV_B_PLOT_SVG
+            log:
+                project_path("logs", "cnv", "{sample}.branch_ab_plot.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                command = [
+                    config["biosoft"]["python"],
+                    SCRIPT_CNV_PLOT,
+                    SCRIPT_CNV_PLOT_ACTION,
+                    "--sample-id", wildcards.sample,
+                    "--input-bins", input.bins,
+                    "--input-events", input.events,
+                    "--output-svg", output.svg,
+                    "--log", log[0],
+                ]
+                if input.a_branch:
+                    command.extend(["--input-a-branch", input.a_branch[0]])
                 subprocess.run(command, check=True)
 
     if CNV_MOSAIC_FRACTION_TRUTH_TSV and ("cnv_benchmark" in AVAILABLE_TARGETS or "cnv_report" in AVAILABLE_TARGETS):
@@ -690,6 +739,7 @@ if CNV_ENABLED:
             input:
                 metadata=RUN_METADATA,
                 events=(expand(CNV_B_FINAL_EVENTS, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
+                plots=(expand(CNV_B_PLOT_SVG, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 genders=(expand(CNV_GENDER_TSV, sample=SAMPLES) if PREDICT_BY_SEX_ENABLED else []),
                 qcs=expand(CNV_QC_TSV, sample=SAMPLES),
                 a_branch=(expand(CNV_A_ABERRATIONS_BED, sample=SAMPLES) if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
@@ -730,6 +780,8 @@ if CNV_ENABLED:
                     command.extend(["--truth-validation-summary", input.mosaic_truth_validation[0]])
                 for path_value in input.events:
                     command.extend(["--event-tsv", path_value])
+                for path_value in input.plots:
+                    command.extend(["--plot-svg", path_value])
                 for path_value in input.genders:
                     command.extend(["--gender-tsv", path_value])
                 for path_value in input.qcs:

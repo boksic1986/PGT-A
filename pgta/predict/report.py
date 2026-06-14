@@ -1,6 +1,8 @@
 #!/biosoftware/miniconda/envs/snakemake_env/bin/python
 import argparse
+import html as html_lib
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +18,12 @@ A_BRANCH_INTERNAL_COLUMNS = {
     "a_branch_review_shortlist",
     "a_branch_strong_signal_count",
 }
+CNVSEQ_TIER_RANK = {
+    "whole_chromosome": 0,
+    "reportable": 1,
+    "review_1_2mb": 2,
+    "subreportable_lt1mb": 3,
+}
 
 
 def parse_args():
@@ -28,6 +36,7 @@ def parse_args():
     parser.add_argument("--ml-summary", default="")
     parser.add_argument("--benchmark-summary", default="")
     parser.add_argument("--truth-validation-summary", default="")
+    parser.add_argument("--plot-svg", action="append", default=[])
     parser.add_argument("--output-tsv", required=True)
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--output-md", required=True)
@@ -201,6 +210,35 @@ def text_or_empty(value):
     return str(value)
 
 
+def build_plot_lookup(paths):
+    lookup = {}
+    for path_value in paths:
+        if not path_value:
+            continue
+        path = Path(path_value)
+        name = path.name
+        if name.endswith(".final_cnv.svg"):
+            sample_id = name[: -len(".final_cnv.svg")]
+        elif name.endswith(".branch_ab.svg"):
+            sample_id = name[: -len(".branch_ab.svg")]
+        else:
+            sample_id = path.stem
+        if sample_id:
+            lookup[sample_id] = str(path)
+    return lookup
+
+
+def format_plot_link(sample_id, output_path, plot_lookup, html=False):
+    plot_path = plot_lookup.get(str(sample_id), "")
+    if not plot_path:
+        return ""
+    relative = os.path.relpath(plot_path, start=str(Path(output_path).parent))
+    if html:
+        escaped_href = html_lib.escape(relative)
+        return f"<a href='{escaped_href}'>plot</a>"
+    return f"[plot]({relative})"
+
+
 def is_suppressed_sex_review_event(row):
     artifact_status = str(row.get("artifact_status", "") or "").strip().lower()
     chrom = str(row.get("chrom", "") or "").strip()
@@ -208,9 +246,39 @@ def is_suppressed_sex_review_event(row):
     return keep_event == 1 and artifact_status == "review" and chrom in SEX_CHROMS
 
 
+def cnvseq_tier_rank(value):
+    return CNVSEQ_TIER_RANK.get(str(value or "").strip(), 9)
+
+
+def format_branch_b_top_event(row):
+    tier = str(row.get("cnvseq_report_tier", "") or "").strip()
+    suffix = f"; {tier}" if tier else ""
+    return (
+        f"{row['chrom']}:{int(row['start'])}-{int(row['end'])} {row['state']} "
+        f"[{row['artifact_status']}/{row['technical_confidence']}{suffix}]"
+    )
+
+
 def summarize_branch_b_events(events_df):
     ranked_df = events_df.copy()
-    ranked_df["branch_b_top_display_suppressed"] = ranked_df.apply(is_suppressed_sex_review_event, axis=1)
+    if "cnvseq_report_tier" not in ranked_df.columns:
+        ranked_df["cnvseq_report_tier"] = ""
+    if "cnvseq_reportable" not in ranked_df.columns:
+        ranked_df["cnvseq_reportable"] = 0
+    ranked_df["cnvseq_reportable"] = pd.to_numeric(ranked_df["cnvseq_reportable"], errors="coerce").fillna(0).astype(int)
+    ranked_df["cnvseq_tier_rank"] = ranked_df["cnvseq_report_tier"].map(cnvseq_tier_rank)
+    kept_mask = ranked_df["keep_event"].astype(int).eq(1)
+    chrom_series = ranked_df["chrom"].fillna("").astype(str) if "chrom" in ranked_df.columns else pd.Series("", index=ranked_df.index)
+    ranked_df["_sex_review_top_candidate"] = ranked_df.apply(is_suppressed_sex_review_event, axis=1)
+    ranked_df["_sample_has_nonsex_kept_event"] = (
+        (kept_mask & ~chrom_series.isin(SEX_CHROMS))
+        .groupby(ranked_df["sample_id"], dropna=False)
+        .transform("max")
+        .astype(bool)
+    )
+    ranked_df["branch_b_top_display_suppressed"] = (
+        ranked_df["_sex_review_top_candidate"] & ranked_df["_sample_has_nonsex_kept_event"]
+    )
 
     sample_df = (
         ranked_df.groupby("sample_id", dropna=False)
@@ -219,6 +287,29 @@ def summarize_branch_b_events(events_df):
             branch_b_kept_events=("keep_event", "sum"),
             branch_b_pass_events=("artifact_status", lambda values: int((values == "pass").sum())),
             branch_b_review_events=("artifact_status", lambda values: int((values == "review").sum())),
+            branch_b_reportable_events=("cnvseq_reportable", lambda values: int(values.loc[kept_mask.reindex(values.index, fill_value=False)].sum())),
+            branch_b_review_tier_events=(
+                "cnvseq_report_tier",
+                lambda values: int(
+                    (
+                        values.loc[kept_mask.reindex(values.index, fill_value=False)]
+                        .fillna("")
+                        .astype(str)
+                        .eq("review_1_2mb")
+                    ).sum()
+                ),
+            ),
+            branch_b_subreportable_events=(
+                "cnvseq_report_tier",
+                lambda values: int(
+                    (
+                        values.loc[kept_mask.reindex(values.index, fill_value=False)]
+                        .fillna("")
+                        .astype(str)
+                        .eq("subreportable_lt1mb")
+                    ).sum()
+                ),
+            ),
             branch_b_top_priority_score=("priority_score", "max"),
             branch_b_suppressed_sex_review_events=("branch_b_top_display_suppressed", "sum"),
         )
@@ -233,8 +324,8 @@ def summarize_branch_b_events(events_df):
 
     top_branch_b = (
         display_events_df.sort_values(
-            ["sample_id", "priority_score", "n_bins", "end"],
-            ascending=[True, False, False, False],
+            ["sample_id", "cnvseq_tier_rank", "priority_score", "n_bins", "end"],
+            ascending=[True, True, False, False, False],
         )
         .groupby("sample_id", dropna=False)
         .head(1)[
@@ -246,6 +337,7 @@ def summarize_branch_b_events(events_df):
                 "state",
                 "artifact_status",
                 "technical_confidence",
+                "cnvseq_report_tier",
                 *[
                     column
                     for column in [
@@ -266,10 +358,7 @@ def summarize_branch_b_events(events_df):
         ]
         .copy()
     )
-    top_branch_b["branch_b_top_event"] = top_branch_b.apply(
-        lambda row: f"{row['chrom']}:{int(row['start'])}-{int(row['end'])} {row['state']} [{row['artifact_status']}/{row['technical_confidence']}]",
-        axis=1,
-    )
+    top_branch_b["branch_b_top_event"] = top_branch_b.apply(format_branch_b_top_event, axis=1)
     if "biopsy_abnormal_cell_fraction_point" in top_branch_b.columns:
         top_branch_b["branch_b_top_fraction"] = top_branch_b.apply(
             lambda row: (
@@ -379,6 +468,7 @@ def main():
     ml_summary = read_optional_json(args.ml_summary)
     benchmark_summary = read_optional_json(args.benchmark_summary)
     truth_validation_summary = read_optional_json(args.truth_validation_summary)
+    plot_lookup = build_plot_lookup(args.plot_svg)
     fraction_benchmark = benchmark_summary.get("fraction_estimation", {}) if isinstance(benchmark_summary, dict) else {}
     low_fraction_detection = benchmark_summary.get("low_fraction_detection", []) if isinstance(benchmark_summary, dict) else []
 
@@ -441,8 +531,8 @@ def main():
         "",
         "## Sample Table",
         "",
-        "| Sample | QC | Sex | Branch B Top Event | Technical Conclusion | Biological Candidate Conclusion |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| Sample | QC | Sex | Plot | Branch B Top Event | Technical Conclusion | Biological Candidate Conclusion |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     if fraction_benchmark:
         md_lines[8:8] = [
@@ -471,22 +561,26 @@ def main():
             + "`",
         )
     for row in sample_df.itertuples(index=False):
+        plot_link = format_plot_link(row.sample_id, args.output_md, plot_lookup, html=False)
         md_lines.append(
             f"| `{row.sample_id}` | `{getattr(row, 'qc_status', 'NA')}` | `{getattr(row, 'sex_call', 'NA')}` | "
+            f"{plot_link or ''} | "
             f"{getattr(row, 'branch_b_top_event', '') or 'none'} | {row.technical_conclusion} | {row.biological_candidate_conclusion} |"
         )
     ensure_parent(args.output_md).write_text("\n".join(md_lines) + "\n", encoding="utf-8")
 
     html_rows = []
     for row in sample_df.itertuples(index=False):
+        plot_link = format_plot_link(row.sample_id, args.output_html, plot_lookup, html=True)
         html_rows.append(
             "<tr>"
-            f"<td>{row.sample_id}</td>"
-            f"<td>{getattr(row, 'qc_status', 'NA')}</td>"
-            f"<td>{getattr(row, 'sex_call', 'NA')}</td>"
-            f"<td>{getattr(row, 'branch_b_top_event', '') or 'none'}</td>"
-            f"<td>{row.technical_conclusion}</td>"
-            f"<td>{row.biological_candidate_conclusion}</td>"
+            f"<td>{html_lib.escape(str(row.sample_id))}</td>"
+            f"<td>{html_lib.escape(str(getattr(row, 'qc_status', 'NA')))}</td>"
+            f"<td>{html_lib.escape(str(getattr(row, 'sex_call', 'NA')))}</td>"
+            f"<td>{plot_link}</td>"
+            f"<td>{html_lib.escape(str(getattr(row, 'branch_b_top_event', '') or 'none'))}</td>"
+            f"<td>{html_lib.escape(str(row.technical_conclusion))}</td>"
+            f"<td>{html_lib.escape(str(row.biological_candidate_conclusion))}</td>"
             "</tr>"
         )
     html = (
@@ -495,7 +589,7 @@ def main():
         "th,td{border:1px solid #ccc;padding:8px;vertical-align:top;}th{background:#f3f3f3;text-align:left;}</style>"
         "</head><body><h1>CNV Report</h1>"
         f"<p>Samples: {sample_df['sample_id'].nunique()} | Branch B kept events: {int(sample_df['branch_b_kept_events'].sum())}</p>"
-        "<table><thead><tr><th>Sample</th><th>QC</th><th>Sex</th><th>Branch B Top Event</th>"
+        "<table><thead><tr><th>Sample</th><th>QC</th><th>Sex</th><th>Plot</th><th>Branch B Top Event</th>"
         "<th>Technical Conclusion</th><th>Biological Candidate Conclusion</th></tr></thead><tbody>"
         + "".join(html_rows)
         + "</tbody></table></body></html>"

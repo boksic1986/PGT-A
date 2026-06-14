@@ -9,6 +9,14 @@ from pgta.predict.branch_b.common import read_bins_and_candidates, read_table, w
 from pgta.core.logging import setup_logger
 
 
+CHRX_CENTROMERE_BY_GENOME = {
+    "hg19": (58527181, 61882314),
+    "grch37": (58527181, 61882314),
+    "hg38": (58500748, 62662843),
+    "grch38": (58500748, 62662843),
+}
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Apply explicit artifact rules to calibrated CNV candidate events.")
     parser.add_argument("--sample-id", required=True)
@@ -44,9 +52,28 @@ def parse_args():
     parser.add_argument("--focal-review-min-support-z", type=float, default=6.0)
     parser.add_argument("--focal-review-max-overlap-fraction", type=float, default=0.25)
     parser.add_argument("--focal-review-max-region-risk", type=float, default=0.20)
-    parser.add_argument("--a-branch-review-min-abs-z", type=float, default=20.0)
+    parser.add_argument("--a-branch-review-min-abs-z", type=float, default=15.0)
+    parser.add_argument("--a-branch-sensitive-review-min-abs-z", type=float, default=7.0)
+    parser.add_argument("--a-branch-sensitive-review-min-bins", type=float, default=10.0)
+    parser.add_argument("--a-branch-sensitive-review-max-high-risk-fraction", type=float, default=0.05)
+    parser.add_argument("--a-branch-sensitive-review-max-region-risk", type=float, default=0.20)
+    parser.add_argument("--a-branch-sensitive-review-min-same-direction-z", type=float, default=0.25)
     parser.add_argument("--a-branch-discordant-protect-min-abs-z", type=float, default=50.0)
     parser.add_argument("--branch-b-direction-min-abs-z", type=float, default=0.25)
+    parser.add_argument("--recurrent-artifact-chrom", action="append", default=["chr19", "chr22"])
+    parser.add_argument("--recurrent-artifact-min-same-direction-z", type=float, default=2.0)
+    parser.add_argument("--recurrent-artifact-protect-min-a-abs-z", type=float, default=80.0)
+    parser.add_argument("--recurrent-edge-artifact-chrom", action="append", default=["chr17"])
+    parser.add_argument("--paired-event-rescue-min-a-abs-z", type=float, default=8.0)
+    parser.add_argument("--paired-event-rescue-mate-min-a-abs-z", type=float, default=50.0)
+    parser.add_argument("--paired-event-rescue-min-bins", type=int, default=5)
+    parser.add_argument("--narrow-boundary-artifact-max-bins", type=int, default=15)
+    parser.add_argument("--narrow-boundary-artifact-max-available-chrom-fraction", type=float, default=0.08)
+    parser.add_argument("--narrow-boundary-artifact-protect-min-a-abs-z", type=float, default=50.0)
+    parser.add_argument("--sca-xy-xgain-max-bam-x-relative", type=float, default=0.80)
+    parser.add_argument("--sca-xy-xgain-focal-edge-max-bins", type=int, default=20)
+    parser.add_argument("--cnvseq-reportable-min-bp", type=int, default=2_000_000)
+    parser.add_argument("--cnvseq-review-min-bp", type=int, default=1_000_000)
     parser.add_argument("--cnvseq-large-event-min-bp", type=int, default=10_000_000)
     parser.add_argument("--cnvseq-boundary-max-abs-z", type=float, default=4.0)
     parser.add_argument("--cnvseq-whole-chrom-available-fraction", type=float, default=0.90)
@@ -55,15 +82,20 @@ def parse_args():
 
 
 def parse_gender_tsv(path_value):
+    info = parse_gender_info(path_value)
+    return str(info.get("sex_call", "")).strip().upper()
+
+
+def parse_gender_info(path_value):
     if not path_value:
-        return ""
+        return {}
     path = Path(path_value)
     if not path.exists():
-        return ""
+        return {}
     df = read_table(path, empty_ok=True)
     if df.empty or "sex_call" not in df.columns:
-        return ""
-    return str(df["sex_call"].iloc[0]).strip().upper()
+        return {}
+    return df.iloc[0].to_dict()
 
 
 def parse_par_regions(region_specs):
@@ -94,6 +126,27 @@ def compute_par_overlap(chrom, start, end, par_regions):
     return overlap_bp, overlap_bp / float(event_length)
 
 
+def sca_region_class(chrom, start, end, par_fraction, genome_build="hg19"):
+    if chrom == "chrY":
+        return "sca_y"
+    if chrom != "chrX":
+        return ""
+    if par_fraction >= 0.95:
+        return "sca_x_par_only"
+    if par_fraction >= 0.05:
+        return "sca_x_mixed_par_nonpar"
+
+    centromere_start, centromere_end = CHRX_CENTROMERE_BY_GENOME.get(
+        str(genome_build).lower(),
+        CHRX_CENTROMERE_BY_GENOME["hg19"],
+    )
+    if int(end) < centromere_start:
+        return "sca_x_nonpar_p"
+    if int(start) >= centromere_start and int(end) > centromere_end:
+        return "sca_x_nonpar_q"
+    return "sca_x_nonpar_centromere_crossing"
+
+
 def safe_float(value, default=np.nan):
     try:
         return float(value)
@@ -120,6 +173,32 @@ def has_branch_b_direction_discordance(state, evidence_values, min_abs_z=0.25):
         if np.isfinite(value) and abs(float(value)) >= min_abs_z
     ]
     return len(informative_values) >= 2 and all(value * expected_direction < 0 for value in informative_values)
+
+
+def append_reason(existing, reason):
+    values = [item for item in str(existing or "").split(";") if item]
+    if reason not in values:
+        values.append(reason)
+    return ";".join(values)
+
+
+def remove_reason(existing, reason):
+    values = [item for item in str(existing or "").split(";") if item and item != reason]
+    return ";".join(values)
+
+
+def append_flag(existing, flag):
+    values = [item for item in str(existing or "").split(",") if item]
+    if flag not in values:
+        values.append(flag)
+    return ",".join(values)
+
+
+def recurrent_artifact_chroms(values):
+    chroms = []
+    for value in values or []:
+        chroms.extend([item.strip() for item in str(value).split(",") if item.strip()])
+    return set(chroms)
 
 
 def summarize_cnvseq_event_context(row, bins_df):
@@ -173,6 +252,16 @@ def summarize_cnvseq_event_context(row, bins_df):
     }
 
 
+def classify_cnvseq_report_tier(event_length_bp, cnvseq_available_chrom_fraction, args):
+    if cnvseq_available_chrom_fraction >= float(getattr(args, "cnvseq_whole_chrom_available_fraction", 0.90)):
+        return "whole_chromosome", 1
+    if event_length_bp >= int(getattr(args, "cnvseq_reportable_min_bp", 2_000_000)):
+        return "reportable", 1
+    if event_length_bp >= int(getattr(args, "cnvseq_review_min_bp", 1_000_000)):
+        return "review_1_2mb", 0
+    return "subreportable_lt1mb", 0
+
+
 def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     flags = []
     explanations = []
@@ -186,14 +275,33 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     caller = str(getattr(row, "caller", ""))
     a_candidate_id = str(getattr(row, "a_candidate_id", "") or "").strip()
     a_abs_z = abs(safe_float(getattr(row, "a_abs_zscore", np.nan), default=0.0))
-    a_branch_review_min_abs_z = safe_float(getattr(args, "a_branch_review_min_abs_z", 20.0), default=20.0)
+    a_branch_review_min_abs_z = safe_float(getattr(args, "a_branch_review_min_abs_z", 15.0), default=15.0)
     preserve_a_branch_primary_signal = (
         (caller == "wisecondorx_a_branch" or bool(a_candidate_id))
         and a_abs_z >= a_branch_review_min_abs_z
     )
+    a_branch_boundary_protect_min_abs_z = safe_float(
+        getattr(args, "a_branch_discordant_protect_min_abs_z", 50.0),
+        default=50.0,
+    )
+    preserve_a_branch_boundary_signal = (
+        (caller == "wisecondorx_a_branch" or bool(a_candidate_id))
+        and a_abs_z >= a_branch_boundary_protect_min_abs_z
+    )
     is_sex_chrom = chrom in {"chrX", "chrY"}
     chrom_fraction = float(row.n_bins) / max(chrom_bin_count, 1)
     overlap_bp, par_fraction = compute_par_overlap(chrom, int(row.start), int(row.end), par_regions)
+    sca_class = sca_region_class(
+        chrom,
+        int(row.start),
+        int(row.end),
+        par_fraction,
+        genome_build=getattr(args, "genome_build", "hg19"),
+    )
+    touches_chrom_edge = (
+        int(row.start_bin) <= args.edge_bin_window
+        or (chrom_bin_count - int(row.end_bin) - 1) <= args.edge_bin_window
+    )
     signed_mean_z = safe_float(getattr(row, "calibrated_mean_z", np.nan))
     signed_median_z = safe_float(getattr(row, "calibrated_median_z", np.nan))
     signed_adjusted_event_z = safe_float(getattr(row, "event_corr_adjusted_z", np.nan))
@@ -222,6 +330,11 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     cnvseq_available_chrom_fraction = safe_float(
         getattr(row, "cnvseq_available_chrom_fraction", np.nan), default=chrom_fraction
     )
+    cnvseq_report_tier, cnvseq_reportable = classify_cnvseq_report_tier(
+        event_length_bp,
+        cnvseq_available_chrom_fraction,
+        args,
+    )
     cnvseq_gap_centromere_bin_fraction = safe_float(
         getattr(row, "cnvseq_gap_centromere_bin_fraction", np.nan), default=0.0
     )
@@ -237,6 +350,34 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     cnvseq_boundary_like_event = bool(cnvseq_crosses_gap_or_centromere or high_risk_boundary_crossing)
     cnvseq_segment_level_z = max(mean_z, median_z, adjusted_event_z)
     weighted_non_high_support_fraction = clean_fraction + (0.5 * max(moderate_fraction, 0.0))
+    same_direction_branch_b_z = max(
+        [
+            value * state_direction(state)
+            for value in [
+                signed_mean_z,
+                signed_median_z,
+                signed_adjusted_event_z,
+                signed_segment_mean_z,
+                signed_segment_median_z,
+            ]
+            if np.isfinite(value)
+        ]
+        or [np.nan]
+    )
+    preserve_a_branch_sensitive_signal = (
+        (caller == "wisecondorx_a_branch" or bool(a_candidate_id))
+        and not is_sex_chrom
+        and a_abs_z >= float(getattr(args, "a_branch_sensitive_review_min_abs_z", 7.0))
+        and effective_bin_count >= float(getattr(args, "a_branch_sensitive_review_min_bins", 10.0))
+        and high_fraction <= float(getattr(args, "a_branch_sensitive_review_max_high_risk_fraction", 0.05))
+        and region_risk_score_max <= float(getattr(args, "a_branch_sensitive_review_max_region_risk", 0.20))
+        and not cnvseq_boundary_like_event
+        and (
+            not np.isfinite(same_direction_branch_b_z)
+            or same_direction_branch_b_z
+            >= float(getattr(args, "a_branch_sensitive_review_min_same_direction_z", 0.25))
+        )
+    )
     preserve_broad_internal_signal = (
         chrom_fraction > args.max_chrom_fraction
         and internal_support_z >= args.broad_support_min_abs_z
@@ -296,6 +437,16 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         and overlap_metrics["ambiguous_alignment_region"] <= 0.0
         and (not np.isfinite(empirical_q) or empirical_q <= max(args.max_qvalue, args.high_confidence_qvalue))
     )
+    same_direction_event_z = signed_adjusted_event_z * state_direction(state)
+    weak_same_direction_support = (
+        not np.isfinite(same_direction_event_z)
+        or same_direction_event_z < float(getattr(args, "recurrent_artifact_min_same_direction_z", 2.0))
+    )
+    recurrent_weak_support = (
+        max_calibrated_z < args.min_abs_calibrated_z
+        or (np.isfinite(empirical_q) and empirical_q > args.max_qvalue)
+        or weak_same_direction_support
+    )
 
     if int(row.n_bins) < args.min_event_bins:
         flags.append("too_few_bins")
@@ -307,6 +458,9 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         explanations.append("Calibrated signal amplitude is below the minimum support threshold.")
         if preserve_a_branch_primary_signal:
             downgrade_reasons.append("a_branch_strong_evidence_preserved_for_review")
+            review_only = True
+        elif preserve_a_branch_sensitive_signal:
+            downgrade_reasons.append("a_branch_sensitive_evidence_preserved_for_review")
             review_only = True
         elif preserve_broad_gain_signal:
             downgrade_reasons.append("broad_gain_preserved_by_raw_or_chromosome_support")
@@ -324,6 +478,13 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
             explanations.append("Broad event is preserved for review because Branch A has very strong WisecondorX support.")
             downgrade_reasons.append("a_branch_strong_evidence_preserved_for_review")
             review_only = True
+        elif preserve_a_branch_sensitive_signal:
+            explanations.append(
+                "Broad or small-chromosome event is preserved for review because Branch A has "
+                "same-direction low-risk WisecondorX support."
+            )
+            downgrade_reasons.append("a_branch_sensitive_evidence_preserved_for_review")
+            review_only = True
         elif preserve_broad_internal_signal or preserve_broad_gain_signal:
             explanations.append("Broad event is preserved for review because Branch B shows high-confidence chromosome-scale support.")
             if preserve_broad_gain_signal and not preserve_broad_internal_signal:
@@ -335,7 +496,7 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
             explanations.append("Event spans too much of one chromosome and is likely technical.")
             filter_reasons.append("chromosome_fraction_too_large")
             hard_artifact = True
-    if int(row.start_bin) <= args.edge_bin_window or (chrom_bin_count - int(row.end_bin) - 1) <= args.edge_bin_window:
+    if touches_chrom_edge:
         flags.append("edge_event")
         explanations.append("Segment touches chromosome-edge bins and should be reviewed.")
         downgrade_reasons.append("chromosome_edge_contact")
@@ -347,6 +508,22 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         review_only = True
 
     if is_sex_chrom:
+        flags.append("sca_event")
+        if sca_class:
+            flags.append(sca_class)
+            if sca_class == "sca_x_mixed_par_nonpar":
+                downgrade_reasons.append("sca_mixed_par_nonpar_review")
+            elif sca_class == "sca_x_par_only":
+                downgrade_reasons.append("sca_par_only_review")
+            elif sca_class == "sca_y":
+                downgrade_reasons.append("sca_y_review")
+            else:
+                downgrade_reasons.append("sca_nonpar_review")
+            review_only = True
+        if 0.0 < par_fraction < 0.05 and sca_class not in {"sca_x_par_only", "sca_x_mixed_par_nonpar"}:
+            flags.append("sca_par_boundary_overlap")
+            downgrade_reasons.append("sca_par_boundary_review")
+            review_only = True
         flags.append("sex_chromosome_event")
         explanations.append("Sex-chromosome event needs sex and PAR-aware interpretation.")
     if overlap_bp > 0:
@@ -404,9 +581,12 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         review_only = True
     if overlap_metrics["blacklist_overlap"] > 0.0:
         flags.append("blacklist_overlap")
-        explanations.append("Event overlaps a blacklisted genomic region.")
-        filter_reasons.append("blacklist_region_overlap")
-        hard_artifact = True
+        explanations.append(
+            "Event overlaps blacklisted bins; WisecondorX treats these bins as masked evidence, "
+            "so overlap is review evidence rather than an event-level hard artifact."
+        )
+        downgrade_reasons.append("blacklist_overlap")
+        review_only = True
     if overlap_metrics["ambiguous_alignment_region"] >= 0.10:
         flags.append("ambiguous_alignment_region")
         explanations.append("Event overlaps a high-risk ambiguous-alignment region.")
@@ -432,12 +612,52 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         downgrade_reasons.append("high_risk_boundary_crossing")
         review_only = True
     if (
+        high_risk_boundary_crossing == 1
+        and (
+            int(row.n_bins) <= int(getattr(args, "narrow_boundary_artifact_max_bins", 15))
+            or cnvseq_available_chrom_fraction
+            <= float(getattr(args, "narrow_boundary_artifact_max_available_chrom_fraction", 0.08))
+        )
+        and a_abs_z < float(getattr(args, "narrow_boundary_artifact_protect_min_a_abs_z", 50.0))
+    ):
+        flags.append("narrow_high_risk_boundary_artifact")
+        explanations.append(
+            "Small or locally sparse event crosses a high-risk sequence boundary without strong Branch A protection."
+        )
+        filter_reasons.append("narrow_high_risk_boundary_without_strong_a_branch_support")
+        hard_artifact = True
+    if (
+        chrom in recurrent_artifact_chroms(getattr(args, "recurrent_artifact_chrom", []))
+        and state == "gain"
+        and recurrent_weak_support
+        and a_abs_z < float(getattr(args, "recurrent_artifact_protect_min_a_abs_z", 80.0))
+    ):
+        flags.append("recurrent_artifact_region")
+        explanations.append(
+            "Event falls in a recurrent validation artifact region and lacks same-direction Branch B support."
+        )
+        filter_reasons.append("recurrent_artifact_region_weak_support")
+        hard_artifact = True
+    if (
+        not is_sex_chrom
+        and touches_chrom_edge
+        and high_risk_boundary_crossing == 1
+        and cnvseq_segment_level_z < args.high_confidence_z
+        and not preserve_a_branch_boundary_signal
+    ):
+        flags.append("edge_boundary_weak_a_branch")
+        explanations.append(
+            "Edge-adjacent boundary event lacks strong Branch A support and is treated as a boundary artifact."
+        )
+        filter_reasons.append("edge_boundary_without_strong_a_branch_support")
+        hard_artifact = True
+    if (
         not is_sex_chrom
         and event_length_bp >= int(getattr(args, "cnvseq_large_event_min_bp", 10_000_000))
         and cnvseq_boundary_like_event
         and cnvseq_available_chrom_fraction < float(getattr(args, "cnvseq_whole_chrom_available_fraction", 0.90))
         and cnvseq_segment_level_z < float(getattr(args, "cnvseq_boundary_max_abs_z", args.high_confidence_z))
-        and not preserve_a_branch_primary_signal
+        and not preserve_a_branch_boundary_signal
     ):
         flags.append("cnvseq_subchrom_boundary_event")
         explanations.append(
@@ -465,6 +685,21 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         flags.append("branch_b_direction_discordant")
         explanations.append("Branch B signed evidence is consistently opposite to the candidate state.")
         filter_reasons.append("branch_b_direction_discordant_with_candidate_state")
+        hard_artifact = True
+    if (
+        chrom in recurrent_artifact_chroms(getattr(args, "recurrent_edge_artifact_chrom", []))
+        and touches_chrom_edge
+        and max_calibrated_z < args.min_abs_calibrated_z
+        and np.isfinite(empirical_q)
+        and empirical_q > args.high_confidence_qvalue
+        and weak_same_direction_support
+        and a_abs_z < float(getattr(args, "recurrent_artifact_protect_min_a_abs_z", 80.0))
+    ):
+        flags.append("recurrent_edge_lowcal_artifact")
+        explanations.append(
+            "Edge-adjacent recurrent artifact region has weak calibrated and same-direction support."
+        )
+        filter_reasons.append("recurrent_edge_lowcal_weak_support")
         hard_artifact = True
 
     risk_penalty = (
@@ -551,7 +786,22 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
             technical_confidence = "rejected"
             report_class = "technical_artifact"
 
-    biological_context = "sex_chromosome" if is_sex_chrom else "autosome"
+    if keep_event and not cnvseq_reportable:
+        flags.append(cnvseq_report_tier)
+        explanations.append(
+            "CNVseq-style reporting keeps this event below the routine 2 Mb reportable threshold as review-only evidence."
+        )
+        downgrade_reasons.append("cnvseq_subreportable_size_review")
+        artifact_status = "review"
+        technical_confidence = "moderate" if technical_confidence == "high" else technical_confidence
+        report_class = "candidate_review"
+        manual_review_recommended = 1
+    else:
+        manual_review_recommended = int(
+            review_only or "manual" in " ".join(explanations).lower() or bool(downgrade_reasons)
+        )
+
+    biological_context = sca_class if is_sex_chrom and sca_class else ("sex_chromosome" if is_sex_chrom else "autosome")
     return {
         "artifact_status": artifact_status,
         "keep_event": keep_event,
@@ -564,9 +814,165 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         "retain_reason": ";".join(dict.fromkeys(retain_reasons)),
         "downgrade_reason": ";".join(dict.fromkeys(downgrade_reasons)),
         "filter_reason": ";".join(dict.fromkeys(filter_reasons)),
-        "manual_review_recommended": int(review_only or "manual" in " ".join(explanations).lower() or bool(downgrade_reasons)),
+        "manual_review_recommended": manual_review_recommended,
         "biological_context": biological_context,
+        "cnvseq_report_tier": cnvseq_report_tier,
+        "cnvseq_reportable": int(cnvseq_reportable),
+        "event_length_bp": int(event_length_bp),
     }
+
+
+def apply_paired_chromosome_event_rescue(events_df, args):
+    if events_df.empty:
+        return events_df
+    frame = events_df.copy()
+    required = {
+        "sample_id",
+        "chrom",
+        "state",
+        "caller",
+        "a_abs_zscore",
+        "n_bins",
+        "filter_reason",
+        "keep_event",
+    }
+    if not required.issubset(frame.columns):
+        return frame
+
+    a_abs = pd.to_numeric(frame["a_abs_zscore"], errors="coerce").fillna(0.0)
+    n_bins = pd.to_numeric(frame["n_bins"], errors="coerce").fillna(0.0)
+    filter_text = frame["filter_reason"].fillna("").astype(str)
+    paired_rescue_reason_mask = (
+        filter_text.str.contains("branch_b_direction_discordant_with_candidate_state", regex=False)
+        | filter_text.str.contains("signal_support_below_minimum", regex=False)
+        | filter_text.str.contains("cnvseq_subchrom_boundary_weak_support", regex=False)
+    )
+    candidate_mask = (
+        frame["keep_event"].astype(int).eq(0)
+        & paired_rescue_reason_mask
+        & frame["caller"].fillna("").astype(str).eq("wisecondorx_a_branch")
+        & a_abs.ge(float(getattr(args, "paired_event_rescue_min_a_abs_z", 8.0)))
+        & n_bins.ge(float(getattr(args, "paired_event_rescue_min_bins", 5)))
+    )
+    if not candidate_mask.any():
+        return frame
+
+    kept_mask = frame["keep_event"].astype(int).eq(1)
+    mate_min_a = float(getattr(args, "paired_event_rescue_mate_min_a_abs_z", 50.0))
+    for idx, row in frame.loc[candidate_mask].iterrows():
+        mate_mask = (
+            kept_mask
+            & frame["sample_id"].astype(str).eq(str(row["sample_id"]))
+            & frame["chrom"].astype(str).eq(str(row["chrom"]))
+            & frame["state"].astype(str).str.lower().ne(str(row["state"]).lower())
+            & pd.to_numeric(frame["a_abs_zscore"], errors="coerce").fillna(0.0).ge(mate_min_a)
+        )
+        if not mate_mask.any():
+            continue
+        frame.at[idx, "artifact_status"] = "review"
+        frame.at[idx, "keep_event"] = int(bool(getattr(args, "keep_review", 1)))
+        frame.at[idx, "technical_confidence"] = "low"
+        frame.at[idx, "report_class"] = "candidate_review" if int(frame.at[idx, "keep_event"]) else "candidate_suppressed"
+        frame.at[idx, "retain_reason"] = append_reason(frame.at[idx, "retain_reason"], "paired_chromosome_event_rescue")
+        frame.at[idx, "downgrade_reason"] = append_reason(
+            frame.at[idx, "downgrade_reason"], "paired_chromosome_event_rescue"
+        )
+        frame.at[idx, "filter_reason"] = remove_reason(
+            frame.at[idx, "filter_reason"], "branch_b_direction_discordant_with_candidate_state"
+        )
+        frame.at[idx, "filter_reason"] = remove_reason(
+            frame.at[idx, "filter_reason"], "signal_support_below_minimum"
+        )
+        frame.at[idx, "filter_reason"] = remove_reason(
+            frame.at[idx, "filter_reason"], "cnvseq_subchrom_boundary_weak_support"
+        )
+        frame.at[idx, "manual_review_recommended"] = 1
+    return frame
+
+
+def apply_sca_group_context(events_df):
+    if events_df.empty:
+        return events_df
+    frame = events_df.copy()
+    required = {"sample_id", "chrom", "state", "keep_event", "artifact_flags", "biological_context"}
+    if not required.issubset(frame.columns):
+        return frame
+
+    kept_chr_x = frame["keep_event"].astype(int).eq(1) & frame["chrom"].astype(str).eq("chrX")
+    for (_, state), group in frame.loc[kept_chr_x].groupby(["sample_id", "state"], dropna=False):
+        flags = group["artifact_flags"].fillna("").astype(str)
+        has_p = flags.str.contains("sca_x_nonpar_p", regex=False)
+        has_q = flags.str.contains("sca_x_nonpar_q", regex=False)
+        if not has_p.any() or not has_q.any():
+            continue
+        idxs = group.loc[has_p | has_q].index
+        for idx in idxs:
+            frame.at[idx, "artifact_flags"] = append_flag(frame.at[idx, "artifact_flags"], "sca_x_nonpar_pq_pair")
+            frame.at[idx, "downgrade_reason"] = append_reason(
+                frame.at[idx, "downgrade_reason"], "sca_x_nonpar_pq_pair_review"
+            )
+            frame.at[idx, "manual_review_recommended"] = 1
+            frame.at[idx, "biological_context"] = "sca_x_nonpar_pq_pair"
+    return frame
+
+
+def apply_sca_sex_consistency(events_df, gender_info, args):
+    if events_df.empty:
+        return events_df
+    frame = events_df.copy()
+    required = {"chrom", "state", "keep_event", "artifact_flags", "downgrade_reason", "filter_reason"}
+    if not required.issubset(frame.columns):
+        return frame
+
+    sex_call = str(gender_info.get("sex_call", "") or "").strip().upper()
+    if sex_call != "XY":
+        return frame
+
+    bam_x_relative = safe_float(gender_info.get("bam_x_relative_depth", np.nan))
+    if not np.isfinite(bam_x_relative):
+        return frame
+    if bam_x_relative > float(getattr(args, "sca_xy_xgain_max_bam_x_relative", 0.80)):
+        return frame
+
+    flags = frame["artifact_flags"].fillna("").astype(str)
+    chrom = frame["chrom"].fillna("").astype(str)
+    state = frame["state"].fillna("").astype(str).str.lower()
+    n_bins = pd.to_numeric(frame.get("n_bins", pd.Series(np.nan, index=frame.index)), errors="coerce")
+    broad_or_pair = flags.str.contains("broad_chrom_fraction", regex=False) | flags.str.contains(
+        "sca_x_nonpar_pq_pair", regex=False
+    )
+    focal_edge = (
+        flags.str.contains("edge_event", regex=False)
+        & (
+            flags.str.contains("par_overlap", regex=False)
+            | flags.str.contains("mixed_par_nonpar", regex=False)
+            | flags.str.contains("sca_par_boundary_overlap", regex=False)
+        )
+        & n_bins.le(int(getattr(args, "sca_xy_xgain_focal_edge_max_bins", 20)))
+    )
+    inconsistent_mask = (
+        frame["keep_event"].astype(int).eq(1)
+        & chrom.eq("chrX")
+        & state.eq("gain")
+        & flags.str.contains("sca_event", regex=False)
+        & (broad_or_pair | focal_edge)
+    )
+    for idx in frame.loc[inconsistent_mask].index:
+        frame.at[idx, "artifact_status"] = "artifact"
+        frame.at[idx, "keep_event"] = 0
+        frame.at[idx, "technical_confidence"] = "rejected"
+        frame.at[idx, "report_class"] = "technical_artifact"
+        frame.at[idx, "artifact_flags"] = append_flag(
+            frame.at[idx, "artifact_flags"], "sca_xy_xgain_without_sample_x_elevation"
+        )
+        frame.at[idx, "downgrade_reason"] = append_reason(
+            frame.at[idx, "downgrade_reason"], "sca_xy_xgain_without_sample_x_elevation"
+        )
+        frame.at[idx, "filter_reason"] = append_reason(
+            frame.at[idx, "filter_reason"], "sca_xy_xgain_without_sample_x_elevation"
+        )
+        frame.at[idx, "manual_review_recommended"] = 1
+    return frame
 
 
 def main():
@@ -578,7 +984,8 @@ def main():
         bins_required_columns=["chrom", "bin_index"],
         empty_candidates_ok=True,
     )
-    sex_call = parse_gender_tsv(args.gender_tsv)
+    gender_info = parse_gender_info(args.gender_tsv)
+    sex_call = str(gender_info.get("sex_call", "") or "").strip().upper()
     par_regions = parse_par_regions(args.par_region)
 
     if events_df.empty:
@@ -625,6 +1032,9 @@ def main():
     decision_df = pd.DataFrame(decisions)
     for column in decision_df.columns:
         events_df[column] = decision_df[column]
+    events_df = apply_paired_chromosome_event_rescue(events_df, args)
+    events_df = apply_sca_group_context(events_df)
+    events_df = apply_sca_sex_consistency(events_df, gender_info, args)
     events_df = events_df.sort_values(
         by=["keep_event", "artifact_status", "priority_score", "n_bins"],
         ascending=[False, True, False, False],

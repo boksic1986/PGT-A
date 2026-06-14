@@ -74,6 +74,7 @@ CNV_POSTPROCESS_AMBIGUOUS_ALIGNMENT_BED = (
     else ""
 )
 CNV_POSTPROCESS_DIR = str(Path(CNV_DIR) / "postprocess")
+CNV_PLOTS_DIR = str(Path(CNV_DIR) / "plots")
 CNV_B_CORRECTED_BINS = str(Path(CNV_POSTPROCESS_DIR) / "correction" / "{sample}.bins.tsv")
 CNV_B_CORRECTION_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "correction" / "{sample}.summary.json")
 CNV_B_BINS = str(Path(CNV_POSTPROCESS_DIR) / "calling" / "{sample}.bins.tsv")
@@ -87,6 +88,7 @@ CNV_B_MOSAIC_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "mosaic_fraction" / "{sam
 CNV_B_FINAL_EVENTS = str(Path(CNV_POSTPROCESS_DIR) / "artifact_rules" / "{sample}.candidate_events.tsv")
 CNV_B_ARTIFACT_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "artifact_rules" / "{sample}.summary.tsv")
 CNV_B_FINAL_JSON = str(Path(CNV_POSTPROCESS_DIR) / "artifact_rules" / "{sample}.candidate_events.json")
+CNV_B_PLOT_SVG = str(Path(CNV_PLOTS_DIR) / "{sample}.final_cnv.svg")
 CNV_CALLING_MIN_BINS = int(CNV_CALLING_CFG.get("min_bins", 5))
 CNV_CALLING_MAX_SEGMENTS = int(CNV_CALLING_CFG.get("max_segments_per_chrom", 12))
 CNV_CALLING_SPLIT_THRESHOLD = float(CNV_CALLING_CFG.get("split_threshold", 2.5))
@@ -114,11 +116,39 @@ CNV_ARTIFACT_MAX_QVALUE = float(CNV_ARTIFACT_CFG.get("max_qvalue", 0.25))
 CNV_ARTIFACT_KEEP_REVIEW = int(bool(CNV_ARTIFACT_CFG.get("keep_review", True)))
 CNV_ARTIFACT_HIGH_CONF_Z = float(CNV_ARTIFACT_CFG.get("high_confidence_z", 4.0))
 CNV_ARTIFACT_HIGH_CONF_QVALUE = float(CNV_ARTIFACT_CFG.get("high_confidence_qvalue", 0.05))
-CNV_ARTIFACT_A_BRANCH_REVIEW_MIN_ABS_Z = float(CNV_ARTIFACT_CFG.get("a_branch_review_min_abs_z", 20.0))
+CNV_ARTIFACT_A_BRANCH_REVIEW_MIN_ABS_Z = float(CNV_ARTIFACT_CFG.get("a_branch_review_min_abs_z", 15.0))
+CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MIN_ABS_Z = float(
+    CNV_ARTIFACT_CFG.get("a_branch_sensitive_review_min_abs_z", 7.0)
+)
+CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MIN_BINS = float(
+    CNV_ARTIFACT_CFG.get("a_branch_sensitive_review_min_bins", 10.0)
+)
+CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MAX_HIGH_RISK_FRAC = float(
+    CNV_ARTIFACT_CFG.get("a_branch_sensitive_review_max_high_risk_fraction", 0.05)
+)
+CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MAX_REGION_RISK = float(
+    CNV_ARTIFACT_CFG.get("a_branch_sensitive_review_max_region_risk", 0.20)
+)
+CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MIN_SAME_DIRECTION_Z = float(
+    CNV_ARTIFACT_CFG.get("a_branch_sensitive_review_min_same_direction_z", 0.25)
+)
 CNV_ARTIFACT_A_BRANCH_DISCORDANT_PROTECT_MIN_ABS_Z = float(
     CNV_ARTIFACT_CFG.get("a_branch_discordant_protect_min_abs_z", 50.0)
 )
 CNV_ARTIFACT_BRANCH_B_DIRECTION_MIN_ABS_Z = float(CNV_ARTIFACT_CFG.get("branch_b_direction_min_abs_z", 0.25))
+CNV_ARTIFACT_NARROW_BOUNDARY_MAX_BINS = int(CNV_ARTIFACT_CFG.get("narrow_boundary_artifact_max_bins", 15))
+CNV_ARTIFACT_NARROW_BOUNDARY_MAX_AVAILABLE_CHROM_FRACTION = float(
+    CNV_ARTIFACT_CFG.get("narrow_boundary_artifact_max_available_chrom_fraction", 0.08)
+)
+CNV_ARTIFACT_NARROW_BOUNDARY_PROTECT_MIN_A_ABS_Z = float(
+    CNV_ARTIFACT_CFG.get("narrow_boundary_artifact_protect_min_a_abs_z", 50.0)
+)
+CNV_ARTIFACT_SCA_XY_XGAIN_MAX_BAM_X_REL = float(CNV_ARTIFACT_CFG.get("sca_xy_xgain_max_bam_x_relative", 0.80))
+CNV_ARTIFACT_SCA_XY_XGAIN_FOCAL_EDGE_MAX_BINS = int(
+    CNV_ARTIFACT_CFG.get("sca_xy_xgain_focal_edge_max_bins", 20)
+)
+CNV_ARTIFACT_CNVSEQ_REPORTABLE_MIN_BP = int(CNV_ARTIFACT_CFG.get("cnvseq_reportable_min_bp", 2000000))
+CNV_ARTIFACT_CNVSEQ_REVIEW_MIN_BP = int(CNV_ARTIFACT_CFG.get("cnvseq_review_min_bp", 1000000))
 CNV_ARTIFACT_CNVSEQ_LARGE_EVENT_MIN_BP = int(CNV_ARTIFACT_CFG.get("cnvseq_large_event_min_bp", 10000000))
 CNV_ARTIFACT_CNVSEQ_BOUNDARY_MAX_ABS_Z = float(CNV_ARTIFACT_CFG.get("cnvseq_boundary_max_abs_z", 4.0))
 CNV_ARTIFACT_CNVSEQ_WHOLE_CHROM_AVAILABLE_FRACTION = float(
