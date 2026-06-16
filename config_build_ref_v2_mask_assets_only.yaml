@@ -2,7 +2,7 @@ base_config: "/data/project/CNV/PGT-A/test_project/build_config.yaml"
 
 pipeline:
   mode: "build_ref"
-  targets: ["metadata", "baseline_qc", "reference_qc", "reference"]
+  targets: ["reference"]
 
 core:
   project_path: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only"

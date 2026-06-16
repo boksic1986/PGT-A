@@ -97,6 +97,52 @@ class BranchBCallingSignalTest(unittest.TestCase):
         self.assertEqual((int(event["start_bin"]), int(event["end_bin"])), (1, 3))
         self.assertEqual(int(event["n_bins"]), 3)
 
+    def test_empty_explicit_a_candidates_suppress_branch_b_discovery(self):
+        bins_df = pd.DataFrame(
+            {
+                "chrom": ["chr21"] * 6,
+                "start": [index * 100 for index in range(6)],
+                "end": [(index + 1) * 100 for index in range(6)],
+                "bin_index": list(range(6)),
+                "signal_for_calling": [20.0] * 6,
+                "normalized_signal": [20.0] * 6,
+                "robust_z": [5.0] * 6,
+                "calling_weight": [1.0] * 6,
+                "bin_weight": [1.0] * 6,
+                "region_risk_weight": [1.0] * 6,
+                "variance_inflation": [1.0] * 6,
+                "calling_seed_eligible": [1] * 6,
+                "is_autosome": [1] * 6,
+            }
+        )
+        args = types.SimpleNamespace(
+            sample_id="H16",
+            branch="B",
+            correction_model="2d_loess_gc_mappability",
+            hmm_role="sidecar",
+            min_bins=3,
+            max_segments_per_chrom=12,
+            split_threshold=2.5,
+            hmm_state_shift=2.5,
+            hmm_stay_prob=0.995,
+            min_event_bins=3,
+            min_event_z=1.5,
+            chromosome_z_threshold=1.8,
+            chromosome_min_effective_bins=3.0,
+            chromosome_min_clean_fraction=0.0,
+            raw_chromosome_z_threshold=1.8,
+            masked_gap_rescue_min_abs_local_z=1.8,
+            masked_gap_rescue_min_median_z=4.0,
+            masked_gap_rescue_min_chrom_shift_z=0.75,
+            fusion_iou_threshold=0.8,
+            a_candidates_provided=True,
+        )
+        logger = types.SimpleNamespace(info=lambda *args, **kwargs: None)
+
+        _, events = build_candidate_events(args, bins_df, logger, a_candidates_df=pd.DataFrame())
+
+        self.assertEqual(events, [])
+
     def test_chromosome_shift_survives_chrom_local_normalization(self):
         neutral_values = [10.0, 10.1, 9.9, 10.0, 10.2, 9.8]
         bins_df = pd.DataFrame(

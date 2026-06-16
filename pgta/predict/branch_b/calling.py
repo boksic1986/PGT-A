@@ -781,6 +781,15 @@ def build_candidate_events(args, chrom_df, logger, a_candidates_df=None):
             len(events),
         )
         return chrom_df, events
+    if a_candidates_df is not None and bool(getattr(args, "a_candidates_provided", False)):
+        logger.info(
+            "chrom=%s hmm_role=%s segments=%d segment_events=%d a_refined_events=0 branch_b_discovery_suppressed=1",
+            chrom_df["chrom"].iloc[0],
+            hmm_role,
+            len(segment_rows),
+            len(segment_events),
+        )
+        return chrom_df, []
     chromosome_events = build_chromosome_dosage_event(args, chrom_df)
     raw_chromosome_events = build_raw_chromosome_dosage_event(args, chrom_df)
     masked_gap_rescue_events = build_masked_gap_rescue_events(args, chrom_df)
@@ -808,6 +817,7 @@ def build_candidate_events(args, chrom_df, logger, a_candidates_df=None):
 def main():
     args = parse_args()
     logger = setup_logger("cnv_calling", args.log or None)
+    args.a_candidates_provided = bool(str(args.input_a_candidates).strip())
     bins_df, binsize, quality, signal_column = load_calling_bins(args)
     bins_df = annotate_region_risk(bins_df)
     bins_df["robust_z"] = 0.0
@@ -844,7 +854,13 @@ def main():
         "quality": None if not np.isfinite(quality) else float(quality),
         "bin_count": int(len(output_bins)),
         "candidate_event_count": int(len(output_events)),
-        "candidate_source": "branch_a" if not a_candidates_df.empty else "branch_b_discovery",
+        "candidate_source": (
+            "branch_a"
+            if not a_candidates_df.empty
+            else "branch_a_empty"
+            if args.a_candidates_provided
+            else "branch_b_discovery"
+        ),
         "a_candidate_count": int(len(a_candidates_df)),
         "median_effective_bin_count_per_chrom": float(
             np.median(

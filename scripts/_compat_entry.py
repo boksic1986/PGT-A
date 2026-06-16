@@ -22,6 +22,7 @@ DISPATCHER_MODULE_MAP = {
         "cnv_evaluation": "pgta.predict.evaluation",
         "cnv_ml": "pgta.predict.ml",
         "cnv_mosaic_fraction": "pgta.predict.branch_b.mosaic_fraction",
+        "cnv_plot": "pgta.predict.branch_b.plot",
         "cnv_qc": "pgta.predict.cnv_qc",
         "cnv_report": "pgta.predict.report",
         "wisecondorx_gender": "pgta.predict.sex_routing",

@@ -1,4 +1,4 @@
-base_config: "/data/project/CNV/PGT-A/test_project/predict_samples.yaml"
+base_config: "/data/project/CNV/PGT-A/refactor_validation_20260419/predict_samples_h1_h6_20260608.yaml"
 
 pipeline:
   mode: "predict"
@@ -6,12 +6,10 @@ pipeline:
     - "metadata"
     - "cnv_qc"
     - "cnv"
-    - "cnv_eval"
-    - "cnv_benchmark"
     - "cnv_report"
 
 core:
-  project_path: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only"
+  project_path: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_20260608_mask_only"
   wisecondorx:
     reference_output_by_sex:
       XX: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only/reference/XX/result/ref_xx_best.npz"
@@ -21,11 +19,6 @@ core:
     cnv:
       preprocess:
         strategy: "mask_only"
-      evaluation:
-        truth_tsv: "/data/project/CNV/PGT-A/test_project/sample_info/positive_truth_events.tsv"
-      benchmark:
-        truth_tsv: "/data/project/CNV/PGT-A/test_project/sample_info/positive_truth_events.tsv"
-        mosaic_fraction_truth_tsv: "/data/project/CNV/PGT-A/refactor_validation_20260419/sample_info/mosaic_fraction_validation_y7_y8.tsv"
       postprocess:
         calling:
           hmm_role: "sidecar"

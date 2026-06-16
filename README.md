@@ -233,6 +233,8 @@ CNV:
 - `wisecondorx/cnv/qc/{sample}.qc.tsv`
 - `wisecondorx/cnv/qc/{sample}.qc.svg`
 - `wisecondorx/cnv/predict/{sample}*`
+- `wisecondorx/cnv/plots/{sample}.final_cnv.svg`
+- `wisecondorx/cnv/report/cnv_summary.html`
 
 ## 6. Logs and audit trail
 
