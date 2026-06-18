@@ -723,6 +723,40 @@ if CNV_ENABLED:
                     check=True,
                 )
 
+        rule cnv_branch_s_shadow:
+            input:
+                bins=CNV_B_CALIBRATED_BINS,
+                a_candidates=CNV_A_CANDIDATES,
+                gender_tsv=([CNV_GENDER_TSV] if PREDICT_BY_SEX_ENABLED else []),
+                metadata=RUN_METADATA
+            output:
+                evidence=CNV_BRANCH_S_EVIDENCE,
+                scores=CNV_BRANCH_S_SCORES,
+                summary=CNV_BRANCH_S_SUMMARY
+            log:
+                project_path("logs", "cnv", "{sample}.branch_s.shadow.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                command = [
+                    config["biosoft"]["python"],
+                    SCRIPT_BRANCH_S_SHADOW,
+                    SCRIPT_BRANCH_S_SHADOW_ACTION,
+                    "--sample-id", wildcards.sample,
+                    "--input-bins", input.bins,
+                    "--a-candidates", input.a_candidates,
+                    "--output-evidence", output.evidence,
+                    "--output-scores", output.scores,
+                    "--output-summary", output.summary,
+                    "--log", log[0],
+                ]
+                if input.gender_tsv:
+                    command.extend(["--gender-tsv", input.gender_tsv[0]])
+                subprocess.run(command, check=True)
+
     if CNV_MOSAIC_FRACTION_TRUTH_TSV and ("cnv_benchmark" in AVAILABLE_TARGETS or "cnv_report" in AVAILABLE_TARGETS):
         rule cnv_mosaic_truth_validation:
             input:

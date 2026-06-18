@@ -478,6 +478,22 @@ Implementation status on 2026-06-18:
 - Output SCA state scores in shadow mode.
 - Do not replace current sex routing or final report until separately validated.
 
+Status 2026-06-18:
+
+- Implemented as `pgta/predict/branch_s.py`.
+- Workflow outputs:
+  - `wisecondorx/cnv/postprocess/branch_s/{sample}.sex_chrom_evidence.tsv`
+  - `wisecondorx/cnv/postprocess/branch_s/{sample}.sca_state_scores.tsv`
+  - `wisecondorx/cnv/postprocess/branch_s/{sample}.summary.json`
+- Remote validation:
+  - Branch A/B/S related unit regression: `81 passed in 1.01s`.
+  - `snakemake -n cnv` after execution: `Nothing to be done`.
+- Contract remains shadow-only:
+  - `final_report_impact=none_shadow_only`
+  - `replaces_current_sex_calling=false`
+  - `replaces_final_report=false`
+- Detailed report: `docs/reports/branch_ab_v2_phase5_2026-06-18.md`.
+
 ## Current Recommendation
 
 Proceed with Branch B V2 shadow mode, not with more legacy Branch B filter patches.
