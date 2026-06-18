@@ -692,6 +692,37 @@ if CNV_ENABLED:
                         command.extend(["--background-ledger", background_ledger])
                     subprocess.run(command, check=True)
 
+    if CNV_POSTPROCESS_ENABLE_BRANCH_B:
+        rule cnv_branch_b_v2_classifier:
+            input:
+                ledger=(CNV_B_MATCHED_NEGATIVE if CNV_NEGATIVE_BANK_SAMPLES_TSV else CNV_B_EVIDENCE_LEDGER),
+                metadata=RUN_METADATA
+            output:
+                classification=CNV_B_V2_CLASSIFIER,
+                summary=CNV_B_V2_CLASSIFIER_SUMMARY
+            log:
+                project_path("logs", "cnv", "{sample}.branch_b.v2_classifier.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                subprocess.run(
+                    [
+                        config["biosoft"]["python"],
+                        SCRIPT_BRANCH_B_V2_CLASSIFIER,
+                        SCRIPT_BRANCH_B_V2_CLASSIFIER_ACTION,
+                        "--sample-id", wildcards.sample,
+                        "--input-ledger", input.ledger,
+                        "--output-classification", output.classification,
+                        "--output-summary", output.summary,
+                        "--version", CNV_NEGATIVE_BANK_VERSION,
+                        "--log", log[0],
+                    ],
+                    check=True,
+                )
+
     if CNV_MOSAIC_FRACTION_TRUTH_TSV and ("cnv_benchmark" in AVAILABLE_TARGETS or "cnv_report" in AVAILABLE_TARGETS):
         rule cnv_mosaic_truth_validation:
             input:

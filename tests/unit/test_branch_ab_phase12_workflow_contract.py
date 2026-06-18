@@ -58,3 +58,22 @@ def test_phase3_matched_negative_is_shadow_only_and_report_safe():
 
     report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
     assert "CNV_B_MATCHED_NEGATIVE" not in report_rule
+
+
+def test_phase4_v2_classifier_is_shadow_only_and_report_safe():
+    dispatcher = read_text("scripts/_compat_entry.py")
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+    target_assembly = read_text("rules/target_assembly.smk")
+    snakefile = read_text("Snakefile")
+
+    assert '"branch_b_v2_classifier": "pgta.predict.branch_b.v2_classifier"' in dispatcher
+    assert "CNV_B_V2_CLASSIFIER" in layout
+    assert "CNV_B_V2_CLASSIFIER_SUMMARY" in layout
+    assert "rule cnv_branch_b_v2_classifier" in workflow
+    assert "SCRIPT_BRANCH_B_V2_CLASSIFIER_ACTION" in workflow
+    assert "CNV_B_V2_CLASSIFIER" in target_assembly
+    assert "CNV_B_V2_CLASSIFIER" in snakefile
+
+    report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
+    assert "CNV_B_V2_CLASSIFIER" not in report_rule

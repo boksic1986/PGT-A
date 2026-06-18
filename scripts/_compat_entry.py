@@ -21,6 +21,7 @@ DISPATCHER_MODULE_MAP = {
         "cnv_correction": "pgta.predict.branch_b.correction",
         "cnv_evidence_ledger": "pgta.predict.branch_b.evidence_ledger",
         "cnv_evaluation": "pgta.predict.evaluation",
+        "branch_b_v2_classifier": "pgta.predict.branch_b.v2_classifier",
         "matched_negative_percentile": "pgta.predict.branch_b.matched_negative",
         "cnv_ml": "pgta.predict.ml",
         "cnv_mosaic_fraction": "pgta.predict.branch_b.mosaic_fraction",
