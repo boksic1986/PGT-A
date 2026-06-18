@@ -183,6 +183,15 @@ rule cnv:
             + (expand(CNV_B_FINAL_EVENTS, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
             + (expand(CNV_B_ARTIFACT_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
             + (expand(CNV_B_FINAL_JSON, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
+            + (expand(CNV_B_EVIDENCE_LEDGER, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
+            + (expand(CNV_B_EVIDENCE_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
+            + ([CNV_NEGATIVE_BANK_LABELS, CNV_NEGATIVE_BANK_SUMMARY] if CNV_NEGATIVE_BANK_SAMPLES_TSV else [])
+            + (
+                expand(CNV_B_MATCHED_NEGATIVE, sample=SAMPLES)
+                + expand(CNV_B_MATCHED_NEGATIVE_SUMMARY, sample=SAMPLES)
+                if CNV_POSTPROCESS_ENABLE_BRANCH_B and CNV_NEGATIVE_BANK_SAMPLES_TSV
+                else []
+            )
         ) if CNV_ENABLED else []
 
 

@@ -77,6 +77,11 @@ def parse_args():
     parser.add_argument("--cnvseq-large-event-min-bp", type=int, default=10_000_000)
     parser.add_argument("--cnvseq-boundary-max-abs-z", type=float, default=4.0)
     parser.add_argument("--cnvseq-whole-chrom-available-fraction", type=float, default=0.90)
+    parser.add_argument("--refmap-hard-min-ref-bins", type=float, default=50.0)
+    parser.add_argument("--refmap-review-min-ref-bins", type=float, default=150.0)
+    parser.add_argument("--refmap-high-low-refbin-fraction", type=float, default=0.50)
+    parser.add_argument("--refmap-filter-max-clean-fraction", type=float, default=0.20)
+    parser.add_argument("--refmap-protect-min-a-abs-z", type=float, default=50.0)
     parser.add_argument("--log", default="")
     return parser.parse_args()
 
@@ -349,6 +354,22 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
     )
     cnvseq_boundary_like_event = bool(cnvseq_crosses_gap_or_centromere or high_risk_boundary_crossing)
     cnvseq_segment_level_z = max(mean_z, median_z, adjusted_event_z)
+    wisecondorx_ref_bin_count = safe_float(getattr(row, "wisecondorx_ref_bin_count", np.nan), default=np.nan)
+    if not np.isfinite(wisecondorx_ref_bin_count):
+        wisecondorx_ref_bin_count = safe_float(getattr(row, "ref_size_after_cutoff", np.nan), default=np.nan)
+    low_refbin_fraction = safe_float(getattr(row, "low_refbin_fraction", np.nan), default=0.0)
+    refmap_component = safe_float(getattr(row, "wisecondorx_low_refbin_component", np.nan), default=0.0)
+    same_chrom_ref_bin_count = safe_float(getattr(row, "same_chrom_ref_bin_count", np.nan), default=0.0)
+    refmap_low_count = (
+        np.isfinite(wisecondorx_ref_bin_count)
+        and wisecondorx_ref_bin_count < float(getattr(args, "refmap_review_min_ref_bins", 150.0))
+    )
+    refmap_very_low_count = (
+        np.isfinite(wisecondorx_ref_bin_count)
+        and wisecondorx_ref_bin_count < float(getattr(args, "refmap_hard_min_ref_bins", 50.0))
+    )
+    refmap_high_burden = low_refbin_fraction >= float(getattr(args, "refmap_high_low_refbin_fraction", 0.50))
+    refmap_strong_a_protected = a_abs_z >= float(getattr(args, "refmap_protect_min_a_abs_z", 50.0))
     weighted_non_high_support_fraction = clean_fraction + (0.5 * max(moderate_fraction, 0.0))
     same_direction_branch_b_z = max(
         [
@@ -611,6 +632,25 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         explanations.append("Event crosses a clean/high-risk boundary and should be manually reviewed.")
         downgrade_reasons.append("high_risk_boundary_crossing")
         review_only = True
+    if same_chrom_ref_bin_count > 0.0:
+        flags.append("wisecondorx_same_chrom_ref_leakage")
+        explanations.append("WisecondorX reference-map evidence includes same-chromosome bins; this should not occur.")
+        filter_reasons.append("wisecondorx_same_chrom_ref_leakage")
+        hard_artifact = True
+    elif refmap_low_count or refmap_high_burden or refmap_component >= 0.50:
+        flags.append("wisecondorx_low_refbin_burden")
+        explanations.append(
+            "Event is supported by bins with limited WisecondorX within-sample reference-bin support."
+        )
+        downgrade_reasons.append("wisecondorx_low_refbin_burden")
+        review_only = True
+        if (
+            (refmap_very_low_count or refmap_high_burden)
+            and clean_fraction <= float(getattr(args, "refmap_filter_max_clean_fraction", 0.20))
+            and not refmap_strong_a_protected
+        ):
+            filter_reasons.append("wisecondorx_low_refbin_burden_with_limited_clean_support")
+            hard_artifact = True
     if (
         high_risk_boundary_crossing == 1
         and (
@@ -707,6 +747,7 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         + 0.25 * max(overlap_metrics.values())
         + 0.20 * region_risk_score_mean
         + 0.10 * region_risk_score_max
+        + 0.10 * min(max(refmap_component, low_refbin_fraction, 0.0), 1.0)
     )
     base_priority = float(max_calibrated_z * np.log1p(max(effective_bin_count, 1.0)))
     priority_score = base_priority * max(clean_fraction, 0.10) * max(0.10, 1.0 - risk_penalty)

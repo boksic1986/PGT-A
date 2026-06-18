@@ -20,6 +20,7 @@ else:
         aggregate_reference_to_sample_bins,
         escalate_hotspot_masks,
     )
+    from pgta.predict.branch_b.common import annotate_region_risk
 
 
 @unittest.skipIf(IMPORT_ERROR is not None, f"optional dependency missing: {IMPORT_ERROR}")
@@ -95,6 +96,39 @@ class BranchBCorrectionAnnotationProjectionTest(unittest.TestCase):
         self.assertAlmostEqual(float(row["gap_centromere_telomere_overlap_fraction"]), 1.0, places=6)
         self.assertEqual(int(row["is_gap_centromere_telomere"]), 1)
 
+    def test_sparse_refmap_missing_bins_stay_nan_not_zero(self):
+        sample_bins = pd.DataFrame(
+            {
+                "chrom": ["chr9", "chr9"],
+                "start": [39_000_000, 40_000_000],
+                "end": [40_000_000, 41_000_000],
+            }
+        )
+        sparse_refmap = pd.DataFrame(
+            {
+                "chrom": ["chr9"],
+                "start": [39_000_000],
+                "end": [40_000_000],
+                "ref_size_after_cutoff": [35.0],
+                "segmental_duplication_overlap_fraction": [1.0],
+            }
+        )
+
+        projected = aggregate_reference_to_sample_bins(
+            sample_bins_df=sample_bins,
+            source_df=sparse_refmap,
+            value_columns=[
+                "ref_size_after_cutoff",
+                "low_refbin_fraction",
+                "segmental_duplication_overlap_fraction",
+            ],
+        )
+
+        self.assertEqual(float(projected.loc[0, "ref_size_after_cutoff"]), 35.0)
+        self.assertTrue(pd.isna(projected.loc[1, "ref_size_after_cutoff"]))
+        self.assertEqual(float(projected.loc[0, "segmental_duplication_overlap_fraction"]), 1.0)
+        self.assertEqual(float(projected.loc[1, "segmental_duplication_overlap_fraction"]), 0.0)
+
     def test_hotspot_mask_escalates_xy_homology(self):
         reference_df = pd.DataFrame(
             {
@@ -120,6 +154,30 @@ class BranchBCorrectionAnnotationProjectionTest(unittest.TestCase):
         self.assertIn("branch_b_hotspot:xy_homology", chrx["mask_reason"])
         self.assertEqual(chr16["mask_label"], "dynamic")
         self.assertIn("branch_b_hotspot:repeat_hotspot", chr16["mask_reason"])
+
+    def test_low_refbin_count_blocks_calling_seed_and_fit(self):
+        bins = pd.DataFrame(
+            {
+                "chrom": ["chr16", "chr16"],
+                "start": [1_000_000, 2_000_000],
+                "end": [2_000_000, 3_000_000],
+                "bin_index": [1, 2],
+                "normalized_signal": [10.0, 11.0],
+                "bin_weight": [1.0, 1.0],
+                "mask_label": ["pass", "pass"],
+                "is_autosome": [1, 1],
+                "mappability_score": [1.0, 1.0],
+                "ref_size_after_cutoff": [35.0, 120.0],
+            }
+        )
+
+        annotated = annotate_region_risk(bins)
+
+        self.assertEqual(annotated.loc[0, "region_risk_class"], "high")
+        self.assertEqual(int(annotated.loc[0, "calling_seed_eligible"]), 0)
+        self.assertEqual(int(annotated.loc[0, "correction_fit_eligible"]), 0)
+        self.assertEqual(annotated.loc[1, "region_risk_class"], "moderate")
+        self.assertEqual(int(annotated.loc[1, "correction_fit_eligible"]), 0)
 
 
 if __name__ == "__main__":

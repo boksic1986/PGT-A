@@ -75,6 +75,11 @@ class BranchBArtifactRulesTest(unittest.TestCase):
             cnvseq_large_event_min_bp=10_000_000,
             cnvseq_boundary_max_abs_z=4.0,
             cnvseq_whole_chrom_available_fraction=0.90,
+            refmap_hard_min_ref_bins=50.0,
+            refmap_review_min_ref_bins=150.0,
+            refmap_high_low_refbin_fraction=0.50,
+            refmap_filter_max_clean_fraction=0.20,
+            refmap_protect_min_a_abs_z=50.0,
         )
 
     def test_cnvseq_report_tier_marks_large_events_reportable_without_changing_keep(self):
@@ -1996,6 +2001,121 @@ class BranchBArtifactRulesTest(unittest.TestCase):
         self.assertEqual(result["keep_event"], 0)
         self.assertIn("segmental_duplication_overlap", result["artifact_flags"])
         self.assertIn("segmental_duplication_overlap_with_limited_clean_support", result["filter_reason"])
+
+    def test_low_refbin_burden_with_limited_clean_support_is_artifact(self):
+        row = types.SimpleNamespace(
+            chrom="chr16",
+            start=1_000_000,
+            end=4_000_000,
+            start_bin=1,
+            end_bin=3,
+            n_bins=3,
+            state="gain",
+            calibrated_mean_z=3.2,
+            calibrated_median_z=3.0,
+            event_corr_adjusted_z=3.4,
+            empirical_qvalue=0.04,
+            clean_bin_fraction=0.10,
+            moderate_risk_bin_fraction=0.10,
+            high_risk_bin_fraction=0.80,
+            effective_bin_count=2.5,
+            region_risk_score_mean=0.55,
+            region_risk_score_max=0.90,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.20,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.0,
+            repeat_rich_overlap_fraction=0.0,
+            blacklist_overlap_fraction=0.0,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=0,
+            cnvseq_available_chrom_fraction=0.03,
+            cnvseq_crosses_gap_or_centromere=0,
+            cnvseq_gap_centromere_bin_fraction=0.0,
+            cnvseq_region_class_transition=0,
+            wisecondorx_ref_bin_count=35.0,
+            low_refbin_fraction=0.80,
+            wisecondorx_low_refbin_component=0.80,
+            same_chrom_ref_bin_count=0.0,
+            caller="wisecondorx_a_branch",
+            a_candidate_id="S.A0016",
+            a_abs_zscore=12.0,
+            segment_mean_robust_z=3.0,
+            segment_median_robust_z=3.0,
+            segment_abs_max_robust_z=4.0,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=90,
+            args=self.build_args(),
+            sex_call="XX",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "artifact")
+        self.assertEqual(result["keep_event"], 0)
+        self.assertIn("wisecondorx_low_refbin_burden", result["artifact_flags"])
+        self.assertIn("wisecondorx_low_refbin_burden_with_limited_clean_support", result["filter_reason"])
+
+    def test_low_refbin_burden_with_strong_a_branch_is_review(self):
+        row = types.SimpleNamespace(
+            chrom="chr21",
+            start=20_000_000,
+            end=23_000_000,
+            start_bin=20,
+            end_bin=22,
+            n_bins=3,
+            state="gain",
+            calibrated_mean_z=1.1,
+            calibrated_median_z=1.0,
+            event_corr_adjusted_z=1.2,
+            empirical_qvalue=0.70,
+            clean_bin_fraction=0.30,
+            moderate_risk_bin_fraction=0.20,
+            high_risk_bin_fraction=0.50,
+            effective_bin_count=2.5,
+            region_risk_score_mean=0.55,
+            region_risk_score_max=0.90,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.20,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.0,
+            repeat_rich_overlap_fraction=0.0,
+            blacklist_overlap_fraction=0.0,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=0,
+            cnvseq_available_chrom_fraction=0.08,
+            cnvseq_crosses_gap_or_centromere=0,
+            cnvseq_gap_centromere_bin_fraction=0.0,
+            cnvseq_region_class_transition=0,
+            wisecondorx_ref_bin_count=35.0,
+            low_refbin_fraction=0.80,
+            wisecondorx_low_refbin_component=0.80,
+            same_chrom_ref_bin_count=0.0,
+            caller="wisecondorx_a_branch",
+            a_candidate_id="S.A0021",
+            a_abs_zscore=80.0,
+            segment_mean_robust_z=1.0,
+            segment_median_robust_z=1.0,
+            segment_abs_max_robust_z=1.5,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=48,
+            args=self.build_args(),
+            sex_call="XX",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "review")
+        self.assertEqual(result["keep_event"], 1)
+        self.assertIn("wisecondorx_low_refbin_burden", result["artifact_flags"])
+        self.assertIn("wisecondorx_low_refbin_burden", result["downgrade_reason"])
+        self.assertNotIn("wisecondorx_low_refbin_burden_with_limited_clean_support", result["filter_reason"])
 
 
 if __name__ == "__main__":

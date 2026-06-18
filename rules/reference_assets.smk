@@ -76,6 +76,7 @@ if REFERENCE_ASSET_TARGET_FILES:
                 atomic_annotations=REFERENCE_ATOMIC_BIN_ANNOTATIONS,
                 analysis_annotations=REFERENCE_ANALYSIS_BIN_ANNOTATIONS,
                 qc_annotations=REFERENCE_QC_BIN_ANNOTATIONS,
+                refmap=REFERENCE_REFMAP_TSVS,
                 profiles=expand(BASELINE_QC_PROFILE_TSV, sample=BASELINE_SAMPLE_IDS),
                 metadata=RUN_METADATA
             output:
@@ -98,15 +99,23 @@ if REFERENCE_ASSET_TARGET_FILES:
                 soft_gc_low=SOFT_MASK_GC_LOW,
                 soft_gc_high=SOFT_MASK_GC_HIGH,
                 dynamic_z_frac=DYNAMIC_MASK_Z_FRAC,
-                dynamic_median_abs_z=DYNAMIC_MASK_MEDIAN_ABS_Z
+                dynamic_median_abs_z=DYNAMIC_MASK_MEDIAN_ABS_Z,
+                refmap_tsvs=" ".join(REFERENCE_REFMAP_TSVS)
             threads: 1
             shell:
                 r"""
                 mkdir -p "$(dirname {output.hard_mask})" "$(dirname {log})"
+                refmap_args=()
+                if [ -n "{params.refmap_tsvs}" ]; then
+                    for refmap_tsv in {params.refmap_tsvs}; do
+                        refmap_args+=(--refmap-tsv "$refmap_tsv")
+                    done
+                fi
                 {params.python_bin:q} {params.script:q} {params.script_action:q} \
                     mask \
                     --annotation-tsvs {input.atomic_annotations:q} {input.analysis_annotations:q} {input.qc_annotations:q} \
                     --profile-tsvs {input.profiles:q} \
+                    "${{refmap_args[@]}}" \
                     --hard-mask-output {output.hard_mask:q} \
                     --soft-mask-output {output.soft_mask:q} \
                     --dynamic-mask-output {output.dynamic_mask:q} \
@@ -129,6 +138,7 @@ if REFERENCE_ASSET_TARGET_FILES:
                 atomic_annotations=REFERENCE_ATOMIC_BIN_ANNOTATIONS,
                 analysis_annotations=REFERENCE_ANALYSIS_BIN_ANNOTATIONS,
                 qc_annotations=REFERENCE_QC_BIN_ANNOTATIONS,
+                refmap=REFERENCE_REFMAP_TSVS,
                 metadata=RUN_METADATA
             output:
                 hard_mask=REFERENCE_HARD_MASK_TSV,
@@ -150,14 +160,22 @@ if REFERENCE_ASSET_TARGET_FILES:
                 soft_gc_low=SOFT_MASK_GC_LOW,
                 soft_gc_high=SOFT_MASK_GC_HIGH,
                 dynamic_z_frac=DYNAMIC_MASK_Z_FRAC,
-                dynamic_median_abs_z=DYNAMIC_MASK_MEDIAN_ABS_Z
+                dynamic_median_abs_z=DYNAMIC_MASK_MEDIAN_ABS_Z,
+                refmap_tsvs=" ".join(REFERENCE_REFMAP_TSVS)
             threads: 1
             shell:
                 r"""
                 mkdir -p "$(dirname {output.hard_mask})" "$(dirname {log})"
+                refmap_args=()
+                if [ -n "{params.refmap_tsvs}" ]; then
+                    for refmap_tsv in {params.refmap_tsvs}; do
+                        refmap_args+=(--refmap-tsv "$refmap_tsv")
+                    done
+                fi
                 {params.python_bin:q} {params.script:q} {params.script_action:q} \
                     mask \
                     --annotation-tsvs {input.atomic_annotations:q} {input.analysis_annotations:q} {input.qc_annotations:q} \
+                    "${{refmap_args[@]}}" \
                     --hard-mask-output {output.hard_mask:q} \
                     --soft-mask-output {output.soft_mask:q} \
                     --dynamic-mask-output {output.dynamic_mask:q} \

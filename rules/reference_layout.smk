@@ -186,6 +186,11 @@ SOFT_MASK_GC_LOW = float(REFERENCE_ASSETS_CFG.get("soft_gc_low", 0.2))
 SOFT_MASK_GC_HIGH = float(REFERENCE_ASSETS_CFG.get("soft_gc_high", 0.8))
 DYNAMIC_MASK_Z_FRAC = float(REFERENCE_ASSETS_CFG.get("dynamic_z_frac_threshold", 0.05))
 DYNAMIC_MASK_MEDIAN_ABS_Z = float(REFERENCE_ASSETS_CFG.get("dynamic_median_abs_z_threshold", 1.5))
+REFERENCE_REFMAP_TSVS = [
+    resolve_path(path_value)
+    for path_value in REFERENCE_ASSETS_CFG.get("refmap_tsvs", [])
+    if str(path_value).strip()
+]
 
 TUNING_ENABLED = bool(TUNE_CFG.get("enable", False))
 TUNING_BIN_SIZES = [int(item) for item in TUNE_CFG.get("bin_sizes", [int(WISE_CFG["binsize"])])]

@@ -10,6 +10,7 @@ import pandas as pd
 from pgta.predict.branch_b.common import (
     OPTIONAL_REGION_BOOL_COLUMNS,
     OPTIONAL_REGION_FRACTION_COLUMNS,
+    OPTIONAL_REFMAP_COLUMNS,
     annotate_region_risk,
     interval_overlap,
     load_sample_bins,
@@ -44,11 +45,15 @@ ANNOTATION_VALUE_COLUMNS = [
     "effective_size",
     "mappability_score",
     *OPTIONAL_REGION_FRACTION_COLUMNS.keys(),
+    *OPTIONAL_REFMAP_COLUMNS.keys(),
 ]
 ANNOTATION_BOOL_COLUMNS = ["is_autosome", *OPTIONAL_REGION_BOOL_COLUMNS.keys()]
 MASK_LABEL_PRIORITY = {"pass": 0, "soft": 1, "dynamic": 2, "hard": 3}
 ACROCENTRIC_CHROMS = {"chr13", "chr14", "chr15", "chr21", "chr22"}
 REPEAT_HOTSPOT_CHROMS = {"chr9", "chr16"}
+SPARSE_REFMAP_COUNT_COLUMNS = {
+    column for column, default in OPTIONAL_REFMAP_COLUMNS.items() if not np.isfinite(default)
+}
 
 
 def aggregate_reference_to_sample_bins(sample_bins_df, source_df, value_columns, bool_columns=None):
@@ -89,6 +94,7 @@ def aggregate_reference_to_sample_bins(sample_bins_df, source_df, value_columns,
                 source_ptr += 1
             cursor = source_ptr
             value_totals = {column: 0.0 for column in value_columns}
+            value_covered = {column: 0.0 for column in value_columns}
             bool_hits = {column: 0 for column in bool_columns}
             while cursor < len(chrom_source) and source_starts[cursor] < end:
                 overlap_bp = interval_overlap(start, end, source_starts[cursor], source_ends[cursor])
@@ -98,12 +104,18 @@ def aggregate_reference_to_sample_bins(sample_bins_df, source_df, value_columns,
                         value = values[cursor]
                         if np.isfinite(value):
                             value_totals[column] += float(value) * overlap_fraction
+                            value_covered[column] += overlap_fraction
                     for column, values in source_bools.items():
                         if int(values[cursor]) > 0:
                             bool_hits[column] = 1
                 cursor += 1
             payload = {"chrom": row.chrom, "start": start, "end": end}
-            payload.update(value_totals)
+            for column, value in value_totals.items():
+                if column in SPARSE_REFMAP_COUNT_COLUMNS:
+                    covered = value_covered.get(column, 0.0)
+                    payload[column] = (value / covered) if covered > 0.0 else np.nan
+                else:
+                    payload[column] = value
             payload.update(bool_hits)
             aggregated_rows.append(payload)
     return pd.DataFrame(aggregated_rows)

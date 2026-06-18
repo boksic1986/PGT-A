@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from pgta.predict.branch_b.common import (
+    OPTIONAL_REFMAP_COLUMNS,
     annotate_region_risk,
     autocorrelation_inflation,
     benjamini_hochberg,
@@ -46,6 +47,8 @@ EVENT_REGION_COLUMNS = [
     "repeat_rich_overlap_fraction",
     "blacklist_overlap_fraction",
     "ambiguous_alignment_overlap_fraction",
+    *OPTIONAL_REFMAP_COLUMNS.keys(),
+    "wisecondorx_low_refbin_component",
 ]
 
 

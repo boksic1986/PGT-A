@@ -279,6 +279,26 @@ Current decision:
   - negative-panel burden impact,
   - rollback path.
 
+### CNVpro borrowing validation scope
+
+The older CNVpro/CNVseq workflows are method references, not replacement callers. The goal of this validation is to decide whether the following five evidence families should be promoted into the PGT-A Branch A/B workflow.
+
+| borrowed method family | CNVpro source concept | Proposed PGT-A landing zone | Validation purpose |
+|---|---|---|---|
+| GC/RC correction plus dynamic reference | `GCcorrect.py` LOESS correction, dynamic nearest-control normalization | Branch B V2 evidence ledger / matched-negative background | Test whether batch or reference shift can be explained without flattening weak mosaic or focal positives. |
+| Arm, centromere, PAR, and sex-aware partitioning | `CNVcalling.R` p/q-arm, acrocentric-q, PAR/non-PAR segmentation | Branch B V2 evidence and later Branch S shadow model | Improve interpretation of boundary, SCA, and sex-chromosome events without filtering Branch A candidates. |
+| Copy-number and mosaic proxy | `filterCNV.py` CN thresholds, sex-adjusted CN baseline, mosaic labels | Branch B V2 evidence ledger | Compare A-supported events by copy-number-like amplitude and mosaic proxy, especially when Branch B z is weak. |
+| Whole-chromosome and large-segment tiering | `chroverlap`, length-tiered CNV reports | Report tier / confidence context | Keep large reportable events visible while avoiding length as a hard Branch A or Branch B filter. |
+| Waviness / sample noise | `*_waviness.txt` from CNVcalling residuals | Branch B V2 evidence ledger and sample-level NO_CALL/REVIEW context | Identify noisy samples or unstable bins that should be reviewed instead of being converted into hard artifact rules. |
+
+Promotion rules:
+
+- These evidence families must first run in shadow mode.
+- They must not change `WisecondorX predict`, Branch A candidate inclusion, or final report output in the first implementation.
+- A field is promotable only if it improves explanation or FP review burden while preserving Y1-Y8 and H1-H6 recall.
+- Evidence that is missing or not comparable must be recorded as `UNKNOWN`, not as benign support.
+- CNVpro-derived thresholds must be treated as priors for ablation, not copied directly as production cutoffs.
+
 ## Branch A NPZ / Predict Rebuild Contract
 
 When a new reference is built from additional reference samples:
@@ -339,6 +359,77 @@ When a new reference is built from additional reference samples:
   - `calibration_null_status`
   - `evidence_missing_reason`
 
+### Phase 1A: CNVpro-like evidence shadow ledger
+
+Purpose:
+
+- Validate whether the five CNVpro/CNVseq evidence families are useful enough to enter Branch B V2.
+- Keep this as evidence collection only; do not modify final report decisions or Branch A inclusion.
+- Make the evidence auditable per Branch A candidate so later rule changes are not result-backfilled.
+
+Additional candidate-level fields:
+
+- `cnvpro_like_gc_rc_background_status`
+- `dynamic_reference_status`
+- `matched_negative_source`
+- `matched_negative_percentile`
+- `copy_number_estimate`
+- `sex_adjusted_copy_number`
+- `mosaic_fraction_proxy`
+- `mosaic_proxy_status`
+- `event_arm_class`
+- `event_par_class`
+- `crosses_centromere`
+- `crosses_par_boundary`
+- `whole_chromosome_fraction`
+- `cnvpro_large_segment_tier`
+- `waviness`
+- `sample_noise_status`
+- `cnvpro_like_evidence_status`
+
+Validation outputs:
+
+- One evidence row per Branch A candidate for Y1-Y8, H1-H6, H7-H16, and the 2026-06-15 shadow-report set.
+- Per-field missingness summary.
+- Per-sample review burden before/after hypothetical classification, without changing final report.
+- Truth overlap summary showing whether each field would protect or harm known positives.
+
+Promotion gates:
+
+- No known-positive FN increase under any candidate disposition policy derived from these fields.
+- H6 chr21 weak focal event remains explicitly tracked.
+- A-strong/B-weak true-positive-like patterns are not converted to hard artifacts by weak copy-number or high waviness alone.
+- High waviness or unknown dynamic reference support can only produce `REVIEW_REQUIRED` or `NO_CALL`, not direct `LIKELY_ARTIFACT`, until validated on locked negatives.
+
+### Phase 1B: maskpar/mapability asset decision matrix
+
+Purpose:
+
+- Do not repeat the prior generic overlap analysis unless a concrete gap is identified.
+- Consolidate existing CNVseq unique-bin, repeat-mask, low-mappability, PAR, and maskpar evidence into a decision matrix for how these assets should enter the workflow.
+- Decide between annotation-only, reference-build mask, and full remap/reference rebuild.
+
+Existing evidence baseline:
+
+- `docs/handoff/2026-06-11_2358_hg19_repeat_mask_probe_handoff.md` already evaluated CNVseq unique-bin and repeat-mask overlap against current kept events.
+- That probe found the CNVseq AZF unique-bin complement did not directly explain the current chr6/9/11/16 false positives.
+- It also showed repeat/segdup burden alone is unsafe as a hard event-level filter because true positives and false-positive-like events can share similar burden.
+
+Decision matrix:
+
+| option | Meaning | When to use | Required validation before promotion |
+|---|---|---|---|
+| `annotation_only` | Use `maskpar`, mappability, and unique-bin resources only as event/bin annotations. | Default first step, especially when prior overlap shows no clear FP-only separation. | Unit/static contract checks plus shadow evidence completeness. |
+| `reference_build_mask` | Convert selected assets into hard/soft mask inputs before WisecondorX reference build, without changing alignment reference. | Use only if asset evidence identifies unstable bins that affect reference construction or recurrent artifacts. | Rebuild separate shadow reference; rerun WisecondorX predict, Branch A candidates, Branch B, evaluation, benchmark, and report. |
+| `full_remap_reference` | Replace alignment reference with `hg19.mapability.fa.gz`, `maskpar`, or another altered FASTA. | Last resort only if asset-only and reference-build mask fail and there is a clear mapping-origin artifact. | Rebuild aligner index, remap BAMs, regenerate raw/mask-only NPZs, rebuild reference, rerun all predict/evaluation/report, and prove no recall regression. |
+
+Current default decision:
+
+- Do not replace the current `hg19.fa` alignment reference in production.
+- Treat `hg19.mapability.fa.gz` and `maskpar` first as annotation/mask asset sources.
+- `maskpar` is primarily a PAR/sex-homology interpretation aid; it should not become a global hard mask by default.
+- If a future change moves from `annotation_only` to `reference_build_mask`, the new reference ID, binsize, mask version, and preprocessing contract must be recorded, and all downstream predictions must be rerun.
+
 ### Phase 2: negative bank labeling
 
 - Create N0/N1/N2 labels.
@@ -357,6 +448,14 @@ When a new reference is built from additional reference samples:
   - autosome and similar length,
   - `UNKNOWN_BACKGROUND`.
 - `UNKNOWN_BACKGROUND` must lead to review/no-call, not artifact hard filtering.
+
+Implementation status on 2026-06-18:
+
+- Implemented as `pgta/predict/branch_b/matched_negative.py`.
+- Workflow output:
+  `wisecondorx/cnv/postprocess/matched_negative/{sample}.candidate_evidence.tsv`.
+- The current seed has no N0 samples, so all current Y1-Y8 Phase 3 rows are expected to be `UNKNOWN_BACKGROUND` with `matched_negative_action=REVIEW_NO_CALL`.
+- This is shadow-only and is not consumed by `cnv_report`.
 
 ### Phase 4: Branch B V2 classifier
 

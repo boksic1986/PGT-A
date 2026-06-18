@@ -50,6 +50,105 @@ def test_gap_blacklist_is_hard_mask():
     assert "gap" in reason
 
 
+def test_low_wisecondorx_ref_bins_are_hard_masked():
+    label, reason = classify_reference_mask(
+        {
+            "chrom": "chr16",
+            "start": 1_000_000,
+            "end": 2_000_000,
+            "ref_size_after_cutoff": 12,
+            "segmental_duplication_overlap_fraction": 0.0,
+            "repeat_rich_overlap_fraction": 0.0,
+            "low_mappability_overlap_fraction": 0.0,
+        }
+    )
+
+    assert label == "hard"
+    assert "low_ref_bins" in reason
+
+
+def test_intermediate_wisecondorx_ref_bins_are_dynamic_masked():
+    label, reason = classify_reference_mask(
+        {
+            "chrom": "chr9",
+            "start": 1_000_000,
+            "end": 2_000_000,
+            "ref_size_after_cutoff": 120,
+            "segmental_duplication_overlap_fraction": 0.0,
+            "repeat_rich_overlap_fraction": 0.0,
+            "low_mappability_overlap_fraction": 0.0,
+        }
+    )
+
+    assert label == "dynamic"
+    assert "low_ref_bins" in reason
+
+
+def test_low_ref_bins_in_repeat_region_are_hard_masked():
+    label, reason = classify_reference_mask(
+        {
+            "chrom": "chr16",
+            "start": 1_000_000,
+            "end": 2_000_000,
+            "ref_size_after_cutoff": 90,
+            "segmental_duplication_overlap_fraction": 0.40,
+        }
+    )
+
+    assert label == "hard"
+    assert "repeat_or_lowmap" in reason
+
+
+def test_proximal_low_ref_bins_are_hard_masked():
+    label, reason = classify_reference_mask(
+        {
+            "chrom": "chr21",
+            "start": 15_000_000,
+            "end": 16_000_000,
+            "is_near_centromere": 1,
+            "ref_size_after_cutoff": 120,
+            "segmental_duplication_overlap_fraction": 0.0,
+            "repeat_rich_overlap_fraction": 0.0,
+            "low_mappability_overlap_fraction": 0.0,
+        }
+    )
+
+    assert label == "hard"
+    assert "proximal_low_ref_bins" in reason
+
+
+def test_proximal_high_dynamic_noise_is_hard_masked():
+    label, reason = classify_reference_mask(
+        {
+            "chrom": "chr16",
+            "start": 46_000_000,
+            "end": 47_000_000,
+            "nearest_telomere_distance_bp": 2_000_000,
+            "dynamic_median_abs_z": 2.0,
+            "dynamic_z_frac": 0.0,
+        }
+    )
+
+    assert label == "hard"
+    assert "proximal_high_dynamic_noise" in reason
+
+
+def test_proximal_bin_without_ref_or_noise_risk_is_not_hard_masked():
+    label, _reason = classify_reference_mask(
+        {
+            "chrom": "chr12",
+            "start": 123_000_000,
+            "end": 124_000_000,
+            "is_near_telomere": 1,
+            "ref_size_after_cutoff": 220,
+            "dynamic_median_abs_z": 0.2,
+            "dynamic_z_frac": 0.0,
+        }
+    )
+
+    assert label != "hard"
+
+
 def test_gc_rc_fit_uses_only_clean_autosomal_bins():
     bins = pd.DataFrame(
         {

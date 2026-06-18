@@ -560,6 +560,41 @@ if CNV_ENABLED:
                     command.extend(["--par-region", region])
                 subprocess.run(command, check=True)
 
+        rule cnv_branch_b_evidence_ledger:
+            input:
+                a_candidates=CNV_A_CANDIDATES,
+                bins=CNV_B_CALIBRATED_BINS,
+                events=CNV_B_FINAL_EVENTS,
+                metadata=RUN_METADATA
+            output:
+                ledger=CNV_B_EVIDENCE_LEDGER,
+                summary=CNV_B_EVIDENCE_SUMMARY
+            log:
+                project_path("logs", "cnv", "{sample}.branch_b.evidence_ledger.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                subprocess.run(
+                    [
+                        config["biosoft"]["python"],
+                        SCRIPT_CNV_EVIDENCE_LEDGER,
+                        SCRIPT_CNV_EVIDENCE_LEDGER_ACTION,
+                        "--sample-id", wildcards.sample,
+                        "--a-candidates", input.a_candidates,
+                        "--branch-b-events", input.events,
+                        "--input-bins", input.bins,
+                        "--output-ledger", output.ledger,
+                        "--output-summary", output.summary,
+                        "--reference-id", CNV_REFERENCE_ID,
+                        "--negative-bank-version", CNV_NEGATIVE_BANK_VERSION,
+                        "--log", log[0],
+                    ],
+                    check=True,
+                )
+
         rule cnv_branch_ab_plot:
             input:
                 bins=CNV_B_CALIBRATED_BINS,
@@ -589,6 +624,73 @@ if CNV_ENABLED:
                 if input.a_branch:
                     command.extend(["--input-a-branch", input.a_branch[0]])
                 subprocess.run(command, check=True)
+
+    if CNV_NEGATIVE_BANK_SAMPLES_TSV:
+        rule cnv_negative_bank_labels:
+            input:
+                samples=CNV_NEGATIVE_BANK_SAMPLES_TSV,
+                metadata=RUN_METADATA
+            output:
+                labels=CNV_NEGATIVE_BANK_LABELS,
+                summary=CNV_NEGATIVE_BANK_SUMMARY
+            log:
+                project_path("logs", "cnv", "negative_bank_labels.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                subprocess.run(
+                    [
+                        config["biosoft"]["python"],
+                        SCRIPT_NEGATIVE_BANK_LABELS,
+                        SCRIPT_NEGATIVE_BANK_LABELS_ACTION,
+                        "--input-samples", input.samples,
+                        "--output-labels", output.labels,
+                        "--output-summary", output.summary,
+                        "--version", CNV_NEGATIVE_BANK_VERSION,
+                        "--log", log[0],
+                    ],
+                    check=True,
+                )
+
+        if CNV_POSTPROCESS_ENABLE_BRANCH_B:
+            rule cnv_branch_b_matched_negative:
+                input:
+                    ledger=CNV_B_EVIDENCE_LEDGER,
+                    labels=CNV_NEGATIVE_BANK_LABELS,
+                    background_ledgers=CNV_NEGATIVE_BANK_BACKGROUND_LEDGERS + expand(CNV_B_EVIDENCE_LEDGER, sample=SAMPLES),
+                    metadata=RUN_METADATA
+                output:
+                    ledger=CNV_B_MATCHED_NEGATIVE,
+                    summary=CNV_B_MATCHED_NEGATIVE_SUMMARY
+                log:
+                    project_path("logs", "cnv", "{sample}.branch_b.matched_negative.log")
+                threads: 1
+                run:
+                    from pgta.core.logging import write_rule_audit_log
+                    import subprocess
+
+                    write_rule_audit_log(log[0], input.metadata)
+                    command = [
+                        config["biosoft"]["python"],
+                        SCRIPT_MATCHED_NEGATIVE,
+                        SCRIPT_MATCHED_NEGATIVE_ACTION,
+                        "--sample-id", wildcards.sample,
+                        "--input-ledger", input.ledger,
+                        "--negative-bank-labels", input.labels,
+                        "--output-ledger", output.ledger,
+                        "--output-summary", output.summary,
+                        "--version", CNV_NEGATIVE_BANK_VERSION,
+                        "--feature-column", CNV_NEGATIVE_BANK_FEATURE_COLUMN,
+                        "--min-background", str(CNV_NEGATIVE_BANK_MIN_BACKGROUND),
+                        "--similar-length-fold", str(CNV_NEGATIVE_BANK_SIMILAR_LENGTH_FOLD),
+                        "--log", log[0],
+                    ]
+                    for background_ledger in input.background_ledgers:
+                        command.extend(["--background-ledger", background_ledger])
+                    subprocess.run(command, check=True)
 
     if CNV_MOSAIC_FRACTION_TRUTH_TSV and ("cnv_benchmark" in AVAILABLE_TARGETS or "cnv_report" in AVAILABLE_TARGETS):
         rule cnv_mosaic_truth_validation:
