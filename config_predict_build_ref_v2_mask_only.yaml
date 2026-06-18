@@ -10,6 +10,10 @@ pipeline:
     - "cnv_benchmark"
     - "cnv_report"
 
+reference_assets:
+  refmap_tsvs:
+    - "/data/project/CNV/PGT-A/refactor_validation_20260419/reports/refmap_audit_20260616/low_refbin_bins.tsv"
+
 core:
   project_path: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only"
   wisecondorx:
@@ -19,8 +23,15 @@ core:
     gender_reference_output: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only/reference/gender/result/ref_gender_best.npz"
     common_reference_binsize_output: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only/reference/gender/common_best_binsize.txt"
     cnv:
+      reference_id: "build_ref_v2_mask_only_100kb"
       preprocess:
         strategy: "mask_only"
+      negative_bank:
+        samples_tsv: "/data/project/CNV/PGT-A/refactor_validation_20260419/docs/reports/branch_ab_v2_negative_bank_seed_2026-06-18.tsv"
+        version: "branch_ab_v2_seed_2026-06-18"
+        feature_column: "corrected_amplitude"
+        min_background: 5
+        similar_length_fold: 2.0
       evaluation:
         truth_tsv: "/data/project/CNV/PGT-A/test_project/sample_info/positive_truth_events.tsv"
       benchmark:

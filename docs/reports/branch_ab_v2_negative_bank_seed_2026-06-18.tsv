@@ -1,0 +1,11 @@
+sample_id	qc_status	sex_call	sample_role	branch_b_kept_count	manual_negative_bank_label	manual_review_status	negative_bank_rationale
+H7	PASS	XY	presumed_negative	0	N2	recurring_review_artifact	H7 remains hold-out because earlier H reference self-inclusion still produced recurring review artifacts.
+H8	PASS	XY	presumed_negative	1	N2	retained_review_event	H8 has a retained chr21 gain review event and is not eligible for N0/N1 reference expansion.
+H9	PASS	XY	presumed_negative	0	N1	ref_evaluation_only	H9 has no retained Branch B event but still has A-sensitive burden; use only for shadow reference evaluation.
+H10	PASS	XY	presumed_negative	0	N1	ref_evaluation_only	H10 has no retained Branch B event but still has A-sensitive burden; use only for shadow reference evaluation.
+H11	PASS	XY	presumed_negative	0	N1	ref_evaluation_only	H11 has no retained Branch B event but still has A-sensitive burden; use only for shadow reference evaluation.
+H12	PASS	XY	presumed_negative	0	N1	ref_evaluation_only	H12 has no retained Branch B event but still has A-sensitive burden; use only for shadow reference evaluation.
+H13	PASS	XY	presumed_negative	2	N2	retained_review_event	H13 has retained chr21 and chr12 gain review events and is not eligible for N0/N1 reference expansion.
+H14	PASS	XY	presumed_negative	2	N2	retained_review_event	H14 has retained chr15 and chr21 gain review events and is not eligible for N0/N1 reference expansion.
+H15	PASS	XY	presumed_negative	0	N1	ref_evaluation_only	H15 has no retained Branch B event but still has A-sensitive burden; use only for shadow reference evaluation.
+H16	PASS	XY	presumed_negative	0	N1	ref_evaluation_only	H16 has no retained Branch B event but still has A-sensitive burden; use only for shadow reference evaluation.

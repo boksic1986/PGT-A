@@ -35,6 +35,7 @@ def add_mask_parser(subparsers):
     parser = subparsers.add_parser("mask", help="Build hard/soft/dynamic masks from bin annotations and profiles.")
     parser.add_argument("--annotation-tsvs", nargs="+", required=True)
     parser.add_argument("--profile-tsvs", nargs="*", default=[])
+    parser.add_argument("--refmap-tsv", action="append", default=[])
     parser.add_argument("--hard-mask-output", required=True)
     parser.add_argument("--soft-mask-output", required=True)
     parser.add_argument("--dynamic-mask-output", required=True)
@@ -156,6 +157,28 @@ def load_bed_intervals(path_value):
     return intervals
 
 
+def load_bed_intervals_by_name(path_value, name_token):
+    if not path_value:
+        return {}
+    path = Path(path_value)
+    if not path.exists():
+        raise FileNotFoundError(f"Annotation BED does not exist: {path}")
+    intervals = {}
+    token = str(name_token).lower()
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip() or line.startswith("#"):
+                continue
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) < 4 or token not in parts[3].lower():
+                continue
+            chrom = parts[0].strip()
+            intervals.setdefault(chrom, []).append((int(parts[1]), int(parts[2])))
+    for chrom in intervals:
+        intervals[chrom] = sorted(intervals[chrom])
+    return intervals
+
+
 def overlap_fractions_for_bins(bins_df, interval_map):
     fractions = [0.0] * len(bins_df)
     if bins_df.empty or not interval_map:
@@ -183,6 +206,36 @@ def overlap_fractions_for_bins(bins_df, interval_map):
     return fractions
 
 
+def min_distances_for_bins(bins_df, interval_map):
+    distances = [float("nan")] * len(bins_df)
+    if bins_df.empty or not interval_map:
+        return distances
+    bins_reset = bins_df.reset_index(drop=True)
+    for chrom, chrom_bins in bins_reset.groupby("chrom", sort=False):
+        intervals = interval_map.get(chrom, [])
+        if not intervals:
+            continue
+        interval_idx = 0
+        n_intervals = len(intervals)
+        for row in chrom_bins.itertuples():
+            start = int(row.start)
+            end = int(row.end)
+            while interval_idx < n_intervals and intervals[interval_idx][1] < start:
+                interval_idx += 1
+            best = float("inf")
+            scan_idx = max(interval_idx - 1, 0)
+            while scan_idx < n_intervals and intervals[scan_idx][0] <= end + PROXIMAL_TELOMERE_CENTROMERE_BP:
+                left, right = intervals[scan_idx]
+                if interval_overlap(start, end, int(left), int(right)) > 0:
+                    best = 0.0
+                    break
+                best = min(best, abs(start - int(right)), abs(end - int(left)))
+                scan_idx += 1
+            if math.isfinite(best):
+                distances[int(row.Index)] = float(best)
+    return distances
+
+
 def _fraction_value(row, key, default=0.0):
     value = row.get(key, default)
     try:
@@ -191,6 +244,68 @@ def _fraction_value(row, key, default=0.0):
         return float(value)
     except (TypeError, ValueError):
         return float(default)
+
+
+REFMAP_REF_COUNT_COLUMNS = (
+    "ref_size_after_cutoff",
+    "wisecondorx_ref_bin_count",
+    "reference_bin_count",
+    "ref_bin_count",
+    "ref_bins_per_target",
+)
+REFMAP_HARD_MIN_REF_BINS = 50.0
+REFMAP_DYNAMIC_MIN_REF_BINS = 150.0
+PROXIMAL_TELOMERE_CENTROMERE_BP = 5_000_000
+PROXIMAL_DYNAMIC_Z_FRAC_HARD = 0.05
+PROXIMAL_DYNAMIC_MEDIAN_ABS_Z_HARD = 1.5
+
+
+def _first_numeric_value(row, keys):
+    for key in keys:
+        if key not in row:
+            continue
+        value = row.get(key)
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value):
+            return value
+    return None
+
+
+def _has_repeat_or_mapping_risk(row):
+    return (
+        _fraction_value(row, "segmental_duplication_overlap_fraction") >= 0.25
+        or _fraction_value(row, "repeat_rich_overlap_fraction") >= 0.25
+        or _fraction_value(row, "low_mappability_overlap_fraction") >= 0.25
+        or _fraction_value(row, "ambiguous_alignment_overlap_fraction") >= 0.10
+    )
+
+
+def _bool_value(row, key):
+    value = row.get(key, 0)
+    try:
+        return bool(int(value))
+    except (TypeError, ValueError):
+        return str(value).strip().lower() in {"true", "yes"}
+
+
+def _distance_le(row, key, threshold):
+    try:
+        value = float(row.get(key))
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(value) and value <= float(threshold)
+
+
+def _is_telomere_centromere_proximal(row):
+    return (
+        _bool_value(row, "is_near_telomere")
+        or _bool_value(row, "is_near_centromere")
+        or _distance_le(row, "nearest_telomere_distance_bp", PROXIMAL_TELOMERE_CENTROMERE_BP)
+        or _distance_le(row, "nearest_centromere_distance_bp", PROXIMAL_TELOMERE_CENTROMERE_BP)
+    )
 
 
 def classify_reference_mask(row):
@@ -205,6 +320,24 @@ def classify_reference_mask(row):
 
     if _fraction_value(row, "gap_centromere_telomere_overlap_fraction") >= 0.50:
         return "hard", "gap_centromere_telomere"
+
+    ref_bin_count = _first_numeric_value(row, REFMAP_REF_COUNT_COLUMNS)
+    is_proximal = _is_telomere_centromere_proximal(row)
+    if ref_bin_count is not None:
+        if is_proximal and ref_bin_count < REFMAP_DYNAMIC_MIN_REF_BINS:
+            return "hard", f"telomere_centromere_proximal_low_ref_bins<{REFMAP_DYNAMIC_MIN_REF_BINS:g}"
+        if ref_bin_count < REFMAP_HARD_MIN_REF_BINS:
+            return "hard", f"wisecondorx_low_ref_bins<{REFMAP_HARD_MIN_REF_BINS:g}"
+        if ref_bin_count < 100.0 and _has_repeat_or_mapping_risk(row):
+            return "hard", "wisecondorx_low_ref_bins_in_repeat_or_lowmap_region"
+        if ref_bin_count < REFMAP_DYNAMIC_MIN_REF_BINS:
+            return "dynamic", f"wisecondorx_low_ref_bins<{REFMAP_DYNAMIC_MIN_REF_BINS:g}"
+
+    if is_proximal and (
+        _fraction_value(row, "dynamic_z_frac") >= PROXIMAL_DYNAMIC_Z_FRAC_HARD
+        or _fraction_value(row, "dynamic_median_abs_z") >= PROXIMAL_DYNAMIC_MEDIAN_ABS_Z_HARD
+    ):
+        return "hard", "telomere_centromere_proximal_high_dynamic_noise"
 
     if _fraction_value(row, "low_mappability_overlap_fraction") >= 0.25:
         return "soft", "low_mappability"
@@ -232,6 +365,8 @@ def annotate_bins(fasta, bins_df, region_maps):
         "blacklist": overlap_fractions_for_bins(bins_df, region_maps["blacklist"]),
         "ambiguous_alignment": overlap_fractions_for_bins(bins_df, region_maps["ambiguous_alignment"]),
     }
+    nearest_telomere_distance = min_distances_for_bins(bins_df, region_maps["telomere"])
+    nearest_centromere_distance = min_distances_for_bins(bins_df, region_maps["centromere"])
     annotations = []
     for idx, row in enumerate(bins_df.itertuples(index=False)):
         seq = fasta.fetch(row.chrom, int(row.start), int(row.end)).upper()
@@ -252,6 +387,8 @@ def annotate_bins(fasta, bins_df, region_maps):
         repeat_rich_overlap_fraction = overlap_maps["repeat_rich"][idx]
         blacklist_overlap_fraction = overlap_maps["blacklist"][idx]
         ambiguous_alignment_overlap_fraction = overlap_maps["ambiguous_alignment"][idx]
+        telomere_distance = nearest_telomere_distance[idx]
+        centromere_distance = nearest_centromere_distance[idx]
         annotations.append(
             {
                 "bin_level": row.bin_level,
@@ -275,6 +412,10 @@ def annotate_bins(fasta, bins_df, region_maps):
                 "repeat_rich_overlap_fraction": repeat_rich_overlap_fraction,
                 "blacklist_overlap_fraction": blacklist_overlap_fraction,
                 "ambiguous_alignment_overlap_fraction": ambiguous_alignment_overlap_fraction,
+                "nearest_telomere_distance_bp": telomere_distance,
+                "nearest_centromere_distance_bp": centromere_distance,
+                "is_near_telomere": int(math.isfinite(telomere_distance) and telomere_distance <= PROXIMAL_TELOMERE_CENTROMERE_BP),
+                "is_near_centromere": int(math.isfinite(centromere_distance) and centromere_distance <= PROXIMAL_TELOMERE_CENTROMERE_BP),
                 "is_PAR": int(par_overlap_fraction > 0.0),
                 "is_XTR": int(xtr_overlap_fraction > 0.0),
                 "is_sex_homology": int(max(par_overlap_fraction, xtr_overlap_fraction, sex_homology_overlap_fraction) > 0.0),
@@ -306,6 +447,8 @@ def run_annotations(args):
             "segmental_duplication": load_bed_intervals(args.segmental_duplication_bed),
             "low_mappability": load_bed_intervals(args.low_mappability_bed),
             "gap_centromere_telomere": load_bed_intervals(args.gap_centromere_telomere_bed),
+            "telomere": load_bed_intervals_by_name(args.gap_centromere_telomere_bed, "telomere"),
+            "centromere": load_bed_intervals_by_name(args.gap_centromere_telomere_bed, "centromere"),
             "repeat_rich": load_bed_intervals(args.repeat_rich_bed),
             "blacklist": load_bed_intervals(args.blacklist_bed),
             "sex_homology": load_bed_intervals(args.sex_homology_bed),
@@ -343,6 +486,8 @@ def run_annotations(args):
                 "segmental_duplication_bin_count": int(annotations_df["is_segmental_duplication"].sum()),
                 "low_mappability_bin_count": int(annotations_df["is_low_mappability"].sum()),
                 "blacklist_bin_count": int(annotations_df["is_blacklist_region"].sum()),
+                "near_telomere_bin_count": int(annotations_df["is_near_telomere"].sum()),
+                "near_centromere_bin_count": int(annotations_df["is_near_centromere"].sum()),
             }
 
     summary_path = Path(args.summary_json_output)
@@ -386,6 +531,85 @@ def build_dynamic_metrics(profile_tsvs):
     return grouped
 
 
+def read_refmap_metrics(paths):
+    import pandas as pd
+
+    frames = []
+    for path_value in paths or []:
+        path = Path(path_value)
+        if not path.exists():
+            raise FileNotFoundError(f"Refmap metrics table does not exist: {path}")
+        frame = pd.read_csv(path, sep="\t")
+        required = {"chrom", "start", "end"}
+        missing = sorted(required.difference(frame.columns))
+        if missing:
+            raise ValueError(f"Refmap metrics table missing columns {','.join(missing)}: {path}")
+        keep_cols = [
+            "chrom",
+            "start",
+            "end",
+            "ref_size_after_cutoff",
+            "wisecondorx_ref_bin_count",
+            "reference_bin_count",
+            "ref_bin_count",
+            "ref_bins_per_target",
+            "low_refbin_fraction",
+            "same_chrom_ref_bin_count",
+            "top_ref_chrom_fraction",
+            "ref_chrom_hhi",
+            "segmental_duplication_overlap_fraction",
+            "low_mappability_overlap_fraction",
+            "gap_centromere_telomere_overlap_fraction",
+            "repeat_rich_overlap_fraction",
+            "blacklist_overlap_fraction",
+            "ambiguous_alignment_overlap_fraction",
+        ]
+        frame = frame[[column for column in keep_cols if column in frame.columns]].copy()
+        frames.append(frame)
+    if not frames:
+        return pd.DataFrame(columns=["chrom", "start", "end"])
+
+    merged = pd.concat(frames, ignore_index=True)
+    for column in [column for column in merged.columns if column not in {"chrom", "start", "end"}]:
+        merged[column] = pd.to_numeric(merged[column], errors="coerce")
+
+    agg = {}
+    for column in merged.columns:
+        if column in {"chrom", "start", "end"}:
+            continue
+        if column in REFMAP_REF_COUNT_COLUMNS:
+            agg[column] = "min"
+        else:
+            agg[column] = "max"
+    return merged.groupby(["chrom", "start", "end"], as_index=False).agg(agg)
+
+
+def merge_refmap_metrics(annotations, refmap_metrics):
+    import numpy as np
+    import pandas as pd
+
+    if refmap_metrics.empty:
+        return annotations
+    frame = annotations.merge(refmap_metrics, on=["chrom", "start", "end"], how="left", suffixes=("", "_refmap"))
+    for column in refmap_metrics.columns:
+        if column in {"chrom", "start", "end"}:
+            continue
+        refmap_column = f"{column}_refmap"
+        if refmap_column not in frame.columns:
+            continue
+        if column in frame.columns:
+            left = pd.to_numeric(frame[column], errors="coerce")
+            right = pd.to_numeric(frame[refmap_column], errors="coerce")
+            if column in REFMAP_REF_COUNT_COLUMNS:
+                frame[column] = left.where(right.isna(), np.fmin(left.fillna(right), right))
+            else:
+                frame[column] = left.where(right.isna(), np.fmax(left.fillna(right), right))
+        else:
+            frame[column] = frame[refmap_column]
+        frame = frame.drop(columns=[refmap_column])
+    return frame
+
+
 def write_tsv_json(tsv_path, json_path, df):
     tsv = Path(tsv_path)
     tsv.parent.mkdir(parents=True, exist_ok=True)
@@ -414,6 +638,7 @@ def write_hard_mask_bed(path_value, hard_mask_df):
 
 def run_mask(args):
     annotations = read_annotations(args.annotation_tsvs)
+    annotations = merge_refmap_metrics(annotations, read_refmap_metrics(args.refmap_tsv))
     dynamic_metrics = build_dynamic_metrics(args.profile_tsvs)
     merged = annotations.merge(dynamic_metrics, on=["chrom", "start", "end"], how="left")
 
@@ -451,13 +676,14 @@ def run_mask(args):
     dynamic_condition = (
         merged["dynamic_z_frac"].fillna(0.0).ge(args.dynamic_z_frac_threshold)
         | merged["dynamic_median_abs_z"].fillna(0.0).ge(args.dynamic_median_abs_z_threshold)
+        | merged["static_mask_label"].eq("dynamic")
     )
     dynamic_mask = merged[dynamic_condition].copy()
     dynamic_mask["mask_type"] = "dynamic"
     dynamic_mask["mask_reason"] = dynamic_mask.apply(
-        lambda row: (
-            f"dynamic_z_frac={row['dynamic_z_frac']:.4f};dynamic_median_abs_z={row['dynamic_median_abs_z']:.4f}"
-        ),
+        lambda row: row["static_mask_reason"]
+        if row["static_mask_label"] == "dynamic" and row["static_mask_reason"]
+        else f"dynamic_z_frac={row['dynamic_z_frac']:.4f};dynamic_median_abs_z={row['dynamic_median_abs_z']:.4f}",
         axis=1,
     )
 

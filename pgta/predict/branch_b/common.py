@@ -33,6 +33,19 @@ OPTIONAL_REGION_BOOL_COLUMNS = {
     "is_blacklist_region": 0,
     "is_ambiguous_alignment_region": 0,
 }
+OPTIONAL_REFMAP_COLUMNS = {
+    "ref_size_after_cutoff": np.nan,
+    "wisecondorx_ref_bin_count": np.nan,
+    "reference_bin_count": np.nan,
+    "ref_bin_count": np.nan,
+    "ref_bins_per_target": np.nan,
+    "low_refbin_fraction": 0.0,
+    "same_chrom_ref_bin_count": 0.0,
+    "top_ref_chrom_fraction": np.nan,
+    "ref_chrom_hhi": np.nan,
+}
+REFMAP_HARD_MIN_REF_BINS = 50.0
+REFMAP_DYNAMIC_MIN_REF_BINS = 150.0
 
 
 @dataclass
@@ -195,7 +208,30 @@ def ensure_region_annotation_columns(df):
         frame["mappability_score"] = pd.to_numeric(frame["mappability_score"], errors="coerce").fillna(1.0).clip(
             lower=0.0, upper=1.0
         )
+    for column, default in OPTIONAL_REFMAP_COLUMNS.items():
+        if column not in frame.columns:
+            frame[column] = default
+        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        if np.isfinite(default):
+            frame[column] = frame[column].fillna(default)
     return frame
+
+
+def refmap_ref_bin_count(frame):
+    candidates = [
+        "ref_size_after_cutoff",
+        "wisecondorx_ref_bin_count",
+        "reference_bin_count",
+        "ref_bin_count",
+        "ref_bins_per_target",
+    ]
+    values = pd.Series(np.nan, index=frame.index, dtype="float64")
+    for column in candidates:
+        if column not in frame.columns:
+            continue
+        column_values = pd.to_numeric(frame[column], errors="coerce")
+        values = values.where(values.notna(), column_values)
+    return values
 
 
 def annotate_region_risk(df):
@@ -221,11 +257,28 @@ def annotate_region_risk(df):
             frame["ambiguous_alignment_overlap_fraction"].to_numpy(dtype=np.float64),
         ]
     )
+    ref_bin_count = refmap_ref_bin_count(frame)
+    finite_ref_count = ref_bin_count.notna().to_numpy(dtype=bool)
+    ref_count_values = ref_bin_count.fillna(REFMAP_DYNAMIC_MIN_REF_BINS).to_numpy(dtype=np.float64)
+    low_ref_count_component = np.where(
+        finite_ref_count,
+        np.clip((REFMAP_DYNAMIC_MIN_REF_BINS - ref_count_values) / REFMAP_DYNAMIC_MIN_REF_BINS, 0.0, 1.0),
+        0.0,
+    )
+    refmap_component = np.maximum.reduce(
+        [
+            low_ref_count_component,
+            frame["low_refbin_fraction"].fillna(0.0).to_numpy(dtype=np.float64),
+            np.clip(frame["same_chrom_ref_bin_count"].fillna(0.0).to_numpy(dtype=np.float64), 0.0, 1.0),
+            np.clip((frame["top_ref_chrom_fraction"].fillna(0.0).to_numpy(dtype=np.float64) - 0.50) / 0.50, 0.0, 1.0),
+        ]
+    )
     mask_penalty = frame["mask_label"].map({"pass": 0.0, "soft": 0.20, "dynamic": 0.55, "hard": 0.95}).fillna(0.0)
     risk_score = (
-        0.35 * mapping_component
-        + 0.30 * repeat_component
+        0.30 * mapping_component
+        + 0.25 * repeat_component
         + 0.25 * homology_component
+        + 0.10 * refmap_component
         + 0.10 * mask_penalty.to_numpy(dtype=np.float64)
     )
     risk_score = np.maximum(
@@ -246,6 +299,7 @@ def annotate_region_risk(df):
         | (homology_component > 0.0)
         | (repeat_component > 0.0)
         | (mapping_component > 0.0)
+        | (refmap_component > 0.0)
         | frame["mask_label"].isin({"soft", "dynamic"}).to_numpy(dtype=bool)
     )
     high_condition = (
@@ -253,6 +307,9 @@ def annotate_region_risk(df):
         | (frame["blacklist_overlap_fraction"].to_numpy(dtype=np.float64) > 0.0)
         | (frame["gap_centromere_telomere_overlap_fraction"].to_numpy(dtype=np.float64) > 0.0)
         | (frame["ambiguous_alignment_overlap_fraction"].to_numpy(dtype=np.float64) >= 0.25)
+        | (finite_ref_count & (ref_count_values < REFMAP_HARD_MIN_REF_BINS))
+        | (frame["low_refbin_fraction"].fillna(0.0).to_numpy(dtype=np.float64) >= 0.50)
+        | (frame["same_chrom_ref_bin_count"].fillna(0.0).to_numpy(dtype=np.float64) > 0.0)
         | (frame["mask_label"].isin({"hard", "dynamic"}).to_numpy(dtype=bool))
     )
     risk_class[moderate_condition] = "moderate"
@@ -268,12 +325,17 @@ def annotate_region_risk(df):
         | (mapping_component >= 0.75)
         | (frame["segmental_duplication_overlap_fraction"].to_numpy(dtype=np.float64) >= 0.75)
         | (homology_component >= 0.25)
+        | (finite_ref_count & (ref_count_values < REFMAP_DYNAMIC_MIN_REF_BINS))
+        | (frame["low_refbin_fraction"].fillna(0.0).to_numpy(dtype=np.float64) > 0.0)
+        | (frame["same_chrom_ref_bin_count"].fillna(0.0).to_numpy(dtype=np.float64) > 0.0)
     )
     seed_block = (
         high_condition
         | (frame["gap_centromere_telomere_overlap_fraction"].to_numpy(dtype=np.float64) > 0.0)
         | (frame["blacklist_overlap_fraction"].to_numpy(dtype=np.float64) > 0.0)
         | (frame["ambiguous_alignment_overlap_fraction"].to_numpy(dtype=np.float64) > 0.0)
+        | (finite_ref_count & (ref_count_values < REFMAP_HARD_MIN_REF_BINS))
+        | (frame["same_chrom_ref_bin_count"].fillna(0.0).to_numpy(dtype=np.float64) > 0.0)
     )
     null_block = (
         ~frame["is_autosome"].to_numpy(dtype=bool)
@@ -286,6 +348,8 @@ def annotate_region_risk(df):
     frame["region_risk_class"] = risk_class
     frame["region_risk_weight"] = region_risk_weight
     frame["variance_inflation"] = variance_inflation
+    frame["wisecondorx_ref_bin_count"] = ref_bin_count
+    frame["wisecondorx_low_refbin_component"] = refmap_component
     frame["correction_fit_eligible"] = (~fit_block & ~frame["mask_label"].isin({"hard", "dynamic"})).astype(int)
     frame["calling_seed_eligible"] = (~seed_block & ~frame["mask_label"].isin({"hard"})).astype(int)
     frame["calibration_null_eligible"] = (~null_block).astype(int)
