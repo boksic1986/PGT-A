@@ -187,6 +187,9 @@ rule cnv:
             + (expand(CNV_B_EVIDENCE_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
             + (expand(CNV_B_V2_CLASSIFIER, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
             + (expand(CNV_B_V2_CLASSIFIER_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
+            + (expand(CNV_BRANCH_S_EVIDENCE, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
+            + (expand(CNV_BRANCH_S_SCORES, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
+            + (expand(CNV_BRANCH_S_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
             + ([CNV_NEGATIVE_BANK_LABELS, CNV_NEGATIVE_BANK_SUMMARY] if CNV_NEGATIVE_BANK_SAMPLES_TSV else [])
             + (
                 expand(CNV_B_MATCHED_NEGATIVE, sample=SAMPLES)
