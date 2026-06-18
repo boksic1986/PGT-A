@@ -463,6 +463,15 @@ Implementation status on 2026-06-18:
 - Keep legacy Branch B as comparator.
 - Do not promote B V2 to final report until ablation passes.
 
+Implementation status on 2026-06-18:
+
+- Implemented as `pgta/predict/branch_b/v2_classifier.py`.
+- Workflow output:
+  `wisecondorx/cnv/postprocess/v2_classifier/{sample}.candidate_classification.tsv`.
+- The classifier consumes Phase 3 matched-negative evidence when negative-bank inputs are configured; otherwise it consumes the Phase 1 evidence ledger.
+- The current seed has no N0 samples, so all current Y1-Y8 Phase 4 rows are expected to be `REVIEW_REQUIRED` with `v2_final_report_impact=none_shadow_only`.
+- This is shadow-only and is not consumed by `cnv_report`.
+
 ### Phase 5: Branch S shadow
 
 - Build sex-chromosome evidence tables.
