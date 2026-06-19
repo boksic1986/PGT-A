@@ -44,11 +44,17 @@ def matched_background_status(row):
     return clean_text(row.get("matched_negative_background_status", ""), default="").upper()
 
 
+def has_unknown_matched_negative_background(row):
+    if matched_background_status(row) == "UNKNOWN_BACKGROUND":
+        return True
+    source = clean_text(row.get("matched_negative_source", ""), default="").upper()
+    return source == "UNKNOWN_BACKGROUND"
+
+
 def classify_candidate_row(row):
     disposition = normalized_disposition(row)
-    background_status = matched_background_status(row)
 
-    if background_status == "UNKNOWN_BACKGROUND":
+    if has_unknown_matched_negative_background(row):
         return {
             "v2_candidate_class": "REVIEW_REQUIRED",
             "v2_classifier_action": "SHADOW_REVIEW_ONLY",

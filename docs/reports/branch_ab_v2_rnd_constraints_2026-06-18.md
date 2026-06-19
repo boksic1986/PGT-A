@@ -519,6 +519,25 @@ Implementation status on 2026-06-18:
 - The current seed has no N0 samples, so all current Y1-Y8 Phase 4 rows are expected to be `REVIEW_REQUIRED` with `v2_final_report_impact=none_shadow_only`.
 - This is shadow-only and is not consumed by `cnv_report`.
 
+Implementation update on 2026-06-19:
+
+- Phase 1 fallback ledgers use `matched_negative_source=UNKNOWN_BACKGROUND` and do not carry `matched_negative_background_status`.
+- The V2 classifier now treats both forms as equivalent unknown background:
+  - `matched_negative_background_status=UNKNOWN_BACKGROUND`;
+  - `matched_negative_source=UNKNOWN_BACKGROUND`.
+- Unknown background forces:
+  - `v2_candidate_class=REVIEW_REQUIRED`;
+  - `v2_classifier_action=SHADOW_REVIEW_ONLY`;
+  - `v2_classifier_reason=unknown_matched_negative_background`;
+  - `v2_final_report_impact=none_shadow_only`.
+- Remote materialization after the fix:
+  - Y1-Y8: 8 files, 143 rows, all `REVIEW_REQUIRED`;
+  - H1-H16: 16 files, 307 rows, all `REVIEW_REQUIRED`;
+  - 2026-06-15: 5 files, 170 rows, all `REVIEW_REQUIRED`.
+- This confirms that current Phase 4 is a conservative shadow review layer only. It is not yet a useful FP-reduction classifier because no valid N0 matched-negative background is present.
+- Detailed report:
+  `docs/reports/branch_ab_v2_phase4_unknown_background_fix_2026-06-19.md`.
+
 ### Phase 5: Branch S shadow
 
 - Build sex-chromosome evidence tables.
