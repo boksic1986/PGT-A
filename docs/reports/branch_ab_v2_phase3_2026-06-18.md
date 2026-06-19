@@ -89,6 +89,12 @@ all Y1-Y8 candidate rows -> REVIEW_NO_CALL
 
 This is the correct safe behavior because H7-H16 are not promoted to N0.
 
+This statement applies only to Branch B matched-negative empirical-null use.
+It should not be used to exclude H7-H16 from reference-rebuild exploration.
+Reference rebuild eligibility is handled by separate `R0/R1/R2` labels, and
+old-reference Branch A signal can represent reference mismatch or batch shift
+rather than a true individual positive.
+
 ## Remote Validation
 
 RED checks:
@@ -173,4 +179,27 @@ The current run does not produce usable matched-negative percentiles because the
 
 ## Remaining Gate
 
-To make Phase 3 informative instead of `UNKNOWN_BACKGROUND`, at least one locked clean N0 cohort must be defined and processed through the same evidence-ledger path. H7-H16 should not be used for this unless future ablation/manual review promotes specific samples to N0.
+To make Phase 3 informative instead of `UNKNOWN_BACKGROUND`, at least one
+locked clean N0 cohort must be defined and processed through the same
+evidence-ledger path. H7-H16 should not be used for matched-negative empirical
+null unless a post-rebuild or holdout/ablation run promotes specific samples to
+N0.
+
+This does not block a reference-rebuild experiment. A shadow rebuild may include
+documented `R0/R1` candidates, then rerun WisecondorX predict, Branch A, Branch
+B, evaluation, benchmark, and report to decide whether the expanded reference
+improves FP burden without increasing known-positive FN.
+
+If H7-H16 are added to a named shadow reference, the current `N0=0` result is no
+longer the operative Phase 3 decision. The post-rebuild workflow must create a
+new negative-bank version tied to the new reference ID and recompute
+`N0/N1/N2` from the regenerated WisecondorX predict, Branch A candidates, and
+Branch B evidence. The report must keep separate whether each sample was:
+
+- included in the reference;
+- held out as negative evidence;
+- used only for shadow review.
+
+Phase 3 remains blocked only for percentile-based filtering until this
+post-rebuild negative-bank decision exists. It does not block R0/R1 shadow
+reference construction.

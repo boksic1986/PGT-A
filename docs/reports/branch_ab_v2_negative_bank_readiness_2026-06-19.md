@@ -209,8 +209,23 @@ Result:
 
 Phase 2 is now machine-readable:
 
-- H7-H16 are not a usable N0 empirical-null set.
+- H7-H16 are not currently a usable N0 empirical-null set for Branch B
+  matched-negative calibration under the current reference and current seed
+  labels.
+- This does not mean H7-H16 are unusable for reference-rebuild exploration.
+  Reference rebuild should use separate `R0/R1/R2` labels.
 - Phase 3 matched-negative percentile is not ready for FP reduction.
 - Phase 4 V2 classifier remains shadow review only.
 
-Next minimum action remains data/cohort work: define locked N0 samples independent of H7-H16 review candidates, then rerun WisecondorX predict, Branch A candidates, Branch B, evaluation, benchmark, and report.
+Next minimum action for Branch B calibration remains data/cohort work: define
+locked N0 samples for empirical-null use. In parallel, reference expansion can
+be tested with documented `R0/R1` rebuild candidates, but every new reference
+requires rerunning WisecondorX predict, Branch A candidates, Branch B,
+evaluation, benchmark, and report.
+
+If H7-H16 are included in a named shadow reference, the current `N0=0` result
+must be treated as historical old-reference evidence, not as the post-rebuild
+negative-bank decision. The post-rebuild run must emit a new negative-bank
+version and recompute `N0/N1/N2` under the new reference ID. Samples used to
+build the reference must be distinguished from held-out negatives before any
+matched-negative empirical-null percentile is promoted.

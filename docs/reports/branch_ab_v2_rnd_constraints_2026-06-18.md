@@ -209,11 +209,63 @@ Current H7-H16 summary:
 
 Interpretation:
 
-- H7-H16 are QC PASS, but they are not automatically clean negatives.
-- H8, H13, and H14 should be held out from first-pass reference expansion because they have retained Branch B review events.
-- H7, H9, H10, H11, H12, H15, and H16 can be considered only as N1 presumed-negative / experimental reference candidates.
-- H7 should be handled cautiously because earlier H experimental reference rebuilds still produced recurring review events after self-inclusion.
-- No H7-H16 sample should be promoted directly into the production reference or N0 high-confidence negative bank without ablation and manual review.
+- H7-H16 are QC PASS new-batch negative samples, but they are not automatically
+  clean `N0` samples for Branch B matched-negative calibration.
+- Old-reference Branch A signals in H7-H16 should be interpreted as possible
+  reference mismatch, batch shift, high-repeat-region instability, or true
+  individual signal. They must not be used alone to reject the sample from
+  reference-rebuild exploration.
+- Reference rebuild eligibility and Branch B calibration-negative eligibility
+  are separate gates:
+  - `R0/R1/R2` controls whether a negative sample can enter a shadow reference
+    rebuild.
+  - `N0/N1/N2` controls whether a sample can be used as matched-negative
+    empirical null for Branch B.
+- H8, H13, and H14 remain unsafe as `N0` because they have retained Branch B
+  review events under the old reference, but they may still be evaluated as
+  `R1` shadow-rebuild candidates if their events are plausible batch/reference
+  artifacts rather than sample-specific positives.
+- H7 should be handled cautiously because earlier H experimental reference
+  rebuilds still produced recurring review events after self-inclusion.
+- No H7-H16 sample should be promoted directly into the production reference or
+  `N0` high-confidence negative bank without a named shadow rebuild,
+  post-rebuild Branch A/B evaluation, and manual review.
+
+### Reference rebuild sample labels
+
+Use `R*` labels for reference-rebuild eligibility. These labels are deliberately
+separate from the Branch B `N*` negative-bank labels.
+
+| label | meaning | allowed use |
+|---|---|---|
+| `R0` | reference-rebuild eligible negative | Can enter a named shadow reference rebuild. |
+| `R1` | reference-rebuild candidate with review/batch-risk context | Can enter sensitivity analysis or alternative shadow reference variants, but must be reported separately from R0. |
+| `R2` | not eligible for reference rebuild now | Excluded from rebuild until QC/library/identity/individual-signal concerns are resolved. |
+
+Initial `R*` criteria:
+
+- `R0` requires QC PASS, sex concordance, no known positive identity, no
+  clear sample-specific broad CNV inconsistent with other new-batch negatives,
+  and no library-level failure. Old-reference A-sensitive signal alone is not
+  an exclusion criterion.
+- `R1` is appropriate when the sample is QC PASS and likely negative, but has
+  retained review events, strong old-reference A-sensitive burden, batch-shift
+  behavior, verified region-asset burden, CNVpro acrocentric-partition signal,
+  or other context that should be evaluated in ablation rather than silently
+  treated as clean.
+- `R2` is reserved for QC FAIL, library/prep failure, sex or identity conflict,
+  known/truth positive status, or strong evidence for an individual-specific
+  abnormality that should not be modeled into the normal reference.
+
+Initial H7-H16 interpretation under this two-gate model:
+
+- Candidate `R0`/`R1` pool: H7-H16, after confirming QC, sex, library-quality,
+  and event-pattern context.
+- Candidate `N0` pool: none from H7-H16 until after a post-rebuild or
+  holdout/ablation run proves locked-clean behavior.
+- Candidate `N1`/`N2` status remains useful for Branch B matched-negative
+  safety, but it must not be used as the only gate for reference-rebuild
+  inclusion.
 
 ### H reference rebuild evidence
 
@@ -230,14 +282,24 @@ Historical evaluation summary:
 - `XY_all` = current XY ref plus H7-H16.
 - H1-H6 recall stayed `9/10`; H6 chr21 1.57 Mb gain remained missed.
 - H7-H16 kept-event burden changed, but neither experimental ref was stable enough to promote.
-- Directly adding all H7-H16 is not recommended.
+- The older `XY_all` run is not sufficient as a promotion decision because it
+  predated the explicit `R0/R1/R2` rebuild design, revised Branch A/B evidence
+  ledger, and source-confirmed CNVpro / region-asset risk review.
 
 Current decision:
 
 - Do not promote `XY_strict` or `XY_all` as the default reference.
-- If reference expansion is revisited, build a new shadow ref using a documented N1 candidate subset, not all H7-H16.
-- First candidate subset for shadow evaluation: H9, H10, H11, H12, H15, H16.
-- Hold out initially: H7, H8, H13, H14.
+- If reference expansion is revisited, build named shadow references from a
+  documented `R0/R1/R2` candidate table rather than from implicit old-reference
+  Branch B labels.
+- At least two shadow variants should be evaluated:
+  - conservative `R0-only` or `R0-preferred`;
+  - expanded `R0+R1`, which may include H7-H16 samples with plausible
+    batch/reference-shift signals.
+- H7-H16 should not be rejected from reference-rebuild exploration merely
+  because the old 32-sample reference produced A-sensitive calls.
+- Any promoted reference must rerun WisecondorX predict, Branch A candidates,
+  Branch B evidence/classification, evaluation, benchmark, and report.
 
 ## Branch A/B Validation Plan
 
@@ -260,7 +322,7 @@ Current decision:
 |---|---|---|
 | Y1-Y8 | known-positive validation | Required for recall checks. |
 | H1-H6 | known-positive validation | Required for recall checks, including H6 chr21 weak focal event. |
-| H7-H16 | presumed-negative / ref-candidate review | Not clean N0; use for shadow reporting and N1/N2 labeling. |
+| H7-H16 | new-batch negative / reference-rebuild candidate review | Use `R0/R1/R2` for rebuild eligibility and `N0/N1/N2` separately for Branch B calibration. |
 | 2026-06-15 five-sample run | shadow-report set | Already inspected; not a true locked set because results have been used in rule discussion. |
 | Future unseen samples | true locked validation | Use only after the candidate-level plan is frozen. |
 
@@ -282,6 +344,13 @@ Current decision:
 ### CNVpro borrowing validation scope
 
 The older CNVpro/CNVseq workflows are method references, not replacement callers. The goal of this validation is to decide whether the following five evidence families should be promoted into the PGT-A Branch A/B workflow.
+
+Source-standard check:
+
+- `docs/reports/cnvpro_standard_check_2026-06-19.md`
+- CNVpro handles acrocentric chr13/14/15/21/22 by qter-only segmentation in
+  `CNVcalling.R`. This should be treated as a verified segmentation-contract
+  concept, not as a guessed chr13/14/15 p-arm hard artifact filter.
 
 | borrowed method family | CNVpro source concept | Proposed PGT-A landing zone | Validation purpose |
 |---|---|---|---|
@@ -312,6 +381,25 @@ When a new reference is built from additional reference samples:
    - If binsize and preprocessing contract are unchanged, existing predict NPZs do not need to be regenerated.
    - WisecondorX predict must still be rerun against the new reference.
    - Branch A candidate files, Branch B evidence/classification, evaluation, benchmark, and report must be regenerated because reference residuals and candidate calls can change.
+   - Branch A performance must be re-evaluated after every reference rebuild:
+     - Y1-Y8 and H1-H6 truth recall;
+     - H6 chr21 focal gain status;
+     - candidate counts and strong/sensitive burden per sample;
+     - whether rebuild-included negative samples still show sample-specific
+       significant gain/loss after WisecondorX predict;
+     - whether recurrent signals fall in regions handled specially by the
+       source CNVpro workflow. Current source review shows CNVpro handles
+       acrocentric chromosomes by segmenting chr13/14/15/21/22 only on `qter`;
+       this must be treated as a verified segmentation-contract check, not as
+       a guessed chr13/14/15 p-arm hard filter.
+   - If a rebuild sample still has a strong post-rebuild Branch A signal, that
+     signal must be classified as one of:
+     - likely shared batch/reference-shift residue;
+     - CNVpro acrocentric-partition or region-asset artifact;
+     - sample-specific abnormality;
+     - unresolved review.
+     Only the sample-specific abnormality class should block reference
+     eligibility by itself.
 
 3. Branch B V2 evidence
    - Candidate evidence must be tied to:
@@ -481,7 +569,8 @@ Implementation status on 2026-06-19:
 
 - Create N0/N1/N2 labels.
 - Use only N0 for matched-negative empirical null.
-- Treat H7-H16 as review candidates, not automatic N0.
+- Treat H7-H16 as review candidates for Branch B calibration, not automatic
+  `N0`. This is independent of their `R0/R1/R2` reference-rebuild labels.
 - Initial labels from current evidence:
   - N1 candidates for ref-evaluation only: H9, H10, H11, H12, H15, H16.
   - Hold out / N2 pending review: H7, H8, H13, H14.
@@ -505,7 +594,21 @@ Implementation update on 2026-06-19:
   - `N2=4`;
   - `matched_negative_ready=false`;
   - `matched_negative_blocking_reason=no_n0_locked_clean_negative_samples`.
-- This makes the current blocker machine-readable: H7-H16 are not a valid matched-negative empirical-null cohort.
+- This makes the current old-reference blocker machine-readable: H7-H16 are not
+  a valid matched-negative empirical-null cohort under the current reference and
+  current seed labels.
+- This blocker applies to Branch B matched-negative calibration only. It does
+  not mean H7-H16 are unusable for reference-rebuild exploration under `R0/R1`
+  labels.
+- If H7-H16, or a subset of H7-H16, enter a named shadow reference rebuild under
+  `R0/R1/R2`, the `N0/N1/N2` labels must be recalculated after the new
+  WisecondorX predict and Branch A/B evidence are regenerated. Old-reference
+  `N0=0` must not be reused as the post-rebuild negative-bank decision.
+- Reference-included samples can support post-rebuild residual/batch-stability
+  review, but matched-negative empirical-null promotion still requires a locked
+  clean role after post-rebuild review or a holdout/ablation design. The design
+  must state whether a sample was used to build the reference, used as held-out
+  negative evidence, or used only for shadow review.
 - Detailed audit:
   `docs/reports/branch_ab_v2_negative_bank_readiness_2026-06-19.md`.
 
@@ -526,6 +629,13 @@ Implementation status on 2026-06-18:
   `wisecondorx/cnv/postprocess/matched_negative/{sample}.candidate_evidence.tsv`.
 - The current seed has no N0 samples, so all current Y1-Y8 Phase 3 rows are expected to be `UNKNOWN_BACKGROUND` with `matched_negative_action=REVIEW_NO_CALL`.
 - This is shadow-only and is not consumed by `cnv_report`.
+- Post-reference rebuild rule:
+  - rerun WisecondorX predict, Branch A candidates, Branch B evidence ledger,
+    and negative-bank labeling;
+  - generate a new negative-bank version tied to the new reference ID, binsize,
+    mask/preprocess version, and candidate source;
+  - only then decide whether post-rebuild `N0` exists and whether Phase 3 can
+    produce informative percentiles instead of `UNKNOWN_BACKGROUND`.
 
 ### Phase 4: Branch B V2 classifier
 
@@ -557,9 +667,30 @@ Implementation update on 2026-06-19:
   - Y1-Y8: 8 files, 143 rows, all `REVIEW_REQUIRED`;
   - H1-H16: 16 files, 307 rows, all `REVIEW_REQUIRED`;
   - 2026-06-15: 5 files, 170 rows, all `REVIEW_REQUIRED`.
-- This confirms that current Phase 4 is a conservative shadow review layer only. It is not yet a useful FP-reduction classifier because no valid N0 matched-negative background is present.
+- This confirms that current Phase 4 is a conservative shadow review layer only
+  under the current reference and current negative-bank version. It is not yet a
+  useful FP-reduction classifier because no valid N0 matched-negative
+  background is present.
 - Detailed report:
   `docs/reports/branch_ab_v2_phase4_unknown_background_fix_2026-06-19.md`.
+
+Promotion path after reference rebuild:
+
+- Branch B V2 can be considered for final-report influence only after a named
+  shadow reference run produces a locked candidate/evidence set with:
+  - no known-positive FN increase on Y1-Y8 and H1-H6;
+  - H6 chr21 weak focal event still explicitly tracked;
+  - post-rebuild negative-bank labels recomputed under the same reference ID;
+  - a usable matched-negative background or an explicit rule that unknown
+    background only creates `REVIEW_REQUIRED`, never hard artifact suppression;
+  - per-sample FP/review burden reduced or at least not increased on locked or
+    held-out negatives;
+  - every promoted disposition rule documented with evidence source, affected
+    candidate count, truth impact, negative burden impact, and rollback path.
+- The first promotable report action should be conservative: downgrade to
+  review / no-call / lower-confidence tier where evidence is incomplete. Direct
+  hard suppression requires locked ablation and zero known-positive recall
+  regression.
 
 ### Phase 5: Branch S shadow
 
@@ -646,6 +777,9 @@ Promotion gates:
 - sex-call concordance must not regress;
 - clean XX/XY negatives must not become reportable SCA calls;
 - Branch S evidence must remain region-explainable across X non-PAR, X PAR, Y non-PAR, and Y PAR.
+- Branch S promotion is independent of Branch B V2 autosomal/segmental
+  promotion. A new autosomal/reference rebuild does not promote Branch S unless
+  the locked SCA truth and clean XX/XY negative requirements above are met.
 
 ### Branch A/B pass criteria
 
@@ -655,6 +789,10 @@ Branch A passes an iteration only if:
 - Y1-Y8 and H1-H6 known-positive recall does not regress.
 - H6 chr21 focal gain remains explicitly tracked even when unresolved.
 - H7-H16 and the 2026-06-15 exploratory samples have candidate-burden summaries.
+- For any shadow reference rebuild, rebuild-included negative samples have
+  post-rebuild Branch A summaries showing whether residual signals are shared
+  batch/reference-shift, CNVpro acrocentric-partition / region-asset related,
+  sample-specific, or unresolved review.
 - Candidate generation remains WisecondorX-first and does not contain Branch B artifact filters.
 - `strong_z` remains a support label unless an explicit RFC and ablation prove otherwise.
 
@@ -686,8 +824,16 @@ It proves the opposite boundary condition:
 - H9, H10, H11, H12, H15, and H16 are only N1 presumed-negative / shadow reference candidates.
 - No H7-H16 sample should be used for matched-negative empirical null or production reference promotion until ablation and manual review are complete.
 
+This interpretation is specific to Branch B calibration-negative use. It must
+not be read as a blanket exclusion from reference rebuild. Reference rebuild
+uses `R0/R1/R2`; Branch B calibration uses `N0/N1/N2`.
+
 ## Current Recommendation
 
 Proceed with Branch B V2 shadow mode, not with more legacy Branch B filter patches.
 
-Do not promote H7-H16 into the production reference now. If reference expansion is tested, use a shadow reference with documented candidate samples and rerun Branch A/B validation against Y1-Y8, H1-H6, H7-H16, and the 2026-06-15 shadow-report set.
+Do not promote H7-H16 into the production reference directly. If reference
+expansion is tested, use a named shadow reference with documented `R0/R1/R2`
+candidate samples and rerun WisecondorX predict, Branch A candidates, Branch B
+evidence/classification, evaluation, benchmark, and report against Y1-Y8,
+H1-H6, H7-H16, and the 2026-06-15 shadow-report set.

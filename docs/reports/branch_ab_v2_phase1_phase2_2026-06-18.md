@@ -91,6 +91,16 @@ Current seed labels:
 
 Only `N0` is eligible for matched-negative empirical null. `N1` can be used for shadow reference evaluation only, and `N2` is excluded from negative-bank modeling.
 
+Important distinction:
+
+- `N0/N1/N2` labels are Branch B calibration-negative labels.
+- They do not determine whether a sample can enter reference-rebuild
+  exploration.
+- Reference rebuild uses separate `R0/R1/R2` labels. A sample can be unsafe for
+  Branch B empirical-null use (`N1` or `N2`) but still be useful as an `R0` or
+  `R1` shadow-reference rebuild candidate if QC, sex, library quality, and
+  event-pattern review support it.
+
 ## Workflow Contract
 
 The `cnv` target now includes Phase 1 shadow evidence outputs when Branch B is enabled.
@@ -211,9 +221,21 @@ N0: 0
 matched_negative_eligible: 0
 ```
 
-This is expected for the seed manifest. H7-H16 are not promoted to N0.
+This is expected for the seed manifest. H7-H16 are not promoted to N0 for
+Branch B empirical-null use. This does not exclude them from future
+reference-rebuild variants under separate `R0/R1/R2` labels.
 
 ## Remaining Gates
 
 - Full report promotion remains blocked until Y1-Y8, H1-H6, H7-H16, and the 2026-06-15 shadow-report set are evaluated with no known-positive recall regression.
 - Matched-negative percentile remains Phase 3 and must use only N0 samples.
+- Reference-rebuild expansion is a separate gate: after any new reference is
+  built, WisecondorX predict, Branch A candidates, Branch B evidence, evaluation,
+  benchmark, and report must be regenerated.
+- If H7-H16 enter a named shadow reference, the old-reference `N0=0` result must
+  be treated as historical evidence only. The post-rebuild run must recompute
+  `N0/N1/N2` under the new reference ID and explicitly separate
+  reference-included samples from held-out negative evidence.
+- Branch B V2 final-report promotion remains separate from reference rebuild:
+  it requires post-rebuild no-FN evidence, safe unknown-background behavior, and
+  documented FP/review burden improvement with rollback.
