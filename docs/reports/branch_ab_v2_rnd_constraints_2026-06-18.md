@@ -450,6 +450,33 @@ Current default decision:
 - `maskpar` is primarily a PAR/sex-homology interpretation aid; it should not become a global hard mask by default.
 - If a future change moves from `annotation_only` to `reference_build_mask`, the new reference ID, binsize, mask version, and preprocessing contract must be recorded, and all downstream predictions must be rerun.
 
+Implementation status on 2026-06-19:
+
+- Phase 1B decision matrix has been written to:
+  `docs/reports/branch_ab_v2_phase1b_asset_decision_matrix_2026-06-19.md`.
+- Current production-path mask assets were refreshed from remote result files under:
+  `/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only/reference/assets`.
+- Current asset bins are:
+  - atomic: `50 kb`, `61,927` bins;
+  - analysis: `100 kb`, `30,970` bins;
+  - QC: `1 Mb`, `3,113` bins.
+- Current combined mask counts across all levels are:
+  - `pass=81,406`;
+  - `hard=7,892`;
+  - `soft=6,710`;
+  - `dynamic=2`.
+- Current analysis-level mask counts are:
+  - `hard=2,573`;
+  - `soft=2,197`;
+  - `pass=26,200`.
+- Current hard-mask BED contains `4,881` atomic BED3 intervals and remains a WisecondorX predict blacklist asset.
+- PAR and sex-homology remain annotation-only:
+  - analysis-level PAR bins: `31`;
+  - analysis-level sex-homology bins: `31`;
+  - XTR bins: `0`.
+- Current decision remains `annotation_only` by default. `reference_build_mask` is allowed only as a named shadow reference experiment. `full_remap_reference` is not justified by current evidence.
+- Repeat/segmental-duplication/low-mappability burden must not become a hard event-level threshold without locked ablation because previous evidence showed known positives and FP-like events can share similar soft-mask burden.
+
 ### Phase 2: negative bank labeling
 
 - Create N0/N1/N2 labels.
