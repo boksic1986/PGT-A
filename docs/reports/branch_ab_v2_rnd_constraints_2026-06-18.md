@@ -494,6 +494,11 @@ Implementation update on 2026-06-19:
   - `n0_sample_ids`;
   - `n1_shadow_reference_candidate_count`;
   - `n2_holdout_count`.
+- Manual `N0` labels are accepted only after the same locked-clean safety gate:
+  QC PASS, locked/clean negative role, no retained Branch B review event, and
+  clean manual review status. Unsafe manual `N0` is forced to `N2` with
+  `invalid_manual_n0` and remains ineligible for matched-negative empirical
+  null construction.
 - Current remote result remains:
   - `N0=0`;
   - `N1=6`;

@@ -68,6 +68,24 @@ Current H7-H16 interpretation remains unchanged:
 - `N2`: H7, H8, H13, H14
 - `N0`: none
 
+## Manual N0 Safety Gate
+
+Manual labels are still allowed for N1/N2 curation, but manual `N0` is not a
+direct override. A manual `N0` row is accepted only when all locked-clean
+negative criteria are met:
+
+- `qc_status=PASS`;
+- `sample_role` is one of `locked_negative`, `clean_negative`, or `n0`;
+- `branch_b_kept_count=0`;
+- `manual_review_status` is empty, `clean`, or `locked_clean`;
+- no retained review, hold, recurring artifact, or known-positive status is
+  present.
+
+If any blocker exists, the row is forced to `N2` with
+`negative_bank_reason` starting with `invalid_manual_n0`. This keeps Phase 3
+matched-negative empirical-null construction from being enabled by a manual
+label alone.
+
 ## Downstream State
 
 After refreshing `config_predict_build_ref_v2_mask_only.yaml`:
@@ -161,6 +179,30 @@ Result:
 
 ```text
 Nothing to be done
+```
+
+Manual N0 safety-gate update:
+
+```bash
+ssh fengxian 'cd /data/project/CNV/PGT-A/refactor_validation_20260419 && PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 /biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest tests/unit/test_negative_bank.py -q'
+```
+
+Result:
+
+```text
+7 passed in 0.43s
+```
+
+Branch A/B/S regression after the manual N0 safety gate:
+
+```bash
+ssh fengxian 'cd /data/project/CNV/PGT-A/refactor_validation_20260419 && PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 /biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest tests/unit/test_branch_ab_phase12_workflow_contract.py tests/unit/test_branch_b_evidence_ledger.py tests/unit/test_negative_bank.py tests/unit/test_branch_b_matched_negative.py tests/unit/test_branch_b_v2_classifier.py tests/unit/test_branch_s_shadow.py -q'
+```
+
+Result:
+
+```text
+28 passed in 0.71s
 ```
 
 ## Decision

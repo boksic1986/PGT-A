@@ -75,6 +75,70 @@ class NegativeBankLabelTest(unittest.TestCase):
         self.assertEqual(set(labeled[labeled["negative_bank_label"].eq("N1")]["sample_id"]), {"H9", "H10", "H11", "H12", "H15", "H16"})
         self.assertEqual(set(labeled[labeled["negative_bank_label"].eq("N2")]["sample_id"]), {"H7", "H8", "H13", "H14"})
 
+    def test_manual_n0_label_is_rejected_when_review_evidence_is_not_clean(self):
+        samples = pd.DataFrame(
+            [
+                {
+                    "sample_id": "H8",
+                    "qc_status": "PASS",
+                    "sample_role": "presumed_negative",
+                    "branch_b_kept_count": 1,
+                    "manual_negative_bank_label": "N0",
+                    "manual_review_status": "retained_review_event",
+                }
+            ]
+        )
+
+        labeled = assign_negative_bank_labels(samples, version="branch_ab_v2_seed")
+        row = labeled.iloc[0]
+
+        self.assertEqual(row["negative_bank_label"], "N2")
+        self.assertEqual(int(row["matched_negative_eligible"]), 0)
+        self.assertIn("invalid_manual_n0", row["negative_bank_reason"])
+        self.assertIn("branch_b_retained_review_event", row["negative_bank_reason"])
+
+    def test_manual_n0_label_is_allowed_only_for_locked_clean_negative(self):
+        samples = pd.DataFrame(
+            [
+                {
+                    "sample_id": "N_LOCKED_MANUAL",
+                    "qc_status": "PASS",
+                    "sample_role": "locked_negative",
+                    "branch_b_kept_count": 0,
+                    "manual_negative_bank_label": "N0",
+                    "manual_review_status": "locked_clean",
+                }
+            ]
+        )
+
+        labeled = assign_negative_bank_labels(samples, version="branch_ab_v2_seed")
+        row = labeled.iloc[0]
+
+        self.assertEqual(row["negative_bank_label"], "N0")
+        self.assertEqual(int(row["matched_negative_eligible"]), 1)
+        self.assertNotIn("invalid_manual_n0", row["negative_bank_reason"])
+
+    def test_manual_n0_label_requires_explicit_qc_pass(self):
+        samples = pd.DataFrame(
+            [
+                {
+                    "sample_id": "N_MISSING_QC",
+                    "sample_role": "locked_negative",
+                    "branch_b_kept_count": 0,
+                    "manual_negative_bank_label": "N0",
+                    "manual_review_status": "locked_clean",
+                }
+            ]
+        )
+
+        labeled = assign_negative_bank_labels(samples, version="branch_ab_v2_seed")
+        row = labeled.iloc[0]
+
+        self.assertEqual(row["negative_bank_label"], "N2")
+        self.assertEqual(int(row["matched_negative_eligible"]), 0)
+        self.assertIn("invalid_manual_n0", row["negative_bank_reason"])
+        self.assertIn("qc_not_pass", row["negative_bank_reason"])
+
     def test_summary_counts_labels_and_matched_negative_pool(self):
         labeled = pd.DataFrame(
             [
