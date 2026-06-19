@@ -56,6 +56,7 @@ class NegativeBankLabelTest(unittest.TestCase):
         samples = pd.DataFrame(
             [
                 {"sample_id": "H7", "qc_status": "PASS", "manual_negative_bank_label": "N2", "manual_review_status": "recurring_review_artifact"},
+                {"sample_id": "H8", "qc_status": "PASS", "manual_negative_bank_label": "N2", "manual_review_status": "retained_review_event"},
                 {"sample_id": "H9", "qc_status": "PASS", "manual_negative_bank_label": "N1", "manual_review_status": "ref_evaluation_only"},
                 {"sample_id": "H10", "qc_status": "PASS", "manual_negative_bank_label": "N1", "manual_review_status": "ref_evaluation_only"},
                 {"sample_id": "H11", "qc_status": "PASS", "manual_negative_bank_label": "N1", "manual_review_status": "ref_evaluation_only"},
@@ -72,7 +73,7 @@ class NegativeBankLabelTest(unittest.TestCase):
         self.assertEqual(set(labeled["negative_bank_label"]), {"N1", "N2"})
         self.assertEqual(int(labeled["matched_negative_eligible"].sum()), 0)
         self.assertEqual(set(labeled[labeled["negative_bank_label"].eq("N1")]["sample_id"]), {"H9", "H10", "H11", "H12", "H15", "H16"})
-        self.assertEqual(set(labeled[labeled["negative_bank_label"].eq("N2")]["sample_id"]), {"H7", "H13", "H14"})
+        self.assertEqual(set(labeled[labeled["negative_bank_label"].eq("N2")]["sample_id"]), {"H7", "H8", "H13", "H14"})
 
     def test_summary_counts_labels_and_matched_negative_pool(self):
         labeled = pd.DataFrame(
@@ -88,6 +89,25 @@ class NegativeBankLabelTest(unittest.TestCase):
         self.assertEqual(summary["version"], "v1")
         self.assertEqual(summary["label_counts"]["N0"], 1)
         self.assertEqual(summary["matched_negative_eligible_count"], 1)
+        self.assertTrue(summary["matched_negative_ready"])
+        self.assertEqual(summary["matched_negative_blocking_reason"], "ready")
+        self.assertEqual(summary["n0_sample_ids"], [])
+
+    def test_summary_exposes_no_n0_readiness_blocker(self):
+        labeled = pd.DataFrame(
+            [
+                {"sample_id": "H9", "negative_bank_label": "N1", "matched_negative_eligible": 0},
+                {"sample_id": "H13", "negative_bank_label": "N2", "matched_negative_eligible": 0},
+            ]
+        )
+
+        summary = summarize_negative_bank(labeled, version="branch_ab_v2_seed")
+
+        self.assertFalse(summary["matched_negative_ready"])
+        self.assertEqual(summary["matched_negative_blocking_reason"], "no_n0_locked_clean_negative_samples")
+        self.assertEqual(summary["n1_shadow_reference_candidate_count"], 1)
+        self.assertEqual(summary["n2_holdout_count"], 1)
+        self.assertEqual(summary["n0_sample_ids"], [])
 
 
 if __name__ == "__main__":

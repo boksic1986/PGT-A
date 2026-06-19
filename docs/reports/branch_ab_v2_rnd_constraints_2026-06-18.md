@@ -486,6 +486,24 @@ Implementation status on 2026-06-19:
   - N1 candidates for ref-evaluation only: H9, H10, H11, H12, H15, H16.
   - Hold out / N2 pending review: H7, H8, H13, H14.
 
+Implementation update on 2026-06-19:
+
+- `negative_bank_summary.json` now records Phase 3 readiness explicitly:
+  - `matched_negative_ready`;
+  - `matched_negative_blocking_reason`;
+  - `n0_sample_ids`;
+  - `n1_shadow_reference_candidate_count`;
+  - `n2_holdout_count`.
+- Current remote result remains:
+  - `N0=0`;
+  - `N1=6`;
+  - `N2=4`;
+  - `matched_negative_ready=false`;
+  - `matched_negative_blocking_reason=no_n0_locked_clean_negative_samples`.
+- This makes the current blocker machine-readable: H7-H16 are not a valid matched-negative empirical-null cohort.
+- Detailed audit:
+  `docs/reports/branch_ab_v2_negative_bank_readiness_2026-06-19.md`.
+
 ### Phase 3: matched-negative percentile
 
 - Add empirical percentile as a shadow feature.
