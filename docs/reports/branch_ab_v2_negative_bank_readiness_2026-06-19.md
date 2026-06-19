@@ -12,6 +12,15 @@ Remote project path:
 
 This audit tightens the Phase 2 to Phase 3 contract for Branch B V2.
 
+Important correction after post-rebuild review:
+
+- This audit uses the configured legacy safety seed.
+- It is not a Branch B V2 benchmark truth table.
+- Legacy/current Branch B kept status can explain why no empirical null was
+  enabled, but it must not be the final authority for V2 `N0` selection.
+- Branch B V2 must be benchmarked first on positive recall, then on
+  independently held-out or cross-fit negative background.
+
 The negative-bank output now records whether matched-negative percentile evidence is actually ready. This does not change WisecondorX predict, Branch A candidate generation, Branch B final events, Branch S, or the final report.
 
 ## Code Contract
@@ -62,11 +71,18 @@ Current summary:
 }
 ```
 
-Current H7-H16 interpretation remains unchanged:
+Current H7-H16 legacy safety interpretation:
 
 - `N1`: H9, H10, H11, H12, H15, H16
 - `N2`: H7, H8, H13, H14
 - `N0`: none
+
+This should not be read as a final V2 conclusion. It only says the configured
+legacy seed contains no locked-clean negative samples. After a named shadow
+reference rebuild, `N0/N1/N2` must be recomputed from the new reference ID,
+Branch A candidates, Branch B V2 evidence, and independent clean-negative
+review. Samples used to build the same reference are not ideal empirical-null
+controls unless a leave-one-out or cross-fit design is explicitly used.
 
 ## Manual N0 Safety Gate
 
@@ -210,18 +226,25 @@ Result:
 Phase 2 is now machine-readable:
 
 - H7-H16 are not currently a usable N0 empirical-null set for Branch B
-  matched-negative calibration under the current reference and current seed
-  labels.
+  matched-negative calibration under the current legacy seed labels.
 - This does not mean H7-H16 are unusable for reference-rebuild exploration.
   Reference rebuild should use separate `R0/R1/R2` labels.
-- Phase 3 matched-negative percentile is not ready for FP reduction.
+- Phase 3 matched-negative percentile is not ready for FP reduction until a
+  validated N0, held-out negative, or cross-fit background exists.
 - Phase 4 V2 classifier remains shadow review only.
 
-Next minimum action for Branch B calibration remains data/cohort work: define
-locked N0 samples for empirical-null use. In parallel, reference expansion can
-be tested with documented `R0/R1` rebuild candidates, but every new reference
-requires rerunning WisecondorX predict, Branch A candidates, Branch B,
-evaluation, benchmark, and report.
+Next minimum action for Branch B calibration is not to reuse the legacy seed as
+V2 benchmark. The next step is to:
+
+1. validate Branch B V2 on Y1-Y8 and H1-H6 positive recall;
+2. recompute H7-H16 labels after the H R0 shadow reference using V2 evidence;
+3. define held-out or cross-fit clean negatives for empirical-null use;
+4. only then evaluate whether matched-negative percentile reduces FP/review
+   burden without known-positive recall regression.
+
+In parallel, reference expansion can be tested with documented `R0/R1` rebuild
+candidates, but every new reference requires rerunning WisecondorX predict,
+Branch A candidates, Branch B, evaluation, benchmark, and report.
 
 If H7-H16 are included in a named shadow reference, the current `N0=0` result
 must be treated as historical old-reference evidence, not as the post-rebuild
