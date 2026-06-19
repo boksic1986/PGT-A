@@ -2,7 +2,7 @@ from pathlib import Path
 import shutil
 
 
-REFERENCE_BAMS = [SORTED_BAM.format(sample=sample_id) for sample_id in REF_SAMPLE_IDS]
+REFERENCE_BAMS = [sample_bam_path(sample_id) for sample_id in REF_SAMPLE_IDS]
 REFERENCE_SAMPLE_TEXT = "\n".join(REF_SAMPLE_IDS)
 
 
@@ -25,7 +25,7 @@ def select_allowed_samples(path_value, allowed_samples):
 
 
 def resolve_bams_for_sample_ids(sample_ids):
-    return [SORTED_BAM.format(sample=sample_id) for sample_id in sample_ids]
+    return [sample_bam_path(sample_id) for sample_id in sample_ids]
 
 
 def publish_reference_output(source_path, output_path, logger):
@@ -611,7 +611,7 @@ else:
 
         rule build_wisecondorx_reference_fixed_xx:
             input:
-                bams=[SORTED_BAM.format(sample=sample_id) for sample_id in REF_SAMPLE_IDS_BY_SEX["XX"]],
+                bams=[sample_bam_path(sample_id) for sample_id in REF_SAMPLE_IDS_BY_SEX["XX"]],
                 metadata=RUN_METADATA
             output:
                 ref=REF_OUTPUTS_BY_SEX["XX"]
@@ -652,7 +652,7 @@ else:
 
         rule build_wisecondorx_reference_fixed_xy:
             input:
-                bams=[SORTED_BAM.format(sample=sample_id) for sample_id in REF_SAMPLE_IDS_BY_SEX["XY"]],
+                bams=[sample_bam_path(sample_id) for sample_id in REF_SAMPLE_IDS_BY_SEX["XY"]],
                 metadata=RUN_METADATA
             output:
                 ref=REF_OUTPUTS_BY_SEX["XY"]

@@ -23,7 +23,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Generate baseline QC multiscale summary report.")
     parser.add_argument("--summary-tsvs", nargs="+", required=True)
     parser.add_argument("--profile-tsvs", nargs="+", required=True)
-    parser.add_argument("--fastp-jsons", nargs="+", required=True)
+    parser.add_argument("--fastp-jsons", nargs="*", default=[])
     parser.add_argument("--flagstats", nargs="+", required=True)
     parser.add_argument("--idxstats", nargs="+", required=True)
     parser.add_argument("--binsize-summary-output", required=True)
@@ -100,6 +100,25 @@ def parse_fastp_json(json_path):
         "insert_peak": insert_size.get("peak", np.nan),
         "insert_unknown": insert_size.get("unknown", np.nan),
     }
+
+
+def load_fastp_metrics(json_paths):
+    columns = [
+        "sample_id",
+        "raw_reads",
+        "clean_reads",
+        "raw_q30_rate",
+        "clean_q30_rate",
+        "raw_gc_content",
+        "clean_gc_content",
+        "duplication_rate",
+        "insert_peak",
+        "insert_unknown",
+    ]
+    rows = [parse_fastp_json(path) for path in json_paths]
+    if rows:
+        return pd.DataFrame(rows)
+    return pd.DataFrame(columns=columns)
 
 
 def parse_flagstat(flagstat_path):
@@ -569,7 +588,7 @@ def main():
     binsize_summary = build_binsize_summary(summary_df)
     sample_matrix = build_sample_matrix(summary_df)
 
-    fastp_df = pd.DataFrame([parse_fastp_json(path) for path in args.fastp_jsons])
+    fastp_df = load_fastp_metrics(args.fastp_jsons)
     flagstat_df = pd.DataFrame([parse_flagstat(path) for path in args.flagstats])
     idx_df, auto_df = compute_idxstats_summary([parse_idxstats(path) for path in args.idxstats])
     profile_df = load_profile_summary(args.profile_tsvs)

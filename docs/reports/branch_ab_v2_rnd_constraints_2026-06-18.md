@@ -261,6 +261,14 @@ Initial H7-H16 interpretation under this two-gate model:
 
 - Candidate `R0`/`R1` pool: H7-H16, after confirming QC, sex, library-quality,
   and event-pattern context.
+- First-pass named shadow reference input is now fixed by
+  `docs/reports/h7_h16_reference_rebuild_eligibility_2026-06-19.tsv`:
+  `R0` = H9, H10, H11, H12, H15, H16.
+- H8, H13, and H14 are `R1` expanded-shadow candidates only. They are not part
+  of the first-pass `R0` shadow reference because they retain old-reference
+  Branch B review events.
+- H7 is `R2` for the first-pass rebuild because previous H self-inclusion
+  experiments still showed recurring review artifacts.
 - Candidate `N0` pool: none from H7-H16 until after a post-rebuild or
   holdout/ablation run proves locked-clean behavior.
 - Candidate `N1`/`N2` status remains useful for Branch B matched-negative
@@ -289,6 +297,10 @@ Historical evaluation summary:
 Current decision:
 
 - Do not promote `XY_strict` or `XY_all` as the default reference.
+- Use `config_reference_h_r0_shadow_20260619.yaml` as the first-pass named
+  shadow reference overlay. It keeps the existing XX reference group, expands
+  the existing XY group with H9/H10/H11/H12/H15/H16 only, and writes outputs to
+  `/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619`.
 - If reference expansion is revisited, build named shadow references from a
   documented `R0/R1/R2` candidate table rather than from implicit old-reference
   Branch B labels.
@@ -827,6 +839,34 @@ It proves the opposite boundary condition:
 This interpretation is specific to Branch B calibration-negative use. It must
 not be read as a blanket exclusion from reference rebuild. Reference rebuild
 uses `R0/R1/R2`; Branch B calibration uses `N0/N1/N2`.
+
+### Shadow reference BAM reuse contract
+
+Named shadow reference rebuilds must not implicitly regenerate BAM files when
+the mapping contract is unchanged.
+
+Current contract:
+
+- If `reference_genome`, fastp/bwa/samtools parameters, and read-level
+  preprocessing are unchanged, existing sorted BAM/BAI files are valid inputs
+  for QC, tuning, WisecondorX convert, and reference build.
+- New reference ID requires rerunning WisecondorX predict, Branch A candidates,
+  Branch B evidence/classification, evaluation, benchmark, and report.
+- New reference ID does not by itself require rerunning `fastp_bwa`.
+- If binsize changes, WisecondorX NPZ must be regenerated from existing BAM.
+- If mask or WisecondorX preprocessing changes, reference and predict NPZ must
+  be regenerated under the same preprocessing contract.
+- BAM regeneration is required only if the upstream mapping/read-filtering
+  contract changes or an existing BAM/BAI fails validation.
+
+Implementation note:
+
+- `samples.<sample_id>.bam` is the workflow-level override for an existing BAM.
+- `samples.<sample_id>.bai` may explicitly override the BAM index path; if
+  omitted, the workflow expects `<bam>.bai`.
+- `samples.<sample_id>.fastp_json` may provide library-level QC metadata for
+  reporting. When an external BAM has no fastp JSON, baseline report generation
+  must not pull `fastp_bwa` back into the DAG.
 
 ## Current Recommendation
 

@@ -90,6 +90,42 @@ FASTP_JSON = project_path("fastp", "{sample}.fastp.json")
 SORTED_BAM = project_path("mapping", "{sample}.sorted.bam")
 SORTED_BAI = project_path("mapping", "{sample}.sorted.bam.bai")
 
+
+def sample_bam_path(sample_id):
+    sample_cfg = config["samples"].get(str(sample_id), {})
+    bam_path = str(sample_cfg.get("bam", "")).strip()
+    if bam_path:
+        return resolve_path(bam_path)
+    return SORTED_BAM.format(sample=sample_id)
+
+
+def sample_bai_path(sample_id):
+    sample_cfg = config["samples"].get(str(sample_id), {})
+    bai_path = str(sample_cfg.get("bai", "")).strip()
+    if bai_path:
+        return resolve_path(bai_path)
+    if str(sample_cfg.get("bam", "")).strip():
+        return f"{sample_bam_path(sample_id)}.bai"
+    return SORTED_BAI.format(sample=sample_id)
+
+
+def sample_fastp_json_path(sample_id):
+    sample_cfg = config["samples"].get(str(sample_id), {})
+    fastp_json_path = str(sample_cfg.get("fastp_json", "")).strip()
+    if fastp_json_path:
+        return resolve_path(fastp_json_path)
+    if str(sample_cfg.get("bam", "")).strip():
+        return None
+    return FASTP_JSON.format(sample=sample_id)
+
+
+def sample_fastp_json_paths(sample_ids):
+    return [
+        path
+        for path in (sample_fastp_json_path(sample_id) for sample_id in sample_ids)
+        if path
+    ]
+
 include: "rules/reference_layout.smk"
 include: "rules/predict_layout.smk"
 include: "rules/runtime_layout.smk"

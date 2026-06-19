@@ -2,7 +2,7 @@ if CNV_ENABLED:
     if PREDICT_BY_SEX_ENABLED:
         rule wisecondorx_convert_for_cnv:
             input:
-                bam=SORTED_BAM,
+                bam=lambda wildcards: sample_bam_path(wildcards.sample),
                 common_binsize=COMMON_REF_BINSIZE,
                 metadata=RUN_METADATA
             output:
@@ -31,7 +31,7 @@ if CNV_ENABLED:
         rule wisecondorx_gender_for_predict:
             input:
                 npz=CNV_NPZ,
-                bam=SORTED_BAM,
+                bam=lambda wildcards: sample_bam_path(wildcards.sample),
                 ref=GENDER_REF_OUTPUT,
                 metadata=RUN_METADATA
             output:
@@ -171,7 +171,7 @@ if CNV_ENABLED:
     else:
         rule wisecondorx_convert_for_cnv:
             input:
-                bam=SORTED_BAM,
+                bam=lambda wildcards: sample_bam_path(wildcards.sample),
                 metadata=RUN_METADATA
             output:
                 npz=CNV_NPZ

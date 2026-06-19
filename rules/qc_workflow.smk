@@ -1,7 +1,7 @@
 if "baseline_qc" in REQUESTED_TARGETS:
     rule baseline_bam_uniformity_qc:
         input:
-            bams=expand(SORTED_BAM, sample=BASELINE_SAMPLE_IDS),
+            bams=[sample_bam_path(sample_id) for sample_id in BASELINE_SAMPLE_IDS],
             metadata=RUN_METADATA
         output:
             qc_tsvs=expand(BASELINE_QC_TSV, sample=BASELINE_SAMPLE_IDS),
@@ -136,7 +136,7 @@ if "baseline_qc" in REQUESTED_TARGETS:
 
     rule baseline_multiscale_bam_uniformity_qc:
         input:
-            bams=expand(SORTED_BAM, sample=BASELINE_SAMPLE_IDS),
+            bams=[sample_bam_path(sample_id) for sample_id in BASELINE_SAMPLE_IDS],
             metadata=RUN_METADATA
         output:
             qc_tsvs=expand(BASELINE_MULTI_TSV, bin_label=BASELINE_QC_BIN_LABELS, sample=BASELINE_SAMPLE_IDS),
@@ -271,8 +271,8 @@ if "baseline_qc" in REQUESTED_TARGETS:
 
     rule baseline_sample_samtools_diagnostics:
         input:
-            bam=SORTED_BAM,
-            bai=SORTED_BAI,
+            bam=lambda wildcards: sample_bam_path(wildcards.sample),
+            bai=lambda wildcards: sample_bai_path(wildcards.sample),
             metadata=RUN_METADATA
         output:
             flagstat=BASELINE_FLAGSTAT,
@@ -300,7 +300,7 @@ if "baseline_qc" in REQUESTED_TARGETS:
         input:
             summaries=expand(BASELINE_MULTI_SUMMARY, bin_label=BASELINE_QC_BIN_LABELS),
             profiles=expand(BASELINE_MULTI_PROFILE_TSV, bin_label=BASELINE_QC_BIN_LABELS, sample=BASELINE_SAMPLE_IDS),
-            fastp_jsons=expand(FASTP_JSON, sample=BASELINE_SAMPLE_IDS),
+            fastp_jsons=sample_fastp_json_paths(BASELINE_SAMPLE_IDS),
             flagstats=expand(BASELINE_FLAGSTAT, sample=BASELINE_SAMPLE_IDS),
             idxstats=expand(BASELINE_IDXSTATS, sample=BASELINE_SAMPLE_IDS)
         output:
