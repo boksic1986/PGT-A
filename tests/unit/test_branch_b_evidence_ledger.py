@@ -173,6 +173,84 @@ class BranchBEvidenceLedgerTest(unittest.TestCase):
         self.assertEqual(summary["disposition_counts"]["REVIEW_REQUIRED"], 1)
         self.assertEqual(summary["missing_evidence_candidate_count"], 1)
 
+    def test_cnvpro_like_shadow_fields_are_candidate_level_and_unknown_safe(self):
+        a_candidates = pd.DataFrame(
+            [
+                {
+                    "candidate_id": "H6.A0001",
+                    "sample_id": "H6",
+                    "chrom": "chr21",
+                    "start": 20_000_000,
+                    "end": 24_500_000,
+                    "state": "gain",
+                    "a_zscore": 18.0,
+                    "a_abs_zscore": 18.0,
+                    "a_ratio": 0.18,
+                    "a_support_level": "strong",
+                }
+            ]
+        )
+        bins = pd.DataFrame(
+            {
+                "chrom": ["chr21"] * 5,
+                "start": [20_000_000, 21_000_000, 22_000_000, 23_000_000, 24_000_000],
+                "end": [21_000_000, 22_000_000, 23_000_000, 24_000_000, 25_000_000],
+                "calibrated_z": [5.0, 5.2, 4.8, 5.1, 5.3],
+                "robust_z": [6.0, 6.2, 5.8, 6.1, 6.3],
+                "mask_label": ["pass"] * 5,
+                "region_risk_class": ["clean"] * 5,
+                "calibration_null_eligible": [1] * 5,
+                "wisecondorx_ref_bin_count": [210.0] * 5,
+                "low_refbin_fraction": [0.0] * 5,
+                "same_chrom_ref_bin_count": [0.0] * 5,
+                "gap_centromere_telomere_overlap_fraction": [0.0] * 5,
+            }
+        )
+
+        ledger = build_candidate_evidence_ledger(
+            sample_id="H6",
+            a_candidates=a_candidates,
+            branch_b_events=pd.DataFrame(),
+            bins_df=bins,
+            reference_id="ref_mask_only_100kb",
+            negative_bank_version="negative_bank_v1",
+        )
+
+        row = ledger.iloc[0]
+        expected_columns = {
+            "cnvpro_like_gc_rc_background_status",
+            "dynamic_reference_status",
+            "matched_negative_source",
+            "matched_negative_percentile",
+            "copy_number_estimate",
+            "sex_adjusted_copy_number",
+            "mosaic_fraction_proxy",
+            "mosaic_proxy_status",
+            "event_arm_class",
+            "event_par_class",
+            "crosses_centromere",
+            "crosses_par_boundary",
+            "whole_chromosome_fraction",
+            "cnvpro_large_segment_tier",
+            "waviness",
+            "sample_noise_status",
+            "cnvpro_like_evidence_status",
+        }
+        self.assertTrue(expected_columns.issubset(set(ledger.columns)))
+        self.assertEqual(row["cnvpro_like_gc_rc_background_status"], "GC_RC_AVAILABLE")
+        self.assertEqual(row["dynamic_reference_status"], "OK")
+        self.assertEqual(row["matched_negative_source"], "UNKNOWN_BACKGROUND")
+        self.assertTrue(pd.isna(row["matched_negative_percentile"]))
+        self.assertAlmostEqual(float(row["copy_number_estimate"]), 2.36)
+        self.assertAlmostEqual(float(row["sex_adjusted_copy_number"]), 2.36)
+        self.assertAlmostEqual(float(row["mosaic_fraction_proxy"]), 0.36)
+        self.assertEqual(row["mosaic_proxy_status"], "AVAILABLE")
+        self.assertEqual(row["event_par_class"], "autosome")
+        self.assertEqual(int(row["crosses_centromere"]), 0)
+        self.assertEqual(int(row["crosses_par_boundary"]), 0)
+        self.assertEqual(row["cnvpro_large_segment_tier"], "large_ge4mb")
+        self.assertEqual(row["cnvpro_like_evidence_status"], "SHADOW_EVIDENCE_ONLY")
+
 
 if __name__ == "__main__":
     unittest.main()

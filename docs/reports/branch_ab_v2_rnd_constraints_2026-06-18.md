@@ -401,6 +401,19 @@ Promotion gates:
 - A-strong/B-weak true-positive-like patterns are not converted to hard artifacts by weak copy-number or high waviness alone.
 - High waviness or unknown dynamic reference support can only produce `REVIEW_REQUIRED` or `NO_CALL`, not direct `LIKELY_ARTIFACT`, until validated on locked negatives.
 
+Implementation status on 2026-06-19:
+
+- Implemented as an extension of the existing Branch B evidence ledger, not as a parallel caller or duplicated workflow.
+- Workflow output remains:
+  `wisecondorx/cnv/postprocess/branch_b_evidence_ledger/{sample}.candidate_evidence.tsv`.
+- The additional CNVpro-like fields are shadow-only and are not consumed by `cnv_report`, Branch A candidate generation, or the Branch B final report path.
+- Missing matched-negative context remains `UNKNOWN_BACKGROUND` / `NaN`; it is not treated as clean support.
+- Current copy-number and mosaic values are proxies derived from Branch A ratio or existing event fields when present. They are evidence fields for ablation, not production thresholds.
+- Remote validation:
+  - `tests/unit/test_branch_b_evidence_ledger.py`: `4 passed in 0.58s`.
+  - Branch A/B/S related regression set: `83 passed in 1.07s`.
+  - `snakemake -n cnv cnv_report` with `config_predict_build_ref_v2_mask_only.yaml`: `Nothing to be done`.
+
 ### Phase 1B: maskpar/mapability asset decision matrix
 
 Purpose:
