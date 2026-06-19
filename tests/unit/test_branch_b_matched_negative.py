@@ -140,6 +140,66 @@ class BranchBMatchedNegativeTest(unittest.TestCase):
         self.assertEqual(summary["background_status_counts"]["UNKNOWN_BACKGROUND"], 1)
         self.assertEqual(summary["final_report_impact"], "none_shadow_only")
 
+    def test_n1_shadow_background_is_context_only_not_empirical_null(self):
+        query = pd.DataFrame(
+            [
+                {
+                    "sample_id": "JZ26125843-56-56",
+                    "candidate_id": "JZ26125843-56-56.A0001",
+                    "chrom": "chr19",
+                    "start": 10_000_000,
+                    "end": 20_000_000,
+                    "state": "gain",
+                    "corrected_amplitude": 2.0,
+                    "final_disposition": "REVIEW_REQUIRED",
+                }
+            ]
+        )
+        background = pd.DataFrame(
+            [
+                {
+                    "sample_id": "H9",
+                    "candidate_id": "H9.A0001",
+                    "chrom": "chr19",
+                    "start": 10_000_000,
+                    "end": 20_000_000,
+                    "state": "gain",
+                    "corrected_amplitude": 1.0,
+                },
+                {
+                    "sample_id": "H10",
+                    "candidate_id": "H10.A0001",
+                    "chrom": "chr19",
+                    "start": 10_000_000,
+                    "end": 20_000_000,
+                    "state": "gain",
+                    "corrected_amplitude": 1.5,
+                },
+            ]
+        )
+        labels = pd.DataFrame(
+            [
+                {"sample_id": "H9", "negative_bank_label": "N1", "matched_negative_eligible": 0},
+                {"sample_id": "H10", "negative_bank_label": "N1", "matched_negative_eligible": 0},
+            ]
+        )
+
+        result = build_matched_negative_percentiles(
+            query,
+            background,
+            labels,
+            min_background=2,
+            feature_column="corrected_amplitude",
+            shadow_background_labels={"N1"},
+        )
+        row = result.iloc[0]
+
+        self.assertEqual(row["matched_negative_background_status"], "SHADOW_BACKGROUND")
+        self.assertEqual(row["matched_negative_scope"], "same_region")
+        self.assertEqual(int(row["matched_negative_n"]), 2)
+        self.assertAlmostEqual(float(row["matched_negative_abs_percentile"]), 1.0)
+        self.assertEqual(row["matched_negative_action"], "SHADOW_CONTEXT_ONLY")
+
 
 if __name__ == "__main__":
     unittest.main()

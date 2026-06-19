@@ -54,6 +54,8 @@ def test_phase3_matched_negative_is_shadow_only_and_report_safe():
     assert "CNV_B_MATCHED_NEGATIVE_SUMMARY" in layout
     assert "rule cnv_branch_b_matched_negative" in workflow
     assert "SCRIPT_MATCHED_NEGATIVE_ACTION" in workflow
+    assert "CNV_NEGATIVE_BANK_SHADOW_BACKGROUND_LABELS" in layout
+    assert "--shadow-background-label" in workflow
     assert "CNV_B_MATCHED_NEGATIVE" in snakefile
 
     report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]

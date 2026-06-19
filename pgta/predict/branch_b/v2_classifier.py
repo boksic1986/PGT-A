@@ -34,6 +34,11 @@ def parse_args():
 
 
 def clean_text(value, default=""):
+    try:
+        if pd.isna(value):
+            return default
+    except (TypeError, ValueError):
+        pass
     text = str(value if value is not None else "").strip()
     if not text or text.lower() == "nan":
         return default
@@ -57,8 +62,9 @@ def matched_background_status(row):
 
 
 def has_unknown_matched_negative_background(row):
-    if matched_background_status(row) == "UNKNOWN_BACKGROUND":
-        return True
+    status = matched_background_status(row)
+    if status:
+        return status == "UNKNOWN_BACKGROUND"
     source = clean_text(row.get("matched_negative_source", ""), default="").upper()
     return source == "UNKNOWN_BACKGROUND"
 
@@ -160,6 +166,16 @@ def classify_evidence_tier(row):
         if technical_risk:
             return "MATCHED_NEGATIVE_TECHNICAL_REVIEW", "BACKGROUND_INFORMATIVE", "MEDIUM"
         return "MATCHED_NEGATIVE_BORDERLINE_REVIEW", "BACKGROUND_INFORMATIVE", "MEDIUM"
+
+    if background_status == "SHADOW_BACKGROUND":
+        percentile = matched_negative_percentile(row)
+        if math.isfinite(percentile) and percentile >= 0.99 and positive_support:
+            return "SHADOW_BACKGROUND_OUTLIER_POSITIVE_SUPPORT", "SHADOW_BACKGROUND_CONTEXT", "HIGH"
+        if math.isfinite(percentile) and percentile <= 0.95:
+            return "SHADOW_BACKGROUND_COMPATIBLE", "SHADOW_BACKGROUND_CONTEXT", "LOW"
+        if technical_risk:
+            return "SHADOW_BACKGROUND_TECHNICAL_REVIEW", "SHADOW_BACKGROUND_CONTEXT", "MEDIUM"
+        return "SHADOW_BACKGROUND_BORDERLINE_REVIEW", "SHADOW_BACKGROUND_CONTEXT", "MEDIUM"
 
     if positive_support:
         return "NO_MATCHED_BACKGROUND_POSITIVE_SUPPORT", "NO_BACKGROUND_INPUT", "HIGH"

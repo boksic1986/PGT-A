@@ -690,6 +690,8 @@ if CNV_ENABLED:
                         "--similar-length-fold", str(CNV_NEGATIVE_BANK_SIMILAR_LENGTH_FOLD),
                         "--log", log[0],
                     ]
+                    for label in CNV_NEGATIVE_BANK_SHADOW_BACKGROUND_LABELS:
+                        command.extend(["--shadow-background-label", label])
                     for background_ledger in input.background_ledgers:
                         command.extend(["--background-ledger", background_ledger])
                     subprocess.run(command, check=True)

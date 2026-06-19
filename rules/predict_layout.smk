@@ -113,6 +113,11 @@ CNV_NEGATIVE_BANK_BACKGROUND_LEDGERS = [
 CNV_NEGATIVE_BANK_MIN_BACKGROUND = int(CNV_NEGATIVE_BANK_CFG.get("min_background", 5))
 CNV_NEGATIVE_BANK_SIMILAR_LENGTH_FOLD = float(CNV_NEGATIVE_BANK_CFG.get("similar_length_fold", 2.0))
 CNV_NEGATIVE_BANK_FEATURE_COLUMN = str(CNV_NEGATIVE_BANK_CFG.get("feature_column", "corrected_amplitude"))
+CNV_NEGATIVE_BANK_SHADOW_BACKGROUND_LABELS = [
+    str(item).strip().upper()
+    for item in CNV_NEGATIVE_BANK_CFG.get("shadow_background_labels", [])
+    if str(item).strip()
+]
 CNV_NEGATIVE_BANK_LABELS = str(Path(CNV_POSTPROCESS_DIR) / "negative_bank" / "negative_bank_labels.tsv")
 CNV_NEGATIVE_BANK_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "negative_bank" / "negative_bank_summary.json")
 CNV_REFERENCE_ID = str(CNV_CFG.get("reference_id", "UNKNOWN_REFERENCE"))
