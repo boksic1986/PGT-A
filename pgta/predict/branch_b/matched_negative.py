@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument("--feature-column", default="corrected_amplitude")
     parser.add_argument("--min-background", type=int, default=5)
     parser.add_argument("--similar-length-fold", type=float, default=2.0)
+    parser.add_argument("--shadow-background-label", action="append", default=[])
     parser.add_argument("--log", default="")
     return parser.parse_args()
 
@@ -79,15 +80,30 @@ def eligible_n0_samples(labels_df):
     return normalize_sample_ids(frame.loc[eligible, "sample_id"])
 
 
-def normalize_background(background_df, labels_df, query_sample_id=""):
-    n0_samples = eligible_n0_samples(labels_df)
-    if background_df is None or background_df.empty or not n0_samples:
+def eligible_label_samples(labels_df, allowed_labels):
+    labels = {str(label).strip().upper() for label in allowed_labels or [] if str(label).strip()}
+    if labels_df is None or labels_df.empty or "sample_id" not in labels_df.columns or not labels:
+        return set()
+    if "negative_bank_label" not in labels_df.columns:
+        return set()
+    frame = labels_df.copy()
+    eligible = frame["negative_bank_label"].fillna("").astype(str).str.upper().isin(labels)
+    return normalize_sample_ids(frame.loc[eligible, "sample_id"])
+
+
+def normalize_background(background_df, labels_df, query_sample_id="", allowed_labels=None):
+    background_samples = (
+        eligible_label_samples(labels_df, allowed_labels)
+        if allowed_labels
+        else eligible_n0_samples(labels_df)
+    )
+    if background_df is None or background_df.empty or not background_samples:
         return pd.DataFrame(columns=list(background_df.columns) if background_df is not None else [])
     if "sample_id" not in background_df.columns:
         return pd.DataFrame(columns=list(background_df.columns))
     frame = background_df.copy()
     sample_ids = frame["sample_id"].fillna("").astype(str).str.strip()
-    keep = sample_ids.isin(n0_samples)
+    keep = sample_ids.isin(background_samples)
     if query_sample_id:
         keep &= ~sample_ids.eq(str(query_sample_id))
     frame = frame.loc[keep].copy()
@@ -197,7 +213,7 @@ def matched_negative_payload(candidate, background_rows, status, scope, feature_
         if background_rows is not None and not background_rows.empty and feature_column in background_rows.columns
         else np.array([], dtype=np.float64)
     )
-    if status != "OK" or background_values.size == 0 or not np.isfinite(feature_value):
+    if status not in {"OK", "SHADOW_BACKGROUND"} or background_values.size == 0 or not np.isfinite(feature_value):
         return {
             "matched_negative_version": str(version),
             "matched_negative_feature": str(feature_column),
@@ -214,13 +230,13 @@ def matched_negative_payload(candidate, background_rows, status, scope, feature_
         "matched_negative_version": str(version),
         "matched_negative_feature": str(feature_column),
         "matched_negative_query_abs": abs(feature_value),
-        "matched_negative_background_status": "OK",
+        "matched_negative_background_status": str(status),
         "matched_negative_scope": scope,
         "matched_negative_n": int(background_values.size),
         "matched_negative_abs_percentile": percentile_leq(feature_value, background_values),
         "matched_negative_abs_median": float(np.median(background_values)),
         "matched_negative_abs_p95": float(np.percentile(background_values, 95)),
-        "matched_negative_action": "BACKGROUND_SUPPORTED",
+        "matched_negative_action": "BACKGROUND_SUPPORTED" if status == "OK" else "SHADOW_CONTEXT_ONLY",
     }
 
 
@@ -231,6 +247,7 @@ def build_matched_negative_percentiles(
     min_background=5,
     similar_length_fold=2.0,
     feature_column="corrected_amplitude",
+    shadow_background_labels=None,
     version="branch_ab_v2",
 ):
     if query_ledger is None or query_ledger.empty:
@@ -240,6 +257,12 @@ def build_matched_negative_percentiles(
     query = query_ledger.copy()
     query_sample_id = str(query["sample_id"].iloc[0]) if "sample_id" in query.columns and len(query) else ""
     background = normalize_background(background_ledgers, negative_bank_labels, query_sample_id=query_sample_id)
+    shadow_background = normalize_background(
+        background_ledgers,
+        negative_bank_labels,
+        query_sample_id=query_sample_id,
+        allowed_labels=shadow_background_labels,
+    )
 
     payloads = []
     for _, candidate in query.iterrows():
@@ -250,6 +273,18 @@ def build_matched_negative_percentiles(
             min_background=max(int(min_background), 1),
             similar_length_fold=similar_length_fold,
         )
+        if status == "UNKNOWN_BACKGROUND" and shadow_background_labels:
+            shadow_status, shadow_scope, shadow_rows = select_background_rows(
+                candidate,
+                shadow_background,
+                feature_column,
+                min_background=max(int(min_background), 1),
+                similar_length_fold=similar_length_fold,
+            )
+            if shadow_status == "OK":
+                status = "SHADOW_BACKGROUND"
+                scope = shadow_scope
+                background_rows = shadow_rows
         payloads.append(matched_negative_payload(candidate, background_rows, status, scope, feature_column, version))
     annotated = pd.concat([query.reset_index(drop=True), pd.DataFrame(payloads)], axis=1)
     return annotated
@@ -289,6 +324,7 @@ def main():
         min_background=args.min_background,
         similar_length_fold=args.similar_length_fold,
         feature_column=args.feature_column,
+        shadow_background_labels=set(args.shadow_background_label or []),
         version=args.version,
     )
     write_table(args.output_ledger, annotated)

@@ -33,6 +33,7 @@ core:
         feature_column: "corrected_amplitude"
         min_background: 5
         similar_length_fold: 2.0
+        shadow_background_labels: ["N1"]
       evaluation:
         truth_tsv: "/data/project/CNV/PGT-A/refactor_validation_20260419/sample_info/positive_truth_events.tsv"
       benchmark:

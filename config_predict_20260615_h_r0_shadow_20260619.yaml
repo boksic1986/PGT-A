@@ -31,6 +31,14 @@ core:
         feature_column: "corrected_amplitude"
         min_background: 5
         similar_length_fold: 2.0
+        shadow_background_labels: ["N1"]
+        background_ledgers:
+          - "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_20260608_h_r0_shadow_ref_20260619/wisecondorx/cnv/postprocess/evidence_ledger/H9.candidate_evidence.tsv"
+          - "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_20260608_h_r0_shadow_ref_20260619/wisecondorx/cnv/postprocess/evidence_ledger/H10.candidate_evidence.tsv"
+          - "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_20260608_h_r0_shadow_ref_20260619/wisecondorx/cnv/postprocess/evidence_ledger/H11.candidate_evidence.tsv"
+          - "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_20260608_h_r0_shadow_ref_20260619/wisecondorx/cnv/postprocess/evidence_ledger/H12.candidate_evidence.tsv"
+          - "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_20260608_h_r0_shadow_ref_20260619/wisecondorx/cnv/postprocess/evidence_ledger/H15.candidate_evidence.tsv"
+          - "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_20260608_h_r0_shadow_ref_20260619/wisecondorx/cnv/postprocess/evidence_ledger/H16.candidate_evidence.tsv"
       postprocess:
         calling:
           hmm_role: "sidecar"
