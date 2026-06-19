@@ -114,11 +114,21 @@ def summarize_negative_bank(labeled_df, version="branch_ab_v2"):
         if "matched_negative_eligible" in labeled_df.columns
         else 0
     )
+    matched_ready = matched_count > 0
+    n0_sample_ids = []
+    if matched_ready and "sample_id" in labeled_df.columns and "matched_negative_eligible" in labeled_df.columns:
+        eligible = pd.to_numeric(labeled_df["matched_negative_eligible"], errors="coerce").fillna(0).astype(float).gt(0)
+        n0_sample_ids = sorted(clean_text(value) for value in labeled_df.loc[eligible, "sample_id"] if clean_text(value))
     return {
         "version": str(version),
         "sample_count": int(len(labeled_df)),
         "label_counts": {str(key): int(value) for key, value in label_counts.items()},
         "matched_negative_eligible_count": matched_count,
+        "matched_negative_ready": matched_ready,
+        "matched_negative_blocking_reason": "ready" if matched_ready else "no_n0_locked_clean_negative_samples",
+        "n0_sample_ids": n0_sample_ids,
+        "n1_shadow_reference_candidate_count": int(label_counts.get("N1", 0)),
+        "n2_holdout_count": int(label_counts.get("N2", 0)),
         "n0_only_for_empirical_null": True,
     }
 
