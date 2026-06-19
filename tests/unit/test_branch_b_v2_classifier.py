@@ -65,6 +65,36 @@ def test_unknown_matched_negative_background_forces_review_not_artifact():
     assert "unknown_matched_negative_background" in row["v2_classifier_reason"]
 
 
+def test_phase1_unknown_matched_negative_source_forces_review_not_artifact():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "H2",
+                "candidate_id": "H2_chr6_tail_gain",
+                "chrom": "chr6",
+                "start": 168000001,
+                "end": 170000000,
+                "state": "gain",
+                "a_abs_zscore": 17.0,
+                "branch_b_report_class": "candidate_suppressed",
+                "branch_b_artifact_status": "artifact",
+                "branch_b_keep_event": 0,
+                "final_disposition": "LIKELY_ARTIFACT",
+                "matched_negative_source": "UNKNOWN_BACKGROUND",
+                "matched_negative_percentile": pd.NA,
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["final_disposition"] == "LIKELY_ARTIFACT"
+    assert row["matched_negative_source"] == "UNKNOWN_BACKGROUND"
+    assert row["v2_candidate_class"] == "REVIEW_REQUIRED"
+    assert row["v2_classifier_action"] == "SHADOW_REVIEW_ONLY"
+    assert row["v2_classifier_reason"] == "unknown_matched_negative_background"
+
+
 def test_confirmed_legacy_candidate_is_confirmed_shadow():
     classified = classify_branch_b_v2_candidates(_candidate_frame())
     row = classified.loc[classified["candidate_id"].eq("Y1_chr21_gain")].iloc[0]
