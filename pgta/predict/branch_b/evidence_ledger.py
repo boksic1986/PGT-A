@@ -39,6 +39,23 @@ LEDGER_COLUMNS = [
     "sample_noise_mad",
     "refmap_status",
     "calibration_null_status",
+    "cnvpro_like_gc_rc_background_status",
+    "dynamic_reference_status",
+    "matched_negative_source",
+    "matched_negative_percentile",
+    "copy_number_estimate",
+    "sex_adjusted_copy_number",
+    "mosaic_fraction_proxy",
+    "mosaic_proxy_status",
+    "event_arm_class",
+    "event_par_class",
+    "crosses_centromere",
+    "crosses_par_boundary",
+    "whole_chromosome_fraction",
+    "cnvpro_large_segment_tier",
+    "waviness",
+    "sample_noise_status",
+    "cnvpro_like_evidence_status",
     "evidence_missing_reason",
 ]
 
@@ -296,6 +313,161 @@ def classify_calibration_null_status(event_bins):
     return "OK"
 
 
+def classify_cnvpro_like_gc_rc_background_status(raw_amplitude, corrected_amplitude, event_bins):
+    if event_bins.empty:
+        return "UNKNOWN"
+    if np.isfinite(raw_amplitude) and np.isfinite(corrected_amplitude):
+        return "GC_RC_AVAILABLE"
+    if np.isfinite(raw_amplitude):
+        return "RAW_ONLY"
+    return "UNKNOWN"
+
+
+def classify_dynamic_reference_status(refmap_status):
+    status = str(refmap_status or "").strip().upper()
+    if status == "OK":
+        return "OK"
+    if status == "UNKNOWN":
+        return "UNKNOWN"
+    if status == "SAME_CHROM_REF_LEAKAGE":
+        return "INVALID_REF_LEAKAGE"
+    if status.startswith("LOW_REF") or status.startswith("LOW_REFBIN"):
+        return "REVIEW"
+    return "REVIEW"
+
+
+def estimate_copy_number(candidate_row, event_row):
+    if event_row is not None:
+        value = first_numeric(event_row, ["copy_number_estimate", "sex_adjusted_copy_number"], default=np.nan)
+        if np.isfinite(value):
+            return value
+    ratio = safe_float(candidate_row.get("a_ratio", np.nan), default=np.nan)
+    if not np.isfinite(ratio):
+        return np.nan
+    return float(2.0 * (1.0 + ratio))
+
+
+def estimate_sex_adjusted_copy_number(candidate_row, event_row, copy_number):
+    if event_row is not None:
+        value = first_numeric(event_row, ["sex_adjusted_copy_number"], default=np.nan)
+        if np.isfinite(value):
+            return value
+    return copy_number
+
+
+def estimate_mosaic_fraction(candidate_row, copy_number):
+    if not np.isfinite(copy_number):
+        return np.nan, "UNKNOWN"
+    direction = state_direction(candidate_row["state"])
+    if direction > 0.0:
+        value = copy_number - 2.0
+    elif direction < 0.0:
+        value = 2.0 - copy_number
+    else:
+        return np.nan, "UNKNOWN"
+    return float(np.clip(value, 0.0, 1.0)), "AVAILABLE"
+
+
+def classify_event_arm(candidate_row, event_row):
+    if event_row is not None:
+        value = first_text(event_row, ["event_arm_class", "arm_class"], default="")
+        if value:
+            return value
+    chrom = str(candidate_row["chrom"])
+    if chrom in {"chrX", "chrY", "X", "Y"}:
+        return "sex_chromosome"
+    return "autosome"
+
+
+def _boolean_column_fraction(frame, columns):
+    if frame.empty:
+        return np.nan
+    for column in columns:
+        if column not in frame.columns:
+            continue
+        values = pd.to_numeric(frame[column], errors="coerce")
+        if values.notna().any():
+            return float(values.fillna(0.0).gt(0.0).mean())
+        text = frame[column].fillna("").astype(str).str.lower()
+        if text.ne("").any():
+            return float(text.isin({"1", "true", "yes", "par"}).mean())
+    return np.nan
+
+
+def classify_event_par(candidate_row, event_bins):
+    chrom = str(candidate_row["chrom"])
+    if chrom not in {"chrX", "chrY", "X", "Y"}:
+        return "autosome"
+    par_fraction = _boolean_column_fraction(
+        event_bins,
+        ["is_PAR", "is_par", "is_par_region", "par_overlap_fraction"],
+    )
+    if not np.isfinite(par_fraction):
+        return "UNKNOWN"
+    if par_fraction >= 0.95:
+        return "par_only"
+    if par_fraction > 0.0:
+        return "mixed_par_nonpar"
+    return "nonpar"
+
+
+def calculate_crosses_centromere(event_row, event_bins):
+    if event_row is not None:
+        value = first_numeric(event_row, ["crosses_centromere", "cnvseq_crosses_gap_or_centromere"], default=np.nan)
+        if np.isfinite(value):
+            return int(value > 0.0)
+    if event_bins.empty:
+        return 0
+    for column in ["is_near_centromere", "near_centromere", "gap_centromere_telomere_overlap_fraction"]:
+        if column not in event_bins.columns:
+            continue
+        values = pd.to_numeric(event_bins[column], errors="coerce")
+        if values.notna().any() and bool(values.fillna(0.0).gt(0.0).any()):
+            return 1
+    return 0
+
+
+def calculate_whole_chromosome_fraction(candidate_row, event_bins, bins_df):
+    if event_bins.empty or bins_df is None or bins_df.empty or "chrom" not in bins_df.columns:
+        return np.nan
+    chrom = str(candidate_row["chrom"])
+    chrom_bins = bins_df[bins_df["chrom"].astype(str).eq(chrom)]
+    if chrom_bins.empty:
+        return np.nan
+    return float(len(event_bins) / len(chrom_bins))
+
+
+def classify_large_segment_tier(candidate_row, whole_chromosome_fraction):
+    length = max(int(candidate_row["end"]) - int(candidate_row["start"]), 0)
+    if length >= 20_000_000 and np.isfinite(whole_chromosome_fraction) and whole_chromosome_fraction >= 0.90:
+        return "whole_chromosome"
+    if length >= 10_000_000:
+        return "large_ge10mb"
+    if length >= 4_000_000:
+        return "large_ge4mb"
+    if length >= 2_000_000:
+        return "reportable_ge2mb"
+    if length >= 1_000_000:
+        return "review_ge1mb"
+    return "subreportable_lt1mb"
+
+
+def classify_sample_noise_status(waviness):
+    if not np.isfinite(waviness):
+        return "UNKNOWN"
+    if waviness <= 1.0:
+        return "OK"
+    if waviness <= 2.0:
+        return "MODERATE_WAVINESS"
+    return "HIGH_WAVINESS"
+
+
+def classify_cnvpro_like_evidence_status(event_bins):
+    if event_bins.empty:
+        return "UNKNOWN"
+    return "SHADOW_EVIDENCE_ONLY"
+
+
 def derive_disposition(event_row):
     if event_row is None:
         return "REVIEW_REQUIRED"
@@ -360,6 +532,23 @@ def build_candidate_evidence_ledger(
         )
         refmap_status = classify_refmap_status(event_row, event_bins)
         calibration_null_status = classify_calibration_null_status(event_bins)
+        cnvpro_like_gc_rc_background_status = classify_cnvpro_like_gc_rc_background_status(
+            raw_amplitude,
+            corrected_amplitude,
+            event_bins,
+        )
+        dynamic_reference_status = classify_dynamic_reference_status(refmap_status)
+        copy_number_estimate = estimate_copy_number(candidate_row, event_row)
+        sex_adjusted_copy_number = estimate_sex_adjusted_copy_number(candidate_row, event_row, copy_number_estimate)
+        mosaic_fraction_proxy, mosaic_proxy_status = estimate_mosaic_fraction(candidate_row, sex_adjusted_copy_number)
+        event_par_class = classify_event_par(candidate_row, event_bins)
+        crosses_centromere = calculate_crosses_centromere(event_row, event_bins)
+        crosses_par_boundary = int(event_par_class == "mixed_par_nonpar")
+        whole_chromosome_fraction = calculate_whole_chromosome_fraction(candidate_row, event_bins, bins_df)
+        cnvpro_large_segment_tier = classify_large_segment_tier(candidate_row, whole_chromosome_fraction)
+        waviness = sample_noise_mad
+        sample_noise_status = classify_sample_noise_status(waviness)
+        cnvpro_like_evidence_status = classify_cnvpro_like_evidence_status(event_bins)
         reasons = []
         if event_row is None:
             append_reason(reasons, "branch_b_event_missing")
@@ -397,6 +586,23 @@ def build_candidate_evidence_ledger(
             "sample_noise_mad": sample_noise_mad,
             "refmap_status": refmap_status,
             "calibration_null_status": calibration_null_status,
+            "cnvpro_like_gc_rc_background_status": cnvpro_like_gc_rc_background_status,
+            "dynamic_reference_status": dynamic_reference_status,
+            "matched_negative_source": "UNKNOWN_BACKGROUND",
+            "matched_negative_percentile": np.nan,
+            "copy_number_estimate": copy_number_estimate,
+            "sex_adjusted_copy_number": sex_adjusted_copy_number,
+            "mosaic_fraction_proxy": mosaic_fraction_proxy,
+            "mosaic_proxy_status": mosaic_proxy_status,
+            "event_arm_class": classify_event_arm(candidate_row, event_row),
+            "event_par_class": event_par_class,
+            "crosses_centromere": crosses_centromere,
+            "crosses_par_boundary": crosses_par_boundary,
+            "whole_chromosome_fraction": whole_chromosome_fraction,
+            "cnvpro_large_segment_tier": cnvpro_large_segment_tier,
+            "waviness": waviness,
+            "sample_noise_status": sample_noise_status,
+            "cnvpro_like_evidence_status": cnvpro_like_evidence_status,
             "evidence_missing_reason": ";".join(reasons),
         }
         rows.append(payload)
