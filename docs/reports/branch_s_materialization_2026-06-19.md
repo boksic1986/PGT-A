@@ -73,6 +73,45 @@ Result:
 Nothing to be done (all requested files are present and up to date).
 ```
 
+Score-direction fix rerun, Y1-Y8:
+
+```bash
+ssh fengxian "cd /data/project/CNV/PGT-A/refactor_validation_20260419 && /biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s /data/project/CNV/PGT-A/refactor_validation_20260419/Snakefile --configfile /data/project/CNV/PGT-A/refactor_validation_20260419/config_predict_build_ref_v2_mask_only.yaml --cores 8 cnv --forcerun cnv_branch_s_shadow --rerun-triggers mtime"
+```
+
+Result:
+
+```text
+8 cnv_branch_s_shadow jobs completed.
+Complete log: .snakemake/log/2026-06-19T105256.763840.snakemake.log
+```
+
+Score-direction fix rerun, H1-H16:
+
+```bash
+ssh fengxian "cd /data/project/CNV/PGT-A/refactor_validation_20260419 && /biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s /data/project/CNV/PGT-A/refactor_validation_20260419/Snakefile --configfile /data/project/CNV/PGT-A/refactor_validation_20260419/config_predict_h_20260608_mask_only.yaml --cores 8 cnv --forcerun cnv_branch_s_shadow --rerun-triggers mtime"
+```
+
+Result:
+
+```text
+16 cnv_branch_s_shadow jobs completed.
+Complete log: .snakemake/log/2026-06-19T105318.116994.snakemake.log
+```
+
+Score-direction fix rerun, 2026-06-15:
+
+```bash
+ssh fengxian "cd /data/project/CNV/PGT-A/refactor_validation_20260419 && /biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s /data/project/CNV/PGT-A/refactor_validation_20260419/Snakefile --configfile /data/project/CNV/PGT-A/refactor_validation_20260419/config_predict_20260615_mask_only.yaml --cores 8 cnv --forcerun cnv_branch_s_shadow --rerun-triggers mtime"
+```
+
+Result:
+
+```text
+5 cnv_branch_s_shadow jobs completed.
+Complete log: .snakemake/log/2026-06-19T105338.063294.snakemake.log
+```
+
 ## Materialized Output Summary
 
 | run | Branch S dir exists | evidence tables | state-score tables | summary JSON | all shadow-only | replaces final report |
@@ -91,13 +130,17 @@ Output roots:
 
 ## SCA Truth Check
 
-Current chrX-loss truth samples show strong Branch A chrX loss candidates, but the current Branch S state-score sign is not biologically validated:
+The first materialized Branch S version used region-level `mean_calibrated_z` directly for state scores. That was not enough for sex-chromosome state direction: known chrX-loss truth samples had positive X non-PAR mean calibrated z while Branch A called chrX loss.
 
-| run | sample | truth context | X non-PAR mean calibrated z | X non-PAR median calibrated z | X Branch A candidate count | current X scores |
-|---|---|---|---:|---:|---:|---|
-| Y1-Y8 | Y3 | chrX loss / XO-like | 2.4326 | -0.0036 | 2 | `X_GAIN=2.433`, `X_LOSS=-2.433` |
-| H1-H16 | H5 | chrX loss segments, including mosaic | 2.1368 | -0.0044 | 2 | `X_GAIN=2.137`, `X_LOSS=-2.137` |
-| H1-H16 | H6 | whole-chrX loss / XO-like | 1.9344 | -0.0050 | 2 | `X_GAIN=1.934`, `X_LOSS=-1.934` |
+The score-direction contract was corrected so state scores prefer overlapping Branch A candidate state and `a_zscore` direction when a sex-chromosome candidate exists. Region-level calibrated z remains fallback/context evidence.
+
+Post-fix chrX-loss truth check:
+
+| run | sample | truth context | X Branch A candidate count | current X scores | state-score reason |
+|---|---|---|---:|---|---|
+| Y1-Y8 | Y3 | chrX loss / XO-like | 2 | `X_GAIN=-77.063`, `X_LOSS=77.063` | `branch_a_candidate_zscore` |
+| H1-H16 | H5 | chrX loss segments, including mosaic | 2 | `X_GAIN=-78.478`, `X_LOSS=78.478` | `branch_a_candidate_zscore` |
+| H1-H16 | H6 | whole-chrX loss / XO-like | 2 | `X_GAIN=-73.654`, `X_LOSS=73.654` | `branch_a_candidate_zscore` |
 
 The formal Branch A candidates for these same samples are loss calls:
 
@@ -111,8 +154,8 @@ Interpretation:
 
 - Branch S is materialized and report-safe.
 - Branch S region evidence is useful for SCA review design.
-- The current `X_GAIN` / `X_LOSS` state scores must not be promoted to SCA classification because their sign does not currently align with known chrX-loss truth.
-- Before any Branch S promotion, score direction must be reworked or redefined against a locked SCA truth set and sex-aware baseline.
+- The current `X_GAIN` / `X_LOSS` state scores now align with the known chrX-loss truth samples that have strong Branch A chrX loss candidates.
+- Branch S still must not be promoted to SCA classification because the locked SCA truth set is too narrow and loss-heavy.
 
 ## Current Conclusion
 
@@ -120,4 +163,4 @@ This completes materialization of Branch S shadow outputs for Y1-Y8, H1-H16, and
 
 The output is safe to keep in the workflow as shadow evidence because every summary remains `final_report_impact=none_shadow_only` and `replaces_final_report=false`.
 
-It is not ready for clinical/reporting SCA decisions. The next technical task is to fix or explicitly redefine SCA state-score direction, then validate on additional locked SCA positives and clean XX/XY negatives.
+It is not ready for clinical/reporting SCA decisions. The next technical task is validation on additional locked SCA positives and clean XX/XY negatives, especially X gain, XXY/XXX/XYY, Y-loss, mosaic SCA, and PAR/XY-homology edge cases.

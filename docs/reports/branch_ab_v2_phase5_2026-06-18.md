@@ -159,5 +159,6 @@ Updated limitation:
 
 - Branch S output has now been materialized for Y1-Y8, H1-H16, and the 2026-06-15 exploratory samples.
 - All generated Branch S outputs remain shadow-only and do not replace final report logic.
-- Current chrX-loss truth samples Y3, H5, and H6 still show a score-direction problem: Branch A calls chrX loss, but the current Branch S `X_GAIN` score is positive and `X_LOSS` score is negative.
-- Therefore Branch S state scores remain review-design evidence only. They must not be promoted to SCA classification or reportable calls until the direction convention is fixed or explicitly redefined against a locked SCA validation set.
+- The initial materialized state-score direction was corrected after chrX-loss truth review. Branch S now prefers overlapping Branch A candidate state and `a_zscore` direction when a sex-chromosome candidate exists.
+- Post-fix Y3, H5, and H6 chrX-loss truth samples have positive `X_LOSS` and negative `X_GAIN` scores with `state_score_reason=branch_a_candidate_zscore`.
+- Branch S state scores remain review-design evidence only. They must not be promoted to SCA classification or reportable calls until a separate locked SCA validation set supports promotion.

@@ -88,3 +88,61 @@ def test_branch_s_shadow_outputs_empty_shadow_tables_when_no_sex_bins():
     assert set(scores["state_score_status"]) == {"INSUFFICIENT_EVIDENCE"}
     assert summary["region_count"] == 0
     assert summary["final_report_impact"] == "none_shadow_only"
+
+
+def test_branch_s_state_scores_use_branch_a_direction_when_region_z_is_opposite():
+    bins = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 58_000_000,
+                "calibrated_z": 2.5,
+                "robust_z": 30.0,
+                "is_PAR": False,
+            },
+            {
+                "chrom": "chrX",
+                "start": 61_000_000,
+                "end": 155_000_000,
+                "calibrated_z": 2.0,
+                "robust_z": 25.0,
+                "is_PAR": False,
+            },
+        ]
+    )
+    a_candidates = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 58_000_000,
+                "state": "loss",
+                "a_zscore": -65.8,
+                "a_abs_zscore": 65.8,
+            },
+            {
+                "chrom": "chrX",
+                "start": 61_000_000,
+                "end": 155_000_000,
+                "state": "loss",
+                "a_zscore": -77.1,
+                "a_abs_zscore": 77.1,
+            },
+        ]
+    )
+
+    _evidence, scores = build_branch_s_shadow(
+        sample_id="XO",
+        bins=bins,
+        a_candidates=a_candidates,
+        gender=pd.DataFrame(),
+    )
+
+    x_gain = scores.loc[scores["sca_state"] == "X_GAIN", "state_score"].iat[0]
+    x_loss = scores.loc[scores["sca_state"] == "X_LOSS", "state_score"].iat[0]
+    loss_reason = scores.loc[scores["sca_state"] == "X_LOSS", "state_score_reason"].iat[0]
+
+    assert x_loss > 0
+    assert x_gain < 0
+    assert loss_reason == "branch_a_candidate_zscore"

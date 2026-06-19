@@ -486,7 +486,8 @@ Status 2026-06-18:
   - `wisecondorx/cnv/postprocess/branch_s/{sample}.sca_state_scores.tsv`
   - `wisecondorx/cnv/postprocess/branch_s/{sample}.summary.json`
 - Remote validation:
-  - Branch A/B/S related unit regression: `81 passed in 1.01s`.
+  - Branch S unit test: `3 passed in 0.58s`.
+  - Branch A/B/S related unit regression after score-direction fix: `82 passed in 1.11s`.
   - `snakemake -n cnv` after execution: `Nothing to be done`.
 - Contract remains shadow-only:
   - `final_report_impact=none_shadow_only`
@@ -515,15 +516,16 @@ Current SCA truth coverage:
 | sample | truth | current validation status |
 |---|---|---|
 | Y3 | `chrX loss`, `45,XO` | Branch S output exists, but this is only one old-batch XO-like case. |
-| H5 | multi-segment `chrX loss`, including mosaic Xq12q13.1 | Branch S output exists, but score direction is not validated. |
-| H6 | whole-`chrX loss`, `45,XO` inference | Branch S output exists, but score direction is not validated. |
+| H5 | multi-segment `chrX loss`, including mosaic Xq12q13.1 | Branch S output exists and current score direction agrees with Branch A chrX-loss evidence, but truth coverage remains narrow. |
+| H6 | whole-`chrX loss`, `45,XO` inference | Branch S output exists and current score direction agrees with Branch A chrX-loss evidence, but truth coverage remains narrow. |
 
-Current score-direction caveat:
+Current score-direction status:
 
 - Y3, H5, and H6 all have strong Branch A chrX loss candidates.
-- Current Branch S `X_NONPAR mean_calibrated_z` is positive for all three samples.
-- Current Branch S state scores therefore produce positive `X_GAIN` and negative `X_LOSS` values for known chrX-loss truth samples.
-- Branch S state scores must not be interpreted as SCA gain/loss classification until this direction convention is fixed or explicitly redefined against locked SCA truth data.
+- The initial Branch S implementation exposed a direction problem because `X_NONPAR mean_calibrated_z` was positive for all three chrX-loss truth samples.
+- The score-direction contract now prefers overlapping Branch A candidate state and `a_zscore` direction when a sex-chromosome candidate exists.
+- Post-fix current scores are positive for `X_LOSS` and negative for `X_GAIN` in Y3, H5, and H6, with `state_score_reason=branch_a_candidate_zscore`.
+- Branch S state scores still must not be interpreted as reportable SCA classification until locked SCA validation is complete.
 
 Current decision:
 
