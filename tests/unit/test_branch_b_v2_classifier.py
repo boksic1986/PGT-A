@@ -112,3 +112,104 @@ def test_v2_summary_reports_review_burden_without_report_promotion():
     assert summary["candidate_count"] == 2
     assert summary["class_counts"] == {"CONFIRMED_SHADOW": 1, "REVIEW_REQUIRED": 1}
     assert summary["final_report_impact"] == "none_shadow_only"
+
+
+def test_unknown_background_strong_a_support_gets_positive_review_tier():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "H6",
+                "candidate_id": "H6_chr21_gain",
+                "chrom": "chr21",
+                "start": 15_000_001,
+                "end": 42_000_000,
+                "state": "gain",
+                "a_abs_zscore": 7.11,
+                "same_direction_fraction": 0.82,
+                "corrected_amplitude": 2.4,
+                "final_disposition": "LIKELY_ARTIFACT",
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "matched_negative_action": "REVIEW_NO_CALL",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "REVIEW_REQUIRED"
+    assert row["v2_classifier_action"] == "SHADOW_REVIEW_ONLY"
+    assert row["v2_final_report_impact"] == "none_shadow_only"
+    assert row["v2_evidence_tier"] == "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT"
+    assert row["v2_review_priority"] == "HIGH"
+
+
+def test_matched_negative_outlier_gets_positive_support_tier_shadow_only():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "Y2",
+                "candidate_id": "Y2_chr21_gain",
+                "chrom": "chr21",
+                "start": 20_000_000,
+                "end": 42_000_000,
+                "state": "gain",
+                "a_abs_zscore": 15.0,
+                "same_direction_fraction": 0.95,
+                "corrected_amplitude": 5.1,
+                "final_disposition": "REVIEW_REQUIRED",
+                "matched_negative_background_status": "OK",
+                "matched_negative_abs_percentile": 0.995,
+                "matched_negative_action": "BACKGROUND_SUPPORTED",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "REVIEW_REQUIRED"
+    assert row["v2_evidence_tier"] == "MATCHED_NEGATIVE_OUTLIER_POSITIVE_SUPPORT"
+    assert row["v2_evidence_gate"] == "BACKGROUND_INFORMATIVE"
+    assert row["v2_review_priority"] == "HIGH"
+
+
+def test_v2_summary_reports_evidence_tier_counts():
+    classified = classify_branch_b_v2_candidates(
+        pd.DataFrame(
+            [
+                {
+                    "sample_id": "H6",
+                    "candidate_id": "H6_chr21_gain",
+                    "chrom": "chr21",
+                    "start": 15_000_001,
+                    "end": 42_000_000,
+                    "state": "gain",
+                    "a_abs_zscore": 7.11,
+                    "same_direction_fraction": 0.82,
+                    "corrected_amplitude": 2.4,
+                    "final_disposition": "LIKELY_ARTIFACT",
+                    "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                },
+                {
+                    "sample_id": "Y2",
+                    "candidate_id": "Y2_chr21_gain",
+                    "chrom": "chr21",
+                    "start": 20_000_000,
+                    "end": 42_000_000,
+                    "state": "gain",
+                    "a_abs_zscore": 15.0,
+                    "same_direction_fraction": 0.95,
+                    "corrected_amplitude": 5.1,
+                    "final_disposition": "REVIEW_REQUIRED",
+                    "matched_negative_background_status": "OK",
+                    "matched_negative_abs_percentile": 0.995,
+                },
+            ]
+        )
+    )
+    summary = summarize_v2_classification("mixed", classified)
+
+    assert summary["evidence_tier_counts"] == {
+        "MATCHED_NEGATIVE_OUTLIER_POSITIVE_SUPPORT": 1,
+        "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT": 1,
+    }
+    assert summary["review_priority_counts"] == {"HIGH": 2}
