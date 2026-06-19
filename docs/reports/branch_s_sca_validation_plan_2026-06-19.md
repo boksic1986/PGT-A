@@ -48,18 +48,18 @@ Current truth events with sex-chromosome involvement:
 | sample | truth | current limitation |
 |---|---|---|
 | Y3 | `chrX loss`, `45,XO` | Branch S output exists, but only one old-batch XO-like case. |
-| H5 | three `chrX loss` segments, including one mosaic segment | Branch S output exists, but score direction is not validated. |
-| H6 | whole-`chrX loss`, `45,XO` inference | Branch S output exists, but score direction is not validated. |
+| H5 | three `chrX loss` segments, including one mosaic segment | Branch S output exists and current score direction agrees with Branch A chrX-loss evidence, but truth coverage remains narrow. |
+| H6 | whole-`chrX loss`, `45,XO` inference | Branch S output exists and current score direction agrees with Branch A chrX-loss evidence, but truth coverage remains narrow. |
 
-Current Branch S score-direction caveat:
+Current Branch S score-direction check:
 
-| run | sample | truth context | X non-PAR mean calibrated z | X Branch A candidate count | current X scores |
-|---|---|---|---:|---:|---|
-| Y1-Y8 | Y3 | chrX loss / XO-like | 2.4326 | 2 | `X_GAIN=2.433`, `X_LOSS=-2.433` |
-| H1-H16 | H5 | chrX loss segments, including mosaic | 2.1368 | 2 | `X_GAIN=2.137`, `X_LOSS=-2.137` |
-| H1-H16 | H6 | whole-chrX loss / XO-like | 1.9344 | 2 | `X_GAIN=1.934`, `X_LOSS=-1.934` |
+| run | sample | truth context | X Branch A candidate count | current X scores | state-score reason |
+|---|---|---|---:|---|---|
+| Y1-Y8 | Y3 | chrX loss / XO-like | 2 | `X_GAIN=-77.063`, `X_LOSS=77.063` | `branch_a_candidate_zscore` |
+| H1-H16 | H5 | chrX loss segments, including mosaic | 2 | `X_GAIN=-78.478`, `X_LOSS=78.478` | `branch_a_candidate_zscore` |
+| H1-H16 | H6 | whole-chrX loss / XO-like | 2 | `X_GAIN=-73.654`, `X_LOSS=73.654` | `branch_a_candidate_zscore` |
 
-The corresponding Branch A chrX candidates are all loss calls with strong z support. Therefore current Branch S state scores must not be interpreted as gain/loss classification. At this stage Branch S can provide region-level evidence and review context only.
+The score-direction contract now uses overlapping Branch A candidate state and `a_zscore` when available, with region-level calibrated z retained as fallback/context. This fixes the known chrX-loss direction issue, but it does not validate Branch S as a reportable SCA classifier. At this stage Branch S can provide region-level evidence and review context only.
 
 Missing locked truth classes:
 
@@ -105,7 +105,7 @@ At minimum, promotion review must report:
 Promotion can only be considered if:
 
 1. Y1-Y8 and H1-H6 known-positive recall does not regress.
-2. H5 and H6 chrX loss signals are detected in the formal workflow with score direction that agrees with the locked truth definition.
+2. H5 and H6 chrX loss signals remain detected in the formal workflow with score direction that agrees with the locked truth definition.
 3. No clean XX/XY negative is converted into a reportable SCA call by Branch S.
 4. Branch S decisions are reproducible across batches and not tuned on the 2026-06-15 exploratory samples.
 5. Branch S remains explainable at the region level: X non-PAR, X PAR, Y non-PAR, and Y PAR evidence must be visible.
@@ -124,8 +124,8 @@ The five-sample run must not be used as a locked validation set because it has a
 
 ## Next Minimum Workflow Actions
 
-1. Rework or explicitly redefine Branch S state-score direction so chrX-loss truth is not represented as positive `X_GAIN` evidence.
-2. Keep H7-H16 as N1/N2 review labels; do not use them as clean SCA negatives.
-3. Collect locked clean XX and XY negatives before estimating SCA specificity.
-4. Collect additional SCA positives before promotion, especially X gain / XXY / XXX / XYY / Y-loss and mosaic cases.
-5. Repeat formal materialization and truth summary after the score-direction contract is fixed.
+1. Keep H7-H16 as N1/N2 review labels; do not use them as clean SCA negatives.
+2. Collect locked clean XX and XY negatives before estimating SCA specificity.
+3. Collect additional SCA positives before promotion, especially X gain / XXY / XXX / XYY / Y-loss and mosaic cases.
+4. Repeat formal materialization and truth summary after any Branch S rule, reference, or sex-routing change.
+5. Keep Branch S shadow-only until locked SCA validation supports a separate promotion decision.

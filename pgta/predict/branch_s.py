@@ -145,7 +145,23 @@ def prepare_candidates(candidates):
     frame["chrom"] = frame["chrom"].map(normalize_chrom)
     frame["start"] = pd.to_numeric(frame["start"], errors="coerce")
     frame["end"] = pd.to_numeric(frame["end"], errors="coerce")
+    if "state" not in frame.columns and "cnv_type" in frame.columns:
+        frame["state"] = frame["cnv_type"]
+    if "state" in frame.columns:
+        frame["state"] = frame["state"].map(normalize_candidate_state)
+    for column in ["a_zscore", "a_abs_zscore"]:
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
     return frame[frame["chrom"].isin({"chrX", "chrY"}) & frame["start"].notna() & frame["end"].notna()].copy()
+
+
+def normalize_candidate_state(value):
+    text = str(value).strip().lower()
+    if text in {"gain", "dup", "duplication"}:
+        return "gain"
+    if text in {"loss", "del", "deletion"}:
+        return "loss"
+    return ""
 
 
 def gender_context(gender):
@@ -172,18 +188,22 @@ def finite_median(values):
 
 
 def count_overlapping_candidates(region_bins, candidates):
+    return int(len(overlapping_candidate_rows(region_bins, candidates)))
+
+
+def overlapping_candidate_rows(region_bins, candidates):
     if region_bins.empty or candidates is None or candidates.empty:
-        return 0
+        return pd.DataFrame()
     chrom = str(region_bins["chrom"].iat[0])
     region_candidates = candidates[candidates["chrom"].astype(str).eq(chrom)].copy()
     if region_candidates.empty:
-        return 0
+        return pd.DataFrame()
     matched = np.zeros(len(region_candidates), dtype=bool)
     candidate_starts = pd.to_numeric(region_candidates["start"], errors="coerce").to_numpy(dtype=np.float64)
     candidate_ends = pd.to_numeric(region_candidates["end"], errors="coerce").to_numpy(dtype=np.float64)
     for _, row in region_bins.iterrows():
         matched |= (candidate_starts < int(row["end"])) & (candidate_ends > int(row["start"]))
-    return int(matched.sum())
+    return region_candidates.loc[matched].copy()
 
 
 def region_class(chrom, is_par):
@@ -222,14 +242,60 @@ def summarize_region(sample_id, region_bins, candidates, context, version):
     }
 
 
-def make_state_score(sample_id, state, source_region_class, source_value, context, version):
+def state_direction(state):
+    text = str(state).strip().upper()
+    if text.endswith("_GAIN"):
+        return 1.0
+    if text.endswith("_LOSS"):
+        return -1.0
+    return 0.0
+
+
+def candidate_abs_zscore(rows):
+    if rows is None or rows.empty:
+        return np.nan
+    if "a_abs_zscore" in rows.columns:
+        values = pd.to_numeric(rows["a_abs_zscore"], errors="coerce").to_numpy(dtype=np.float64)
+    elif "a_zscore" in rows.columns:
+        values = np.abs(pd.to_numeric(rows["a_zscore"], errors="coerce").to_numpy(dtype=np.float64))
+    else:
+        values = np.array([], dtype=np.float64)
+    values = values[np.isfinite(values)]
+    return float(np.max(values)) if values.size else np.nan
+
+
+def candidate_state_score(region_bins, candidates, state):
+    overlaps = overlapping_candidate_rows(region_bins, candidates)
+    if overlaps.empty or "state" not in overlaps.columns:
+        return np.nan, ""
+    target_state = "gain" if str(state).upper().endswith("_GAIN") else "loss"
+    same = overlaps[overlaps["state"].astype(str).eq(target_state)].copy()
+    opposite_state = "loss" if target_state == "gain" else "gain"
+    opposite = overlaps[overlaps["state"].astype(str).eq(opposite_state)].copy()
+    same_z = candidate_abs_zscore(same)
+    opposite_z = candidate_abs_zscore(opposite)
+    if np.isfinite(same_z) or np.isfinite(opposite_z):
+        same_value = same_z if np.isfinite(same_z) else 0.0
+        opposite_value = opposite_z if np.isfinite(opposite_z) else 0.0
+        if same_value >= opposite_value:
+            return float(same_value), "branch_a_candidate_zscore"
+        return float(-opposite_value), "branch_a_candidate_zscore"
+    if not same.empty or not opposite.empty:
+        return (1.0 if len(same) >= len(opposite) else -1.0), "branch_a_candidate_overlap"
+    return np.nan, ""
+
+
+def make_state_score(sample_id, state, source_region_class, source_value, context, version, candidate_score=np.nan, candidate_reason=""):
     if not np.isfinite(source_value):
         score = np.nan
         status = "INSUFFICIENT_EVIDENCE"
         reason = "missing_nonpar_region"
+    elif np.isfinite(candidate_score):
+        score = float(candidate_score)
+        status = "AVAILABLE"
+        reason = str(candidate_reason or "branch_a_candidate_support")
     else:
-        direction = -1.0 if state.endswith("_LOSS") else 1.0
-        score = float(direction * source_value)
+        score = float(state_direction(state) * source_value)
         status = "AVAILABLE"
         reason = "nonpar_mean_calibrated_z"
     return {
@@ -267,12 +333,59 @@ def build_branch_s_shadow(sample_id, bins, a_candidates, gender=None, version=BR
         for _, row in evidence.iterrows()
         if row.get("region_class") in {"X_NONPAR", "Y_NONPAR"}
     }
+    region_bins_by_class = {}
+    for chrom in ["chrX", "chrY"]:
+        region_bins = sex_bins[
+            sex_bins["chrom"].astype(str).eq(chrom) & sex_bins["is_par_region"].astype(bool).eq(False)
+        ].copy()
+        if not region_bins.empty:
+            region_bins_by_class[f"{'X' if chrom == 'chrX' else 'Y'}_NONPAR"] = region_bins
+    candidate_scores = {}
+    for state, source_region in [
+        ("X_GAIN", "X_NONPAR"),
+        ("X_LOSS", "X_NONPAR"),
+        ("Y_GAIN", "Y_NONPAR"),
+        ("Y_LOSS", "Y_NONPAR"),
+    ]:
+        candidate_scores[state] = candidate_state_score(region_bins_by_class.get(source_region, pd.DataFrame()), candidates, state)
     scores = pd.DataFrame(
         [
-            make_state_score(sample_id, "X_GAIN", "X_NONPAR", means.get("X_NONPAR", np.nan), context, version),
-            make_state_score(sample_id, "X_LOSS", "X_NONPAR", means.get("X_NONPAR", np.nan), context, version),
-            make_state_score(sample_id, "Y_GAIN", "Y_NONPAR", means.get("Y_NONPAR", np.nan), context, version),
-            make_state_score(sample_id, "Y_LOSS", "Y_NONPAR", means.get("Y_NONPAR", np.nan), context, version),
+            make_state_score(
+                sample_id,
+                "X_GAIN",
+                "X_NONPAR",
+                means.get("X_NONPAR", np.nan),
+                context,
+                version,
+                *candidate_scores["X_GAIN"],
+            ),
+            make_state_score(
+                sample_id,
+                "X_LOSS",
+                "X_NONPAR",
+                means.get("X_NONPAR", np.nan),
+                context,
+                version,
+                *candidate_scores["X_LOSS"],
+            ),
+            make_state_score(
+                sample_id,
+                "Y_GAIN",
+                "Y_NONPAR",
+                means.get("Y_NONPAR", np.nan),
+                context,
+                version,
+                *candidate_scores["Y_GAIN"],
+            ),
+            make_state_score(
+                sample_id,
+                "Y_LOSS",
+                "Y_NONPAR",
+                means.get("Y_NONPAR", np.nan),
+                context,
+                version,
+                *candidate_scores["Y_LOSS"],
+            ),
         ],
         columns=SCORE_COLUMNS,
     )
