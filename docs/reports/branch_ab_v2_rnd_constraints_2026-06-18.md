@@ -503,18 +503,27 @@ Detailed validation plan:
 Current remote evidence:
 
 - Branch S output is materialized for Y1-Y8 under `results_build_ref_v2_mask_only`.
-- Branch S output is not yet materialized for the H1-H6, H7-H16, or 2026-06-15 formal result directories.
-- Existing Y1-Y8 Branch S rows remain shadow-only and report-safe:
+- Branch S output is materialized for H1-H16 under `results_h_20260608_mask_only`.
+- Branch S output is materialized for the 2026-06-15 five-sample run under `results_20260615_mask_only`.
+- Existing Branch S rows remain shadow-only and report-safe:
   - `branch_s_action=SHADOW_ONLY`
   - `final_report_impact=none_shadow_only`
+- Materialization report: `docs/reports/branch_s_materialization_2026-06-19.md`.
 
 Current SCA truth coverage:
 
 | sample | truth | current validation status |
 |---|---|---|
 | Y3 | `chrX loss`, `45,XO` | Branch S output exists, but this is only one old-batch XO-like case. |
-| H5 | multi-segment `chrX loss`, including mosaic Xq12q13.1 | Branch S output must still be materialized in the formal H workflow. |
-| H6 | whole-`chrX loss`, `45,XO` inference | Branch S output must still be materialized in the formal H workflow. |
+| H5 | multi-segment `chrX loss`, including mosaic Xq12q13.1 | Branch S output exists, but score direction is not validated. |
+| H6 | whole-`chrX loss`, `45,XO` inference | Branch S output exists, but score direction is not validated. |
+
+Current score-direction caveat:
+
+- Y3, H5, and H6 all have strong Branch A chrX loss candidates.
+- Current Branch S `X_NONPAR mean_calibrated_z` is positive for all three samples.
+- Current Branch S state scores therefore produce positive `X_GAIN` and negative `X_LOSS` values for known chrX-loss truth samples.
+- Branch S state scores must not be interpreted as SCA gain/loss classification until this direction convention is fixed or explicitly redefined against locked SCA truth data.
 
 Current decision:
 

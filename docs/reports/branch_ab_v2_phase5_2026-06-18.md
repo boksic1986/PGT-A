@@ -151,7 +151,13 @@ Follow-up validation plan:
 
 - `docs/reports/branch_s_sca_validation_plan_2026-06-19.md`
 
-Current limitation:
+Follow-up materialization:
 
-- Branch S output has been materialized for Y1-Y8 only.
-- H1-H6, H7-H16, and the 2026-06-15 exploratory samples still need formal Branch S materialization before SCA performance can be evaluated.
+- `docs/reports/branch_s_materialization_2026-06-19.md`
+
+Updated limitation:
+
+- Branch S output has now been materialized for Y1-Y8, H1-H16, and the 2026-06-15 exploratory samples.
+- All generated Branch S outputs remain shadow-only and do not replace final report logic.
+- Current chrX-loss truth samples Y3, H5, and H6 still show a score-direction problem: Branch A calls chrX loss, but the current Branch S `X_GAIN` score is positive and `X_LOSS` score is negative.
+- Therefore Branch S state scores remain review-design evidence only. They must not be promoted to SCA classification or reportable calls until the direction convention is fixed or explicitly redefined against a locked SCA validation set.

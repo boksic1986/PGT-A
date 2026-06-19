@@ -27,24 +27,19 @@ Current materialized Branch S output exists for:
 
 ```text
 results_build_ref_v2_mask_only/wisecondorx/cnv/postprocess/branch_s
-```
-
-Current materialized Branch S output does not yet exist for:
-
-```text
 results_h_20260608_mask_only/wisecondorx/cnv/postprocess/branch_s
-results_0615_mask_only/wisecondorx/cnv/postprocess/branch_s
+results_20260615_mask_only/wisecondorx/cnv/postprocess/branch_s
 ```
 
-Existing Y1-Y8 Branch S files:
+Existing Branch S files:
 
-- 8 sex-chromosome evidence tables;
-- 8 SCA state score tables;
-- 8 summary JSON files;
+- Y1-Y8: 8 sex-chromosome evidence tables, 8 SCA state score tables, 8 summary JSON files;
+- H1-H16: 16 sex-chromosome evidence tables, 16 SCA state score tables, 16 summary JSON files;
+- 2026-06-15: 5 sex-chromosome evidence tables, 5 SCA state score tables, 5 summary JSON files;
 - every row has `branch_s_action=SHADOW_ONLY`;
 - every row has `final_report_impact=none_shadow_only`.
 
-This proves the workflow contract is report-safe for the materialized Y1-Y8 run, but it does not prove SCA clinical/reporting performance.
+This proves the workflow contract is report-safe for the materialized Y1-Y8, H1-H16, and 2026-06-15 runs, but it does not prove SCA clinical/reporting performance.
 
 ## Current SCA Truth Coverage
 
@@ -53,8 +48,18 @@ Current truth events with sex-chromosome involvement:
 | sample | truth | current limitation |
 |---|---|---|
 | Y3 | `chrX loss`, `45,XO` | Branch S output exists, but only one old-batch XO-like case. |
-| H5 | three `chrX loss` segments, including one mosaic segment | Branch S output is not yet materialized in the formal H run. |
-| H6 | whole-`chrX loss`, `45,XO` inference | Branch S output is not yet materialized in the formal H run. |
+| H5 | three `chrX loss` segments, including one mosaic segment | Branch S output exists, but score direction is not validated. |
+| H6 | whole-`chrX loss`, `45,XO` inference | Branch S output exists, but score direction is not validated. |
+
+Current Branch S score-direction caveat:
+
+| run | sample | truth context | X non-PAR mean calibrated z | X Branch A candidate count | current X scores |
+|---|---|---|---:|---:|---|
+| Y1-Y8 | Y3 | chrX loss / XO-like | 2.4326 | 2 | `X_GAIN=2.433`, `X_LOSS=-2.433` |
+| H1-H16 | H5 | chrX loss segments, including mosaic | 2.1368 | 2 | `X_GAIN=2.137`, `X_LOSS=-2.137` |
+| H1-H16 | H6 | whole-chrX loss / XO-like | 1.9344 | 2 | `X_GAIN=1.934`, `X_LOSS=-1.934` |
+
+The corresponding Branch A chrX candidates are all loss calls with strong z support. Therefore current Branch S state scores must not be interpreted as gain/loss classification. At this stage Branch S can provide region-level evidence and review context only.
 
 Missing locked truth classes:
 
@@ -100,7 +105,7 @@ At minimum, promotion review must report:
 Promotion can only be considered if:
 
 1. Y1-Y8 and H1-H6 known-positive recall does not regress.
-2. H5 and H6 chrX loss signals are detected in the formal workflow once Branch S is materialized for H samples.
+2. H5 and H6 chrX loss signals are detected in the formal workflow with score direction that agrees with the locked truth definition.
 3. No clean XX/XY negative is converted into a reportable SCA call by Branch S.
 4. Branch S decisions are reproducible across batches and not tuned on the 2026-06-15 exploratory samples.
 5. Branch S remains explainable at the region level: X non-PAR, X PAR, Y non-PAR, and Y PAR evidence must be visible.
@@ -119,8 +124,8 @@ The five-sample run must not be used as a locked validation set because it has a
 
 ## Next Minimum Workflow Actions
 
-1. Materialize Branch S outputs for H1-H6 and H7-H16 under the formal H workflow config.
-2. Summarize Y3, H5, and H6 SCA truth against Branch S evidence.
-3. Keep H7-H16 as N1/N2 review labels; do not use them as clean SCA negatives.
-4. Collect locked clean XX and XY negatives before estimating SCA specificity.
-5. Collect additional SCA positives before promotion, especially X gain / XXY / XXX / XYY / Y-loss and mosaic cases.
+1. Rework or explicitly redefine Branch S state-score direction so chrX-loss truth is not represented as positive `X_GAIN` evidence.
+2. Keep H7-H16 as N1/N2 review labels; do not use them as clean SCA negatives.
+3. Collect locked clean XX and XY negatives before estimating SCA specificity.
+4. Collect additional SCA positives before promotion, especially X gain / XXY / XXX / XYY / Y-loss and mosaic cases.
+5. Repeat formal materialization and truth summary after the score-direction contract is fixed.
