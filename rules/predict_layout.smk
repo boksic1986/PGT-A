@@ -151,13 +151,16 @@ CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MIN_BINS = float(
     CNV_ARTIFACT_CFG.get("a_branch_sensitive_review_min_bins", 10.0)
 )
 CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MAX_HIGH_RISK_FRAC = float(
-    CNV_ARTIFACT_CFG.get("a_branch_sensitive_review_max_high_risk_fraction", 0.05)
+    CNV_ARTIFACT_CFG.get("a_branch_sensitive_review_max_high_risk_fraction", 0.20)
 )
 CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MAX_REGION_RISK = float(
     CNV_ARTIFACT_CFG.get("a_branch_sensitive_review_max_region_risk", 0.20)
 )
 CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MIN_SAME_DIRECTION_Z = float(
     CNV_ARTIFACT_CFG.get("a_branch_sensitive_review_min_same_direction_z", 0.25)
+)
+CNV_ARTIFACT_A_BRANCH_BOUNDARY_PROTECT_MIN_ABS_Z = float(
+    CNV_ARTIFACT_CFG.get("a_branch_boundary_protect_min_abs_z", 30.0)
 )
 CNV_ARTIFACT_A_BRANCH_DISCORDANT_PROTECT_MIN_ABS_Z = float(
     CNV_ARTIFACT_CFG.get("a_branch_discordant_protect_min_abs_z", 50.0)
@@ -168,7 +171,7 @@ CNV_ARTIFACT_NARROW_BOUNDARY_MAX_AVAILABLE_CHROM_FRACTION = float(
     CNV_ARTIFACT_CFG.get("narrow_boundary_artifact_max_available_chrom_fraction", 0.08)
 )
 CNV_ARTIFACT_NARROW_BOUNDARY_PROTECT_MIN_A_ABS_Z = float(
-    CNV_ARTIFACT_CFG.get("narrow_boundary_artifact_protect_min_a_abs_z", 50.0)
+    CNV_ARTIFACT_CFG.get("narrow_boundary_artifact_protect_min_a_abs_z", 30.0)
 )
 CNV_ARTIFACT_SCA_XY_XGAIN_MAX_BAM_X_REL = float(CNV_ARTIFACT_CFG.get("sca_xy_xgain_max_bam_x_relative", 0.80))
 CNV_ARTIFACT_SCA_XY_XGAIN_FOCAL_EDGE_MAX_BINS = int(

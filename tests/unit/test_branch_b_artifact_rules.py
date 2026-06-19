@@ -53,9 +53,10 @@ class BranchBArtifactRulesTest(unittest.TestCase):
             a_branch_review_min_abs_z=15.0,
             a_branch_sensitive_review_min_abs_z=7.0,
             a_branch_sensitive_review_min_bins=10.0,
-            a_branch_sensitive_review_max_high_risk_fraction=0.05,
+            a_branch_sensitive_review_max_high_risk_fraction=0.20,
             a_branch_sensitive_review_max_region_risk=0.20,
             a_branch_sensitive_review_min_same_direction_z=0.25,
+            a_branch_boundary_protect_min_abs_z=30.0,
             a_branch_discordant_protect_min_abs_z=50.0,
             branch_b_direction_min_abs_z=0.25,
             recurrent_artifact_chrom=["chr19", "chr22"],
@@ -67,7 +68,7 @@ class BranchBArtifactRulesTest(unittest.TestCase):
             paired_event_rescue_min_bins=5,
             narrow_boundary_artifact_max_bins=15,
             narrow_boundary_artifact_max_available_chrom_fraction=0.08,
-            narrow_boundary_artifact_protect_min_a_abs_z=50.0,
+            narrow_boundary_artifact_protect_min_a_abs_z=30.0,
             sca_xy_xgain_max_bam_x_relative=0.80,
             sca_xy_xgain_focal_edge_max_bins=20,
             cnvseq_reportable_min_bp=2_000_000,
@@ -363,6 +364,59 @@ class BranchBArtifactRulesTest(unittest.TestCase):
         self.assertEqual(result["artifact_status"], "review")
         self.assertEqual(result["keep_event"], 1)
         self.assertIn("a_branch_strong_evidence_preserved_for_review", result["downgrade_reason"])
+
+    def test_boundary_event_with_primary_a_branch_support_below_discordant_protect_remains_review(self):
+        row = types.SimpleNamespace(
+            chrom="chr8",
+            start=3_000_001,
+            end=14_250_000,
+            start_bin=4,
+            end_bin=18,
+            n_bins=15,
+            state="loss",
+            calibrated_mean_z=-0.02,
+            calibrated_median_z=-0.37,
+            event_corr_adjusted_z=-0.05,
+            empirical_qvalue=0.96,
+            clean_bin_fraction=0.0,
+            moderate_risk_bin_fraction=0.82,
+            high_risk_bin_fraction=0.18,
+            effective_bin_count=12.0,
+            region_risk_score_mean=0.04,
+            region_risk_score_max=0.31,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.20,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.01,
+            repeat_rich_overlap_fraction=0.02,
+            blacklist_overlap_fraction=0.01,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=1,
+            cnvseq_available_chrom_fraction=0.06,
+            cnvseq_crosses_gap_or_centromere=1,
+            cnvseq_gap_centromere_bin_fraction=0.20,
+            cnvseq_region_class_transition=1,
+            caller="wisecondorx_a_branch",
+            a_candidate_id="Y7.A0001",
+            a_abs_zscore=40.9,
+            segment_mean_robust_z=-0.15,
+            segment_median_robust_z=-2.77,
+            segment_abs_max_robust_z=85.6,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=196,
+            args=self.build_args(),
+            sex_call="XX",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "review")
+        self.assertEqual(result["keep_event"], 1)
+        self.assertIn("a_branch_strong_evidence_preserved_for_review", result["downgrade_reason"])
+        self.assertNotIn("cnvseq_subchrom_boundary_weak_support", result["filter_reason"])
 
     def test_intermediate_a_branch_support_is_preserved_for_review(self):
         row = types.SimpleNamespace(
@@ -1653,6 +1707,60 @@ class BranchBArtifactRulesTest(unittest.TestCase):
         result = classify_event(
             row=row,
             chrom_bin_count=48,
+            args=self.build_args(),
+            sex_call="XX",
+            par_regions={},
+        )
+
+        self.assertEqual(result["artifact_status"], "review")
+        self.assertEqual(result["keep_event"], 1)
+        self.assertIn("a_branch_sensitive_evidence_preserved_for_review", result["downgrade_reason"])
+        self.assertNotIn("signal_support_below_minimum", result["filter_reason"])
+        self.assertNotIn("chromosome_fraction_too_large", result["filter_reason"])
+
+    def test_sensitive_a_branch_moderate_risk_small_chromosome_gain_is_preserved_for_review(self):
+        row = types.SimpleNamespace(
+            chrom="chr21",
+            start=15_000_001,
+            end=42_000_000,
+            start_bin=20,
+            end_bin=55,
+            n_bins=36,
+            state="gain",
+            calibrated_mean_z=0.09,
+            calibrated_median_z=0.07,
+            event_corr_adjusted_z=0.40,
+            empirical_qvalue=0.82,
+            clean_bin_fraction=0.0,
+            moderate_risk_bin_fraction=0.82,
+            high_risk_bin_fraction=0.18,
+            effective_bin_count=32.2,
+            region_risk_score_mean=0.03,
+            region_risk_score_max=0.19,
+            xtr_overlap_fraction=0.0,
+            sex_homology_overlap_fraction=0.0,
+            segmental_duplication_overlap_fraction=0.04,
+            low_mappability_overlap_fraction=0.0,
+            gap_centromere_telomere_overlap_fraction=0.0,
+            repeat_rich_overlap_fraction=0.02,
+            blacklist_overlap_fraction=0.0,
+            ambiguous_alignment_overlap_fraction=0.0,
+            high_risk_boundary_crossing=0,
+            cnvseq_available_chrom_fraction=0.88,
+            cnvseq_crosses_gap_or_centromere=0,
+            cnvseq_gap_centromere_bin_fraction=0.0,
+            cnvseq_region_class_transition=1,
+            caller="wisecondorx_a_branch",
+            a_candidate_id="H6.A0006",
+            a_abs_zscore=7.11,
+            segment_mean_robust_z=0.70,
+            segment_median_robust_z=0.53,
+            segment_abs_max_robust_z=3.47,
+        )
+
+        result = classify_event(
+            row=row,
+            chrom_bin_count=65,
             args=self.build_args(),
             sex_call="XX",
             par_regions={},

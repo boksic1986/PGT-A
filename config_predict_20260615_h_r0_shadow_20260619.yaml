@@ -1,0 +1,59 @@
+base_config: "/data/project/CNV/PGT-A/refactor_validation_20260419/predict_samples_20260615.yaml"
+
+pipeline:
+  mode: "predict"
+  targets:
+    - "metadata"
+    - "cnv_qc"
+    - "cnv"
+    - "cnv_report"
+
+reference_assets:
+  refmap_tsvs:
+    - "/data/project/CNV/PGT-A/refactor_validation_20260419/reports/refmap_audit_20260616/low_refbin_bins.tsv"
+
+core:
+  project_path: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_h_r0_shadow_ref_20260619"
+  wisecondorx:
+    reference_model_root: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619/reference"
+    reference_output_by_sex:
+      XX: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619/reference/XX/result/ref_xx_best.npz"
+      XY: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619/reference/XY/result/ref_xy_best.npz"
+    gender_reference_output: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619/reference/gender/result/ref_gender_best.npz"
+    common_reference_binsize_output: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619/reference/gender/common_best_binsize.txt"
+    cnv:
+      reference_id: "h_r0_shadow_ref_20260619"
+      preprocess:
+        strategy: "mask_only"
+      negative_bank:
+        samples_tsv: "/data/project/CNV/PGT-A/refactor_validation_20260419/docs/reports/branch_ab_v2_negative_bank_seed_2026-06-18.tsv"
+        version: "branch_ab_v2_h_r0_shadow_ref_20260619"
+        feature_column: "corrected_amplitude"
+        min_background: 5
+        similar_length_fold: 2.0
+      postprocess:
+        calling:
+          hmm_role: "sidecar"
+        annotation:
+          blacklist_bed: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619/reference/assets/mask/hard_mask.bed"
+          gap_centromere_telomere_bed: "/data/project/CNV/PGT-A/refactor_validation_20260419/resources/hg19/gap_centromere_telomere.hg19.bed"
+          segmental_duplication_bed: "/data/project/CNV/PGT-A/refactor_validation_20260419/resources/hg19/segmental_duplication.hg19.bed"
+          low_mappability_bed: "/data/project/CNV/PGT-A/refactor_validation_20260419/resources/hg19/low_mappability_consensus_excludable.hg19.bed"
+          repeat_rich_bed: "/data/project/CNV/PGT-A/refactor_validation_20260419/resources/hg19/repeat_rich_high_confidence.hg19.bed"
+
+samples:
+  JZ26125843-56-56:
+    bam: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only/mapping/JZ26125843-56-56.sorted.bam"
+    bai: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only/mapping/JZ26125843-56-56.sorted.bam.bai"
+  JZ26125844-59-59:
+    bam: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only/mapping/JZ26125844-59-59.sorted.bam"
+    bai: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only/mapping/JZ26125844-59-59.sorted.bam.bai"
+  JZ26125845-60-60:
+    bam: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only/mapping/JZ26125845-60-60.sorted.bam"
+    bai: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only/mapping/JZ26125845-60-60.sorted.bam.bai"
+  JZ26125846-61-61:
+    bam: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only/mapping/JZ26125846-61-61.sorted.bam"
+    bai: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only/mapping/JZ26125846-61-61.sorted.bam.bai"
+  JZ26125847-62-62:
+    bam: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only/mapping/JZ26125847-62-62.sorted.bam"
+    bai: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only/mapping/JZ26125847-62-62.sorted.bam.bai"

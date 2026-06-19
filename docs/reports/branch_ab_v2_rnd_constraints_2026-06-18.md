@@ -868,6 +868,76 @@ Implementation note:
   reporting. When an external BAM has no fastp JSON, baseline report generation
   must not pull `fastp_bwa` back into the DAG.
 
+### 2026-06-19 post-rebuild H R0 evidence update
+
+The first named H R0 shadow reference rebuild completed remotely.
+
+Reference contract:
+
+- reference ID: `h_r0_shadow_ref_20260619`
+- selected/inlier samples: `38`
+- H R0 samples included: `H9,H10,H11,H12,H15,H16`
+- best binsize: `750000`
+- PCA fields remain project-level tuning diagnostics, not confirmed
+  WisecondorX `newref` CLI parameters.
+
+Workflow contract fixes made for this validation:
+
+- predict overlays preserve `samples.<sample_id>.bam/bai`, so existing BAMs are
+  valid inputs when the upstream mapping contract is unchanged.
+- predict consumes published reference assets and no longer attempts to rebuild
+  reference annotation/mask assets from a predict-only run.
+
+Post-rebuild Branch B artifact-rule refresh:
+
+- remote driver:
+  `/data/project/CNV/PGT-A/refactor_validation_20260419/logs/driver/post_rebuild_branch_b_artifact_rules_refresh_20260619.sh`
+- log completed with `DONE_ALL 2026-06-19T21:32:33+08:00`.
+- log token check: `map_reads=0`, `sort_bam=0`, `index_bam=0`,
+  `wisecondorx_convert_for_cnv=0`, `wisecondorx_predict_cnv=0`,
+  `cnv_artifact_rules_branch_b=32`.
+
+Truth metrics after artifact-rule adjustment:
+
+| set | truth detected | truth recall | A recall | B recall | kept/review | artifacts |
+|---|---:|---:|---:|---:|---:|---:|
+| Y1-Y8 | 10/10 | 1.000 | 1.000 | 1.000 | 25 | 106 |
+| H1-H16 | 10/10 | 1.000 | 1.000 | 1.000 | 20 | 201 |
+
+Recovered FN-sensitive events:
+
+| sample | event | A support | Branch B disposition after refresh |
+|---|---|---:|---|
+| Y7 | `chr8:3000001-14250000 loss` | `a_z=-40.90` | `review`, `keep_event=1` |
+| H6 | `chr21:15000001-42000000 gain` | `a_z=7.11` | `review`, `keep_event=1` |
+
+This is a recall-preserving review policy, not a PASS policy. The adjustment
+keeps strong/sensitive same-direction Branch A candidates visible as review when
+Branch B calibrated evidence is weak but not directionally contradictory. It
+does not create B-only final report events and it does not promote Branch B V2.
+
+Negative-bank status after the rebuild remains:
+
+```json
+{
+  "version": "branch_ab_v2_h_r0_shadow_ref_20260619",
+  "matched_negative_ready": false,
+  "matched_negative_blocking_reason": "no_n0_locked_clean_negative_samples",
+  "matched_negative_eligible_count": 0,
+  "label_counts": {"N1": 6, "N2": 4}
+}
+```
+
+Implication:
+
+- The H R0 shadow reference plus the review-preservation rule now satisfies the
+  immediate Y/H no-FN gate in this validation context.
+- It does not yet satisfy the Branch B V2 matched-negative calibration gate.
+- H7-H16 still require post-rebuild `R0/R1/R2` and `N0/N1/N2` review before any
+  production reference or N0 promotion.
+- The 2026-06-15 five-sample outputs remain current-workflow exploratory
+  reports, not locked validation proof.
+
 ## Current Recommendation
 
 Proceed with Branch B V2 shadow mode, not with more legacy Branch B filter patches.

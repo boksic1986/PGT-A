@@ -55,9 +55,10 @@ def parse_args():
     parser.add_argument("--a-branch-review-min-abs-z", type=float, default=15.0)
     parser.add_argument("--a-branch-sensitive-review-min-abs-z", type=float, default=7.0)
     parser.add_argument("--a-branch-sensitive-review-min-bins", type=float, default=10.0)
-    parser.add_argument("--a-branch-sensitive-review-max-high-risk-fraction", type=float, default=0.05)
+    parser.add_argument("--a-branch-sensitive-review-max-high-risk-fraction", type=float, default=0.20)
     parser.add_argument("--a-branch-sensitive-review-max-region-risk", type=float, default=0.20)
     parser.add_argument("--a-branch-sensitive-review-min-same-direction-z", type=float, default=0.25)
+    parser.add_argument("--a-branch-boundary-protect-min-abs-z", type=float, default=30.0)
     parser.add_argument("--a-branch-discordant-protect-min-abs-z", type=float, default=50.0)
     parser.add_argument("--branch-b-direction-min-abs-z", type=float, default=0.25)
     parser.add_argument("--recurrent-artifact-chrom", action="append", default=["chr19", "chr22"])
@@ -69,7 +70,7 @@ def parse_args():
     parser.add_argument("--paired-event-rescue-min-bins", type=int, default=5)
     parser.add_argument("--narrow-boundary-artifact-max-bins", type=int, default=15)
     parser.add_argument("--narrow-boundary-artifact-max-available-chrom-fraction", type=float, default=0.08)
-    parser.add_argument("--narrow-boundary-artifact-protect-min-a-abs-z", type=float, default=50.0)
+    parser.add_argument("--narrow-boundary-artifact-protect-min-a-abs-z", type=float, default=30.0)
     parser.add_argument("--sca-xy-xgain-max-bam-x-relative", type=float, default=0.80)
     parser.add_argument("--sca-xy-xgain-focal-edge-max-bins", type=int, default=20)
     parser.add_argument("--cnvseq-reportable-min-bp", type=int, default=2_000_000)
@@ -286,8 +287,8 @@ def classify_event(row, chrom_bin_count, args, sex_call, par_regions):
         and a_abs_z >= a_branch_review_min_abs_z
     )
     a_branch_boundary_protect_min_abs_z = safe_float(
-        getattr(args, "a_branch_discordant_protect_min_abs_z", 50.0),
-        default=50.0,
+        getattr(args, "a_branch_boundary_protect_min_abs_z", 30.0),
+        default=30.0,
     )
     preserve_a_branch_boundary_signal = (
         (caller == "wisecondorx_a_branch" or bool(a_candidate_id))

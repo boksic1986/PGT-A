@@ -537,6 +537,8 @@ if CNV_ENABLED:
                     str(CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MAX_REGION_RISK),
                     "--a-branch-sensitive-review-min-same-direction-z",
                     str(CNV_ARTIFACT_A_BRANCH_SENSITIVE_REVIEW_MIN_SAME_DIRECTION_Z),
+                    "--a-branch-boundary-protect-min-abs-z",
+                    str(CNV_ARTIFACT_A_BRANCH_BOUNDARY_PROTECT_MIN_ABS_Z),
                     "--a-branch-discordant-protect-min-abs-z",
                     str(CNV_ARTIFACT_A_BRANCH_DISCORDANT_PROTECT_MIN_ABS_Z),
                     "--branch-b-direction-min-abs-z", str(CNV_ARTIFACT_BRANCH_B_DIRECTION_MIN_ABS_Z),

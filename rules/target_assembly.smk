@@ -187,11 +187,8 @@ if "cnv" in REQUESTED_TARGETS and CNV_ENABLED:
     if CNV_POSTPROCESS_PRESERVE_BRANCH_A:
         ALL_TARGET_FILES += expand(CNV_DONE, sample=SAMPLES)
     if CNV_POSTPROCESS_ENABLE_BRANCH_B:
-        REFERENCE_ASSET_TARGET_FILES += [
-            REFERENCE_ANALYSIS_BIN_ANNOTATIONS,
-            REFERENCE_COMBINED_MASK_TSV,
-            REFERENCE_HARD_MASK_BED,
-        ]
+        # Predict consumes the published reference asset contract. It must not
+        # rebuild or overwrite reference assets from a predict-only run.
         ALL_TARGET_FILES += expand(CNV_B_FINAL_EVENTS, sample=SAMPLES)
         ALL_TARGET_FILES += expand(CNV_B_ARTIFACT_SUMMARY, sample=SAMPLES)
         ALL_TARGET_FILES += expand(CNV_B_FINAL_JSON, sample=SAMPLES)

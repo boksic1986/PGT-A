@@ -24,10 +24,10 @@ if "base_config" in config:
     override_cfg = {k: v for k, v in config.items() if k != "base_config"}
     override_mode = str(override_cfg.get("pipeline", {}).get("mode", "")).strip().lower()
     if override_mode == "predict":
-        # Drop default-config carryover so predict uses the dedicated base_config sample list and settings.
+        # Drop reference-only carryover while still allowing predict overlays to
+        # add per-sample input contracts such as existing BAM/BAI paths.
         override_cfg = dict(override_cfg)
         override_cfg.pop("build_reference", None)
-        override_cfg.pop("samples", None)
     config = merge_config(base_cfg, override_cfg)
 
 
