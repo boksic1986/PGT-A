@@ -1,0 +1,32 @@
+{
+  "inputs": [
+    {
+      "dataset": "Y1-Y8 locked positives",
+      "root": "/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only",
+      "truth_scope": "locked_positive",
+      "ledger_files": 8,
+      "classifier_files": 8,
+      "ledger_rows": 143,
+      "classifier_rows": 143
+    },
+    {
+      "dataset": "H1-H6 positives + H7-H16 review",
+      "root": "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_20260608_mask_only",
+      "truth_scope": "H1-H6 locked_positive; H7-H16 presumed_negative_review_only",
+      "ledger_files": 16,
+      "classifier_files": 16,
+      "ledger_rows": 307,
+      "classifier_rows": 307
+    },
+    {
+      "dataset": "2026-06-15 shadow-report set",
+      "root": "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_mask_only",
+      "truth_scope": "no_locked_truth",
+      "ledger_files": 5,
+      "classifier_files": 5,
+      "ledger_rows": 170,
+      "classifier_rows": 170
+    }
+  ],
+  "truth_file": "/data/project/CNV/PGT-A/refactor_validation_20260419/sample_info/positive_truth_events.tsv"
+}

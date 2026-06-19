@@ -94,9 +94,25 @@ Result:
 Nothing to be done (all requested files are present and up to date).
 ```
 
+## Materialization Status
+
+The refreshed Phase 1A ledgers were materialized on `fengxian` for Y1-Y8, H1-H16, and the 2026-06-15 shadow-report set.
+
+Summary report:
+
+```text
+docs/reports/branch_ab_v2_phase1a_materialization_summary_2026-06-19.md
+```
+
+Key evidence:
+
+- Y1-Y8: 8 ledger files, 143 Branch A candidate rows.
+- H1-H16: 16 ledger files, 307 Branch A candidate rows.
+- 2026-06-15: 5 ledger files, 170 Branch A candidate rows.
+- Existing final/report truth metrics remain FN=0 for Y1-Y8 and H1-H6 in the current outputs.
+- `matched_negative_source` and `matched_negative_percentile` remain missing/unknown on known-positive truth-overlap candidates; they are not ready for hard filtering.
+
 ## Remaining Work
 
-- Materialize refreshed Phase 1A ledgers for Y1-Y8, H1-H16, and 2026-06-15 if the current outputs need the new columns immediately.
-- Add per-field missingness summaries after materialization.
 - Use Phase 3 matched-negative evidence when N0/N1/N2 labels are finalized; do not treat current `UNKNOWN_BACKGROUND` as clean support.
 - Run locked-data ablation before promoting any CNVpro-like evidence into report decisions.
