@@ -42,6 +42,23 @@ def numeric_value(value, default=0.0):
         return float(default)
 
 
+def n0_safety_blockers(qc_status, sample_role, review_status, kept_count):
+    blockers = []
+    if qc_status != "PASS":
+        blockers.append("qc_not_pass")
+    if sample_role in {"known_positive", "positive", "abnormal", "truth_positive"}:
+        blockers.append("not_negative_sample")
+    if kept_count > 0:
+        blockers.append("branch_b_retained_review_event")
+    if "review_event" in review_status or "hold" in review_status or "recurring" in review_status:
+        blockers.append(review_status or "pending_manual_review")
+    if sample_role not in {"locked_negative", "clean_negative", "n0"}:
+        blockers.append("n0_requires_locked_clean_negative_role")
+    if review_status not in {"", "clean", "locked_clean"}:
+        blockers.append("n0_requires_clean_review_status")
+    return blockers
+
+
 def classify_negative_bank_row(row):
     manual_label = normalize_label(row.get("manual_negative_bank_label", ""))
     qc_status = clean_text(row.get("qc_status", "")).upper()
@@ -54,6 +71,10 @@ def classify_negative_bank_row(row):
         reasons.append(f"manual_label_{manual_label}")
         if review_status:
             reasons.append(review_status)
+        if manual_label == "N0":
+            blockers = n0_safety_blockers(qc_status, sample_role, review_status, kept_count)
+            if blockers:
+                return "N2", ";".join(["invalid_manual_n0"] + reasons + blockers)
         return manual_label, ";".join(reasons)
 
     if qc_status and qc_status != "PASS":
