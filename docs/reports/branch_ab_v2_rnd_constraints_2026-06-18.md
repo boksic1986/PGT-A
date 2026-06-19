@@ -315,6 +315,69 @@ Current decision:
 
 ## Branch A/B Validation Plan
 
+### V2 N0 and benchmark reframe
+
+The current `branch_ab_v2_negative_bank_seed_2026-06-18.tsv` is a legacy safety
+seed, not a Branch B V2 benchmark truth table.
+
+This matters because legacy Branch B is one of the systems being replaced or
+downgraded. Therefore, legacy Branch B kept/review status must not be used as
+the final authority for whether a sample is `N0`, nor as the primary benchmark
+for whether Branch B V2 works.
+
+Allowed use of the legacy seed:
+
+- conservative safety input while V2 is shadow-only;
+- historical explanation for why no matched-negative empirical null was enabled;
+- bootstrap list of samples that need post-rebuild review.
+
+Disallowed use of the legacy seed:
+
+- declaring that H7-H16 contain no usable V2 negative samples;
+- measuring Branch B V2 FP reduction against a background selected only by old
+  Branch B;
+- promoting or rejecting `N0` solely from old-reference Branch B kept counts;
+- using `N0=0` from the old/reference-mismatched context as a final
+  post-rebuild blocker.
+
+Branch B V2 validation must be evaluated in this order:
+
+1. **Positive recall gate**
+   - Use Y1-Y8 and H1-H6 truth events.
+   - Branch A truth recall must not regress.
+   - Branch B V2 positive validation must be at least no worse than the frozen
+     comparator, and should improve weak-positive handling by preserving
+     uncertain true-overlap candidates as review rather than suppressing them.
+   - Branch B V2 must not hard-suppress truth-overlap candidates.
+   - Weak/focal positives such as H6 chr21 and boundary-sensitive cases such as
+     Y7 chr8 must remain at least `REVIEW_REQUIRED`.
+
+2. **Candidate-level V2 evidence gate**
+   - Every Branch A candidate must have one V2 evidence row.
+   - Missing matched-negative, refmap, region-risk, or calibration evidence must
+     stay `UNKNOWN` / `NO_CALL`.
+   - Unknown background must not become hard artifact suppression.
+
+3. **Independent negative-background gate**
+   - `N0` must be assigned from independent negative identity, QC PASS, sex
+     concordance, no known/truth positive status, and post-rebuild V2 evidence.
+   - A sample used to build the same reference may support residual/batch
+     stability review, but it is not an ideal empirical-null control unless the
+     design is explicitly cross-fit or leave-one-out.
+   - Preferred `N0` sources are held-out clean negatives or cross-fit folds in
+     which the queried sample was not used to train the reference.
+
+4. **V2 negative benchmark gate**
+   - Only after valid `N0` or cross-fit background exists can
+     matched-negative percentiles be interpreted as FP-reduction evidence.
+   - Until then, matched-negative output remains `UNKNOWN_BACKGROUND` and
+     `REVIEW_NO_CALL`.
+
+5. **Final-report promotion gate**
+   - V2 may influence final reports only after it preserves known-positive
+     recall, reduces or explains negative/review burden on locked or held-out
+     negatives, and documents rollback for every promoted disposition rule.
+
 ### Variant matrix
 
 | variant | purpose |
@@ -322,8 +385,8 @@ Current decision:
 | M0 Branch A only | Quantify maximum sensitivity and raw candidate burden. |
 | M1 A + candidate merge | Test whether candidate merging changes TP/FP/FN. |
 | M2 A + candidate evidence ledger | Produce one evidence row per A candidate without filtering. |
-| M3 M2 + N0/N1/N2 negative labels | Test negative-bank status without changing calls. |
-| M4 M3 + matched-negative percentile | Evaluate empirical background as classification evidence. |
+| M3 M2 + provisional N0/N1/N2 labels | Materialize negative-bank status without changing calls. Legacy seeds are safety inputs only, not V2 benchmark truth. |
+| M4 M3 + matched-negative percentile | Evaluate empirical background as classification evidence only when N0/cross-fit background is valid; otherwise emit UNKNOWN_BACKGROUND. |
 | M5 legacy Branch B | Keep current Branch B as the frozen comparator. |
 | M6 Branch B V2 shadow classifier | Candidate-level classification only; no final report promotion at first. |
 | M7 Branch S shadow model | Sex-chromosome state evidence only; no replacement of current sex calling at first. |
@@ -579,13 +642,20 @@ Implementation status on 2026-06-19:
 
 ### Phase 2: negative bank labeling
 
-- Create N0/N1/N2 labels.
-- Use only N0 for matched-negative empirical null.
+- Create provisional N0/N1/N2 labels.
+- Use only validated N0 for matched-negative empirical null.
 - Treat H7-H16 as review candidates for Branch B calibration, not automatic
   `N0`. This is independent of their `R0/R1/R2` reference-rebuild labels.
-- Initial labels from current evidence:
+- The current seed labels are legacy safety labels. They were derived from
+  current/legacy Branch B context and manual review status, so they are not a
+  valid Branch B V2 benchmark endpoint.
+- Initial legacy safety labels:
   - N1 candidates for ref-evaluation only: H9, H10, H11, H12, H15, H16.
   - Hold out / N2 pending review: H7, H8, H13, H14.
+- Post-rebuild V2 labels must be recomputed from the new reference ID, Branch A
+  candidates, V2 evidence ledger/classifier outputs, and independent
+  clean-negative review. Do not carry forward old-reference `N0=0` as a final
+  V2 conclusion.
 
 Implementation update on 2026-06-19:
 
@@ -606,21 +676,23 @@ Implementation update on 2026-06-19:
   - `N2=4`;
   - `matched_negative_ready=false`;
   - `matched_negative_blocking_reason=no_n0_locked_clean_negative_samples`.
-- This makes the current old-reference blocker machine-readable: H7-H16 are not
-  a valid matched-negative empirical-null cohort under the current reference and
-  current seed labels.
-- This blocker applies to Branch B matched-negative calibration only. It does
-  not mean H7-H16 are unusable for reference-rebuild exploration under `R0/R1`
-  labels.
+- This makes the current legacy-seed blocker machine-readable: the configured
+  seed contains no locked-clean N0 rows, so matched-negative empirical-null
+  construction must stay disabled.
+- This blocker applies only to the current legacy seed and current
+  matched-negative run. It must not be interpreted as proof that Branch B V2 has
+  no usable negative samples, and it does not mean H7-H16 are unusable for
+  reference-rebuild exploration under `R0/R1` labels.
 - If H7-H16, or a subset of H7-H16, enter a named shadow reference rebuild under
   `R0/R1/R2`, the `N0/N1/N2` labels must be recalculated after the new
   WisecondorX predict and Branch A/B evidence are regenerated. Old-reference
   `N0=0` must not be reused as the post-rebuild negative-bank decision.
 - Reference-included samples can support post-rebuild residual/batch-stability
   review, but matched-negative empirical-null promotion still requires a locked
-  clean role after post-rebuild review or a holdout/ablation design. The design
-  must state whether a sample was used to build the reference, used as held-out
-  negative evidence, or used only for shadow review.
+  clean role after post-rebuild review or a holdout/cross-fit design. The
+  design must state whether a sample was used to build the reference, used as
+  held-out negative evidence, used in a leave-one-out fold, or used only for
+  shadow review.
 - Detailed audit:
   `docs/reports/branch_ab_v2_negative_bank_readiness_2026-06-19.md`.
 
@@ -628,9 +700,9 @@ Implementation update on 2026-06-19:
 
 - Add empirical percentile as a shadow feature.
 - Fallback order:
-  - same region in N0 with enough samples,
-  - same chromosome and similar length,
-  - autosome and similar length,
+  - same region in validated N0/cross-fit background with enough samples,
+  - same chromosome and similar length in validated background,
+  - autosome and similar length in validated background,
   - `UNKNOWN_BACKGROUND`.
 - `UNKNOWN_BACKGROUND` must lead to review/no-call, not artifact hard filtering.
 
@@ -639,15 +711,20 @@ Implementation status on 2026-06-18:
 - Implemented as `pgta/predict/branch_b/matched_negative.py`.
 - Workflow output:
   `wisecondorx/cnv/postprocess/matched_negative/{sample}.candidate_evidence.tsv`.
-- The current seed has no N0 samples, so all current Y1-Y8 Phase 3 rows are expected to be `UNKNOWN_BACKGROUND` with `matched_negative_action=REVIEW_NO_CALL`.
+- The current legacy safety seed has no N0 samples, so Phase 3 rows are
+  expected to be `UNKNOWN_BACKGROUND` with
+  `matched_negative_action=REVIEW_NO_CALL`.
 - This is shadow-only and is not consumed by `cnv_report`.
 - Post-reference rebuild rule:
   - rerun WisecondorX predict, Branch A candidates, Branch B evidence ledger,
     and negative-bank labeling;
   - generate a new negative-bank version tied to the new reference ID, binsize,
     mask/preprocess version, and candidate source;
-  - only then decide whether post-rebuild `N0` exists and whether Phase 3 can
-    produce informative percentiles instead of `UNKNOWN_BACKGROUND`.
+  - identify whether post-rebuild `N0` exists using independent negative
+    identity, post-rebuild V2 evidence, and preferably holdout/cross-fit
+    background;
+  - only then allow Phase 3 to produce interpretable percentiles instead of
+    `UNKNOWN_BACKGROUND`.
 
 ### Phase 4: Branch B V2 classifier
 
@@ -661,7 +738,9 @@ Implementation status on 2026-06-18:
 - Workflow output:
   `wisecondorx/cnv/postprocess/v2_classifier/{sample}.candidate_classification.tsv`.
 - The classifier consumes Phase 3 matched-negative evidence when negative-bank inputs are configured; otherwise it consumes the Phase 1 evidence ledger.
-- The current seed has no N0 samples, so all current Y1-Y8 Phase 4 rows are expected to be `REVIEW_REQUIRED` with `v2_final_report_impact=none_shadow_only`.
+- With the current legacy safety seed, no validated N0 background exists, so
+  Phase 4 rows are expected to be `REVIEW_REQUIRED` with
+  `v2_final_report_impact=none_shadow_only`.
 - This is shadow-only and is not consumed by `cnv_report`.
 
 Implementation update on 2026-06-19:
@@ -680,9 +759,9 @@ Implementation update on 2026-06-19:
   - H1-H16: 16 files, 307 rows, all `REVIEW_REQUIRED`;
   - 2026-06-15: 5 files, 170 rows, all `REVIEW_REQUIRED`.
 - This confirms that current Phase 4 is a conservative shadow review layer only
-  under the current reference and current negative-bank version. It is not yet a
-  useful FP-reduction classifier because no valid N0 matched-negative
-  background is present.
+  under the current reference and current legacy negative-bank version. It is
+  not yet a useful FP-reduction classifier because no validated N0 or cross-fit
+  matched-negative background is present.
 - Detailed report:
   `docs/reports/branch_ab_v2_phase4_unknown_background_fix_2026-06-19.md`.
 
@@ -692,9 +771,11 @@ Promotion path after reference rebuild:
   shadow reference run produces a locked candidate/evidence set with:
   - no known-positive FN increase on Y1-Y8 and H1-H6;
   - H6 chr21 weak focal event still explicitly tracked;
-  - post-rebuild negative-bank labels recomputed under the same reference ID;
-  - a usable matched-negative background or an explicit rule that unknown
-    background only creates `REVIEW_REQUIRED`, never hard artifact suppression;
+  - post-rebuild negative-bank labels recomputed under the same reference ID
+    without treating the legacy Branch B seed as benchmark truth;
+  - a usable held-out/cross-fit matched-negative background or an explicit rule
+    that unknown background only creates `REVIEW_REQUIRED`, never hard artifact
+    suppression;
   - per-sample FP/review burden reduced or at least not increased on locked or
     held-out negatives;
   - every promoted disposition rule documented with evidence source, affected
@@ -826,19 +907,25 @@ The 2026-06-15 five-sample report can be released only as a current-workflow rep
 
 ### Phase 2 interpretation
 
-Phase 2 negative-bank labeling does not prove H7-H16 are clean negatives.
+Phase 2 negative-bank labeling does not prove H7-H16 are clean negatives, and
+it also does not prove that Branch B V2 has no usable negative background.
 
-It proves the opposite boundary condition:
+It proves only this boundary condition:
 
 - QC PASS and XY sex call are necessary but not sufficient for N0.
-- H8, H13, and H14 have retained Branch B review events.
-- H7 has recurring review risk from prior self-inclusion reference experiments.
-- H9, H10, H11, H12, H15, and H16 are only N1 presumed-negative / shadow reference candidates.
-- No H7-H16 sample should be used for matched-negative empirical null or production reference promotion until ablation and manual review are complete.
+- The legacy seed did not contain any locked-clean N0 samples.
+- H9, H10, H11, H12, H15, and H16 are only N1 presumed-negative / shadow
+  reference candidates under the legacy seed, not V2-validated N0 samples.
+- H7, H8, H13, and H14 are N2 holdout/review under the legacy seed.
+- No H7-H16 sample should be used for matched-negative empirical null or
+  production reference promotion until post-rebuild V2 evidence, held-out or
+  cross-fit background design, and manual review are complete.
 
 This interpretation is specific to Branch B calibration-negative use. It must
 not be read as a blanket exclusion from reference rebuild. Reference rebuild
-uses `R0/R1/R2`; Branch B calibration uses `N0/N1/N2`.
+uses `R0/R1/R2`; Branch B calibration uses `N0/N1/N2`; Branch B V2 benchmark
+requires positive recall validation first and independent/cross-fit negative
+background second.
 
 ### Shadow reference BAM reuse contract
 
@@ -916,7 +1003,7 @@ keeps strong/sensitive same-direction Branch A candidates visible as review when
 Branch B calibrated evidence is weak but not directionally contradictory. It
 does not create B-only final report events and it does not promote Branch B V2.
 
-Negative-bank status after the rebuild remains:
+Legacy negative-bank status after the rebuild remains:
 
 ```json
 {
@@ -932,9 +1019,13 @@ Implication:
 
 - The H R0 shadow reference plus the review-preservation rule now satisfies the
   immediate Y/H no-FN gate in this validation context.
-- It does not yet satisfy the Branch B V2 matched-negative calibration gate.
+- It does not yet satisfy the Branch B V2 matched-negative calibration gate
+  because the configured background is still the legacy safety seed and contains
+  no validated N0/cross-fit controls.
 - H7-H16 still require post-rebuild `R0/R1/R2` and `N0/N1/N2` review before any
   production reference or N0 promotion.
+- Old/legacy Branch B kept status must not be used as the final V2 benchmark.
+  It can only identify samples requiring post-rebuild V2 review.
 - The 2026-06-15 five-sample outputs remain current-workflow exploratory
   reports, not locked validation proof.
 
