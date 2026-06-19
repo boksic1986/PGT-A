@@ -146,3 +146,12 @@ It is safe as a workflow extension because the outputs are part of `cnv` for mat
 ## Next Step
 
 Use the Branch S tables for SCA review design and truth-set planning. Do not promote SCA state scores to reportable calls until there is a separately locked SCA validation set.
+
+Follow-up validation plan:
+
+- `docs/reports/branch_s_sca_validation_plan_2026-06-19.md`
+
+Current limitation:
+
+- Branch S output has been materialized for Y1-Y8 only.
+- H1-H6, H7-H16, and the 2026-06-15 exploratory samples still need formal Branch S materialization before SCA performance can be evaluated.
