@@ -413,6 +413,13 @@ Implementation status on 2026-06-19:
   - `tests/unit/test_branch_b_evidence_ledger.py`: `4 passed in 0.58s`.
   - Branch A/B/S related regression set: `83 passed in 1.07s`.
   - `snakemake -n cnv cnv_report` with `config_predict_build_ref_v2_mask_only.yaml`: `Nothing to be done`.
+- Phase 1A materialization summary:
+  `docs/reports/branch_ab_v2_phase1a_materialization_summary_2026-06-19.md`.
+  - Y1-Y8: 8 ledger files, 143 Branch A candidate rows.
+  - H1-H16: 16 ledger files, 307 Branch A candidate rows.
+  - 2026-06-15: 5 ledger files, 170 Branch A candidate rows.
+  - Current final/report truth metrics remain FN=0 for Y1-Y8 and H1-H6.
+  - `matched_negative_source` and `matched_negative_percentile` are unknown on known-positive truth-overlap candidates, so matched-negative evidence is not eligible for hard filtering in Phase 1A.
 
 ### Phase 1B: maskpar/mapability asset decision matrix
 
