@@ -17,6 +17,18 @@ Current fixed baseline:
 - P2 also exposed high Branch A candidate burden, so the next Branch A work is
   burden optimization under no-FN and H6 chr21 preservation constraints.
 
+Remote mirror / Snakemake parser state:
+
+- The 2026-06-21 remote Snakemake parse blocker was traced to CRLF line endings
+  in workflow source files copied from the Windows worktree into the Linux
+  mirror.
+- Remote mirror workflow sources were normalized to LF:
+  `Snakefile`, `rules/*.smk`, `pgta/**/*.py`, `scripts/**/*.py`,
+  `tests/**/*.py`, and root YAML configs.
+- `.gitattributes` now records the LF contract for `Snakefile`, `*.smk`,
+  Python, and YAML files.
+- The previously failing dry-run now parses successfully on `ssh fengxian`.
+
 Current Branch B state:
 
 - Branch B remains necessary for candidate-level refinement, including mosaic,

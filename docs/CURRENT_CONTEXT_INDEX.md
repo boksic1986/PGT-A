@@ -26,6 +26,7 @@ handoffs or legacy Branch B outputs.
 active_handoff: docs/handoff/2026-06-21_0127_p1_p6_credibility_audit_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
+remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: p2_no_fn_passed_burden_optimization_next
 branch_b_status: v2_evidence_design_legacy_excluded
 branch_s_status: review_reportable_with_limitations
@@ -120,8 +121,9 @@ A, Branch B, Branch S, background source, and limitations explicitly.
 ## Next Gates
 
 1. Keep this context index current and commit it with each completed R&D loop.
-2. Verify or re-sync the remote mirror before making new Snakemake validation
-   claims.
+2. Keep workflow source line endings LF on the remote mirror before making new
+   Snakemake validation claims. The 2026-06-21 parser blocker was repaired by
+   normalizing `Snakefile`, `.smk`, Python, and YAML workflow sources to LF.
 3. Evaluate Branch A burden under the fixed reference while preserving FN=0 on
    Y1-Y8/H1-H6 and preserving H6 chr21.
 4. Implement Branch B V2-only truth benchmark and evidence/disposition output,

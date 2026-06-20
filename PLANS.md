@@ -24,8 +24,8 @@ Immediate execution order:
 
 1. Keep `docs/CURRENT_CONTEXT_INDEX.md` current and commit each completed
    logical loop.
-2. Fix or re-sync the remote mirror issue before making new Snakemake
-   validation claims.
+2. Preserve LF line endings for workflow sources when syncing the remote mirror;
+   the 2026-06-21 Snakemake parse blocker has been repaired and verified.
 3. Run Branch A burden optimization experiments only under the fixed reference
    contract and only if Y1-Y8/H1-H6 FN stays zero and H6 chr21 remains detected.
 4. Implement Branch B V2-only evidence/disposition benchmark against Y1-Y8 and

@@ -1,0 +1,7 @@
+# Snakemake 8.5.4 on the remote Linux mirror fails to parse workflow files
+# copied with CRLF endings from the Windows worktree. Keep workflow sources LF.
+Snakefile text eol=lf
+*.smk text eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
