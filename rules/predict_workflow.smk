@@ -346,6 +346,110 @@ if CNV_ENABLED:
                 check=True,
             )
 
+    rule cnv_branch_a_validation:
+        input:
+            a_candidates=expand(CNV_A_CANDIDATES, sample=SAMPLES),
+            qcs=expand(CNV_QC_TSV, sample=SAMPLES),
+            genders=(expand(CNV_GENDER_TSV, sample=SAMPLES) if PREDICT_BY_SEX_ENABLED else []),
+            truth=([CNV_EVAL_TRUTH_TSV] if CNV_EVAL_TRUTH_TSV else []),
+            metadata=RUN_METADATA
+        output:
+            sample_summary=CNV_BRANCH_A_VALIDATION_SAMPLE_SUMMARY,
+            truth_metrics=CNV_BRANCH_A_VALIDATION_TRUTH_METRICS,
+            summary=CNV_BRANCH_A_VALIDATION_SUMMARY
+        log:
+            project_path("logs", "cnv", "branch_a_validation.log")
+        threads: 1
+        run:
+            from pgta.core.logging import write_rule_audit_log
+            import subprocess
+
+            write_rule_audit_log(log[0], input.metadata)
+            command = [
+                config["biosoft"]["python"],
+                SCRIPT_BRANCH_A_VALIDATION,
+                SCRIPT_BRANCH_A_VALIDATION_ACTION,
+                "--reference-id", CNV_REFERENCE_ID,
+                "--binsize", str(CNV_CONVERT_BINSIZE),
+                "--preprocess-mask-version", CNV_PREPROCESS_STRATEGY,
+                "--wisecondorx-predict-command",
+                (
+                    "WisecondorX predict <npz> <sex-routed-ref> <output-prefix> "
+                    f"--zscore {CNV_ZSCORE} --alpha {CNV_ALPHA} "
+                    f"--maskrepeats {CNV_MASKREPEATS} --minrefbins {CNV_MINREFBINS}"
+                ),
+                "--blacklist-bed", CNV_POSTPROCESS_BLACKLIST_BED,
+                "--minrefbins", str(CNV_MINREFBINS),
+                "--zscore", str(CNV_ZSCORE),
+                "--alpha", str(CNV_ALPHA),
+                "--maskrepeats", str(CNV_MASKREPEATS),
+                "--output-sample-summary", output.sample_summary,
+                "--output-truth-metrics", output.truth_metrics,
+                "--output-summary", output.summary,
+            ]
+            for sample_id in SAMPLES:
+                command.extend(["--sample-id", str(sample_id)])
+            for candidate_tsv in input.a_candidates:
+                command.extend(["--candidate-tsv", str(candidate_tsv)])
+            for qc_tsv in input.qcs:
+                command.extend(["--qc-tsv", str(qc_tsv)])
+            for gender_tsv in input.genders:
+                command.extend(["--gender-tsv", str(gender_tsv)])
+            if input.truth:
+                command.extend(["--truth-tsv", str(input.truth[0])])
+            subprocess.run(command, check=True)
+
+    if "reference_audit" in AVAILABLE_TARGETS:
+        rule cnv_reference_candidate_audit:
+            input:
+                a_candidates=expand(CNV_A_CANDIDATES, sample=CNV_REFERENCE_AUDIT_SAMPLE_IDS),
+                qcs=expand(CNV_QC_TSV, sample=CNV_REFERENCE_AUDIT_SAMPLE_IDS),
+                genders=(expand(CNV_GENDER_TSV, sample=CNV_REFERENCE_AUDIT_SAMPLE_IDS) if PREDICT_BY_SEX_ENABLED else []),
+                sample_metadata=([CNV_REFERENCE_AUDIT_SAMPLE_METADATA] if CNV_REFERENCE_AUDIT_SAMPLE_METADATA else []),
+                reference_samples=([CNV_REFERENCE_AUDIT_REFERENCE_SAMPLES_FILE] if CNV_REFERENCE_AUDIT_REFERENCE_SAMPLES_FILE else []),
+                bin_annotations=([CNV_REFERENCE_AUDIT_BIN_ANNOTATIONS] if CNV_REFERENCE_AUDIT_BIN_ANNOTATIONS else []),
+                metadata=RUN_METADATA
+            output:
+                audit=CNV_REFERENCE_AUDIT_TSV,
+                summary=CNV_REFERENCE_AUDIT_SUMMARY
+            log:
+                project_path("logs", "cnv", "reference_candidate_audit.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                command = [
+                    config["biosoft"]["python"],
+                    SCRIPT_REFERENCE_CANDIDATE_AUDIT,
+                    SCRIPT_REFERENCE_CANDIDATE_AUDIT_ACTION,
+                    "--a-candidates-dir", str(Path(CNV_DIR) / "a_branch"),
+                    "--qc-dir", CNV_QC_DIR,
+                    "--reference-id", CNV_REFERENCE_ID,
+                    "--output-audit", output.audit,
+                    "--output-summary", output.summary,
+                    "--strong-z", str(CNV_REFERENCE_AUDIT_STRONG_Z),
+                    "--broad-event-min-bp", str(CNV_REFERENCE_AUDIT_BROAD_EVENT_MIN_BP),
+                    "--sample-specific-fraction-threshold", str(CNV_REFERENCE_AUDIT_SAMPLE_SPECIFIC_FRACTION_THRESHOLD),
+                    "--high-risk-burden-threshold", str(CNV_REFERENCE_AUDIT_HIGH_RISK_BURDEN_THRESHOLD),
+                    "--shared-signal-min-samples", str(CNV_REFERENCE_AUDIT_SHARED_SIGNAL_MIN_SAMPLES),
+                ]
+                if PREDICT_BY_SEX_ENABLED:
+                    command.extend(["--gender-dir", CNV_GENDER_DIR])
+                if CNV_REFERENCE_AUDIT_EVIDENCE_LEDGER_DIR:
+                    command.extend(["--evidence-ledger-dir", CNV_REFERENCE_AUDIT_EVIDENCE_LEDGER_DIR])
+                if input.sample_metadata:
+                    command.extend(["--sample-metadata", input.sample_metadata[0]])
+                else:
+                    for sample_id in CNV_REFERENCE_AUDIT_SAMPLE_IDS:
+                        command.extend(["--sample-id", str(sample_id)])
+                if input.reference_samples:
+                    command.extend(["--reference-samples-file", input.reference_samples[0]])
+                if input.bin_annotations:
+                    command.extend(["--bin-annotations", input.bin_annotations[0]])
+                subprocess.run(command, check=True)
+
     if CNV_POSTPROCESS_ENABLE_BRANCH_B:
         rule cnv_correction_branch_b:
             input:
@@ -914,6 +1018,9 @@ if CNV_ENABLED:
                 genders=(expand(CNV_GENDER_TSV, sample=SAMPLES) if PREDICT_BY_SEX_ENABLED else []),
                 qcs=expand(CNV_QC_TSV, sample=SAMPLES),
                 a_branch=(expand(CNV_A_ABERRATIONS_BED, sample=SAMPLES) if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
+                branch_a_validation_summaries=CNV_REPORT_BRANCH_A_VALIDATION_SUMMARIES,
+                branch_b_evidence_summaries=(expand(CNV_B_EVIDENCE_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
+                branch_s_summaries=(expand(CNV_BRANCH_S_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 evaluation_summary=([CNV_EVAL_SUMMARY] if "cnv_eval" in REQUESTED_TARGETS else []),
                 ml_summary=([CNV_ML_SUMMARY] if "cnv_ml" in REQUESTED_TARGETS else []),
                 benchmark_summary=([CNV_BENCHMARK_SUMMARY] if "cnv_benchmark" in REQUESTED_TARGETS else []),
@@ -925,6 +1032,13 @@ if CNV_ENABLED:
                 html=CNV_REPORT_HTML
             log:
                 project_path("logs", "cnv", "report.log")
+            params:
+                reference_id=CNV_REFERENCE_ID,
+                wisecondorx_predict_command=(
+                    "WisecondorX predict <npz> <ref> <output-prefix> "
+                    f"--zscore {CNV_ZSCORE} --alpha {CNV_ALPHA} "
+                    f"--maskrepeats {CNV_MASKREPEATS} --minrefbins {CNV_MINREFBINS}"
+                )
             threads: 1
             run:
                 from pgta.core.logging import write_rule_audit_log
@@ -935,6 +1049,8 @@ if CNV_ENABLED:
                     config["biosoft"]["python"],
                     SCRIPT_CNV_REPORT,
                     SCRIPT_CNV_REPORT_ACTION,
+                    "--reference-id", params.reference_id,
+                    "--wisecondorx-predict-command", params.wisecondorx_predict_command,
                     "--output-tsv", output.tsv,
                     "--output-json", output.json,
                     "--output-md", output.md,
@@ -949,6 +1065,8 @@ if CNV_ENABLED:
                     command.extend(["--benchmark-summary", input.benchmark_summary[0]])
                 if input.mosaic_truth_validation:
                     command.extend(["--truth-validation-summary", input.mosaic_truth_validation[0]])
+                for path_value in input.branch_a_validation_summaries:
+                    command.extend(["--branch-a-validation-summary", path_value])
                 for path_value in input.events:
                     command.extend(["--event-tsv", path_value])
                 for path_value in input.plots:
@@ -959,4 +1077,8 @@ if CNV_ENABLED:
                     command.extend(["--qc-tsv", path_value])
                 for path_value in input.a_branch:
                     command.extend(["--a-branch-bed", path_value])
+                for path_value in input.branch_b_evidence_summaries:
+                    command.extend(["--branch-b-evidence-summary", path_value])
+                for path_value in input.branch_s_summaries:
+                    command.extend(["--branch-s-summary", path_value])
                 subprocess.run(command, check=True)

@@ -23,6 +23,10 @@ core:
     common_reference_binsize_output: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619/reference/gender/common_best_binsize.txt"
     cnv:
       reference_id: "h_r0_shadow_ref_20260619"
+      report:
+        branch_a_validation_summaries:
+          - "/data/project/CNV/PGT-A/refactor_validation_20260419/results_y_h_r0_shadow_ref_20260619/wisecondorx/cnv/branch_a_validation/summary.json"
+          - "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_20260608_h_r0_shadow_ref_20260619/wisecondorx/cnv/branch_a_validation/summary.json"
       preprocess:
         strategy: "mask_only"
       negative_bank:

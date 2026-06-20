@@ -231,6 +231,50 @@ CNV_REPORT_TSV = str(Path(CNV_REPORT_DIR) / "cnv_summary.tsv")
 CNV_REPORT_JSON = str(Path(CNV_REPORT_DIR) / "cnv_summary.json")
 CNV_REPORT_MD = str(Path(CNV_REPORT_DIR) / "cnv_summary.md")
 CNV_REPORT_HTML = str(Path(CNV_REPORT_DIR) / "cnv_summary.html")
+CNV_REPORT_BRANCH_A_VALIDATION_SUMMARIES = [
+    resolve_path(item)
+    for item in CNV_REPORT_CFG.get("branch_a_validation_summaries", [])
+    if str(item).strip()
+]
+CNV_REFERENCE_AUDIT_CFG = CNV_CFG.get("reference_audit", {})
+CNV_REFERENCE_AUDIT_SAMPLE_IDS = [
+    str(item)
+    for item in CNV_REFERENCE_AUDIT_CFG.get("samples", SAMPLES)
+]
+CNV_REFERENCE_AUDIT_SAMPLE_METADATA = (
+    resolve_path(CNV_REFERENCE_AUDIT_CFG.get("sample_metadata", ""))
+    if str(CNV_REFERENCE_AUDIT_CFG.get("sample_metadata", "")).strip()
+    else ""
+)
+CNV_REFERENCE_AUDIT_REFERENCE_SAMPLES_FILE = (
+    resolve_path(CNV_REFERENCE_AUDIT_CFG.get("reference_samples_file", ""))
+    if str(CNV_REFERENCE_AUDIT_CFG.get("reference_samples_file", "")).strip()
+    else ""
+)
+CNV_REFERENCE_AUDIT_BIN_ANNOTATIONS = (
+    resolve_path(CNV_REFERENCE_AUDIT_CFG.get("bin_annotations", ""))
+    if str(CNV_REFERENCE_AUDIT_CFG.get("bin_annotations", "")).strip()
+    else ""
+)
+CNV_REFERENCE_AUDIT_EVIDENCE_LEDGER_DIR = (
+    resolve_path(CNV_REFERENCE_AUDIT_CFG.get("evidence_ledger_dir", ""))
+    if str(CNV_REFERENCE_AUDIT_CFG.get("evidence_ledger_dir", "")).strip()
+    else str(Path(CNV_POSTPROCESS_DIR) / "evidence_ledger")
+)
+CNV_REFERENCE_AUDIT_STRONG_Z = float(CNV_REFERENCE_AUDIT_CFG.get("strong_z", 10.0))
+CNV_REFERENCE_AUDIT_BROAD_EVENT_MIN_BP = int(CNV_REFERENCE_AUDIT_CFG.get("broad_event_min_bp", 10000000))
+CNV_REFERENCE_AUDIT_SAMPLE_SPECIFIC_FRACTION_THRESHOLD = float(
+    CNV_REFERENCE_AUDIT_CFG.get("sample_specific_fraction_threshold", 0.05)
+)
+CNV_REFERENCE_AUDIT_HIGH_RISK_BURDEN_THRESHOLD = float(
+    CNV_REFERENCE_AUDIT_CFG.get("high_risk_burden_threshold", 0.20)
+)
+CNV_REFERENCE_AUDIT_SHARED_SIGNAL_MIN_SAMPLES = int(
+    CNV_REFERENCE_AUDIT_CFG.get("shared_signal_min_samples", 3)
+)
+CNV_REFERENCE_AUDIT_DIR = str(Path(CNV_DIR) / "reference_audit")
+CNV_REFERENCE_AUDIT_TSV = str(Path(CNV_REFERENCE_AUDIT_DIR) / "reference_candidate_audit.tsv")
+CNV_REFERENCE_AUDIT_SUMMARY = str(Path(CNV_REFERENCE_AUDIT_DIR) / "reference_candidate_audit.summary.json")
 CNV_NPZ = str(Path(CNV_DIR) / "npz" / "{sample}.npz")
 CNV_MASKED_NPZ = str(Path(CNV_DIR) / "npz_mask_only" / "{sample}.npz")
 CNV_MASK_SUMMARY = str(Path(CNV_DIR) / "npz_mask_only" / "{sample}.mask_summary.json")
@@ -243,3 +287,7 @@ CNV_DONE = str(Path(CNV_PREDICT_DIR) / "{sample}.done")
 CNV_A_ABERRATIONS_BED = str(Path(CNV_PREDICT_DIR) / "{sample}_aberrations.bed")
 CNV_A_CANDIDATES = str(Path(CNV_DIR) / "a_branch" / "{sample}.candidate_events.tsv")
 CNV_A_CANDIDATE_SUMMARY = str(Path(CNV_DIR) / "a_branch" / "{sample}.summary.json")
+CNV_BRANCH_A_VALIDATION_DIR = str(Path(CNV_DIR) / "branch_a_validation")
+CNV_BRANCH_A_VALIDATION_SAMPLE_SUMMARY = str(Path(CNV_BRANCH_A_VALIDATION_DIR) / "sample_summary.tsv")
+CNV_BRANCH_A_VALIDATION_TRUTH_METRICS = str(Path(CNV_BRANCH_A_VALIDATION_DIR) / "truth_metrics.tsv")
+CNV_BRANCH_A_VALIDATION_SUMMARY = str(Path(CNV_BRANCH_A_VALIDATION_DIR) / "summary.json")

@@ -161,8 +161,20 @@ class BranchBEvidenceLedgerTest(unittest.TestCase):
     def test_summary_reports_disposition_and_missingness_counts(self):
         ledger = pd.DataFrame(
             [
-                {"final_disposition": "CONFIRMED", "evidence_missing_reason": ""},
-                {"final_disposition": "REVIEW_REQUIRED", "evidence_missing_reason": "refmap_missing"},
+                {
+                    "final_disposition": "CONFIRMED",
+                    "disposition": "REVIEW_REQUIRED",
+                    "evidence_missing_reason": "",
+                    "background_source": "UNKNOWN_BACKGROUND",
+                    "background_status": "UNKNOWN_BACKGROUND",
+                },
+                {
+                    "final_disposition": "REVIEW_REQUIRED",
+                    "disposition": "REVIEW_REQUIRED",
+                    "evidence_missing_reason": "refmap_missing",
+                    "background_source": "UNKNOWN_BACKGROUND",
+                    "background_status": "UNKNOWN_BACKGROUND",
+                },
             ]
         )
 
@@ -171,6 +183,9 @@ class BranchBEvidenceLedgerTest(unittest.TestCase):
         self.assertEqual(summary["candidate_count"], 2)
         self.assertEqual(summary["disposition_counts"]["CONFIRMED"], 1)
         self.assertEqual(summary["disposition_counts"]["REVIEW_REQUIRED"], 1)
+        self.assertEqual(summary["p3_disposition_counts"]["REVIEW_REQUIRED"], 2)
+        self.assertEqual(summary["background_source_counts"]["UNKNOWN_BACKGROUND"], 2)
+        self.assertEqual(summary["background_status_counts"]["UNKNOWN_BACKGROUND"], 2)
         self.assertEqual(summary["missing_evidence_candidate_count"], 1)
 
     def test_cnvpro_like_shadow_fields_are_candidate_level_and_unknown_safe(self):
@@ -250,6 +265,76 @@ class BranchBEvidenceLedgerTest(unittest.TestCase):
         self.assertEqual(int(row["crosses_par_boundary"]), 0)
         self.assertEqual(row["cnvpro_large_segment_tier"], "large_ge4mb")
         self.assertEqual(row["cnvpro_like_evidence_status"], "SHADOW_EVIDENCE_ONLY")
+
+    def test_p3_disposition_contract_is_review_safe_and_has_required_fields(self):
+        a_candidates = pd.DataFrame(
+            [
+                {
+                    "candidate_id": "H6.A0001",
+                    "sample_id": "H6",
+                    "chrom": "chr21",
+                    "start": 20_000_000,
+                    "end": 22_000_000,
+                    "state": "gain",
+                    "a_zscore": 18.0,
+                    "a_abs_zscore": 18.0,
+                    "a_ratio": 0.12,
+                    "a_support_level": "strong",
+                }
+            ]
+        )
+        branch_b_events = pd.DataFrame(
+            [
+                {
+                    "event_id": "H6.A0001.B_refined",
+                    "a_candidate_id": "H6.A0001",
+                    "sample_id": "H6",
+                    "chrom": "chr21",
+                    "state": "gain",
+                    "keep_event": 0,
+                    "report_class": "candidate_suppressed",
+                    "artifact_status": "artifact",
+                    "event_corr_adjusted_z": 5.0,
+                }
+            ]
+        )
+
+        ledger = build_candidate_evidence_ledger(
+            sample_id="H6",
+            a_candidates=a_candidates,
+            branch_b_events=branch_b_events,
+            bins_df=pd.DataFrame(),
+            reference_id="h_r0_shadow_ref_20260619",
+            negative_bank_version="branch_ab_p3",
+        )
+
+        required_columns = {
+            "sample",
+            "branch_b_direction_support",
+            "copy_number_like_amplitude",
+            "mosaic_proxy",
+            "loh_evidence",
+            "upd_evidence",
+            "background_source",
+            "background_status",
+            "region_risk_context",
+            "sample_noise_context",
+            "cnvpro_consistency_status",
+            "disposition",
+            "disposition_reason",
+            "report_impact",
+        }
+        self.assertTrue(required_columns.issubset(set(ledger.columns)))
+
+        row = ledger.iloc[0]
+        self.assertEqual(row["sample"], "H6")
+        self.assertEqual(row["loh_evidence"], "not_available")
+        self.assertEqual(row["upd_evidence"], "not_available")
+        self.assertEqual(row["background_source"], "UNKNOWN_BACKGROUND")
+        self.assertEqual(row["background_status"], "UNKNOWN_BACKGROUND")
+        self.assertEqual(row["report_impact"], "none_shadow_only")
+        self.assertEqual(row["disposition"], "REVIEW_REQUIRED")
+        self.assertIn("legacy_artifact_not_hard_suppressed", row["disposition_reason"])
 
 
 if __name__ == "__main__":

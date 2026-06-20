@@ -146,3 +146,95 @@ def test_branch_s_state_scores_use_branch_a_direction_when_region_z_is_opposite(
     assert x_loss > 0
     assert x_gain < 0
     assert loss_reason == "branch_a_candidate_zscore"
+
+
+def test_branch_s_summary_contains_p5_report_boundary_contract():
+    bins = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 58_000_000,
+                "calibrated_z": 4.0,
+                "robust_z": 22.0,
+                "is_PAR": False,
+            },
+            {
+                "chrom": "chrX",
+                "start": 60_000,
+                "end": 2_600_000,
+                "calibrated_z": 1.0,
+                "robust_z": 1.0,
+                "par_overlap_fraction": 1.0,
+            },
+            {
+                "chrom": "chrY",
+                "start": 3_000_000,
+                "end": 20_000_000,
+                "calibrated_z": 0.5,
+                "robust_z": 0.5,
+                "is_PAR": False,
+            },
+        ]
+    )
+    a_candidates = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 58_000_000,
+                "state": "gain",
+                "a_zscore": 42.0,
+                "a_abs_zscore": 42.0,
+            }
+        ]
+    )
+    gender = pd.DataFrame(
+        [
+            {
+                "sample_id": "SCA1",
+                "sex_call": "XY",
+                "predict_gender": "M",
+                "sex_call_source": "wisecondorx_bam_consensus",
+            }
+        ]
+    )
+
+    evidence, scores = build_branch_s_shadow(
+        sample_id="SCA1",
+        bins=bins,
+        a_candidates=a_candidates,
+        gender=gender,
+    )
+    summary = summarize_branch_s_shadow("SCA1", evidence, scores, gender)
+
+    required_keys = {
+        "sample",
+        "sex_call",
+        "expected_x_ploidy",
+        "expected_y_ploidy",
+        "x_nonpar_direction",
+        "x_par_context",
+        "y_nonpar_direction",
+        "y_par_or_homology_context",
+        "branch_a_x_support",
+        "branch_a_y_support",
+        "sca_candidate_state",
+        "sca_confidence_tier",
+        "sca_output_mode",
+        "sca_uncertainty_reason",
+        "report_text_status",
+    }
+    assert required_keys.issubset(summary)
+    assert summary["sample"] == "SCA1"
+    assert summary["expected_x_ploidy"] == 1
+    assert summary["expected_y_ploidy"] == 1
+    assert summary["x_nonpar_direction"] == "gain"
+    assert summary["x_par_context"] == "available"
+    assert summary["branch_a_x_support"] == "present"
+    assert summary["branch_a_y_support"] == "absent"
+    assert summary["sca_candidate_state"] == "X_GAIN"
+    assert summary["sca_confidence_tier"] == "SCA_REVIEW_STRONG"
+    assert summary["sca_output_mode"] == "review_development_only"
+    assert summary["report_text_status"] == "development_only_not_final_reportable"
+    assert "locked_sca_truth_incomplete" in summary["sca_uncertainty_reason"]

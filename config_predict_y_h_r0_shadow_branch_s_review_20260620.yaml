@@ -1,0 +1,8 @@
+base_config: "/data/project/CNV/PGT-A/refactor_validation_20260419/config_predict_y_h_r0_shadow_20260619.yaml"
+
+pipeline:
+  mode: "predict"
+  targets:
+    - "metadata"
+    - "cnv_qc"
+    - "branch_s_review"

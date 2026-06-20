@@ -32,6 +32,11 @@ def parse_args():
     parser.add_argument("--gender-tsv", action="append", default=[])
     parser.add_argument("--qc-tsv", action="append", default=[])
     parser.add_argument("--a-branch-bed", action="append", default=[])
+    parser.add_argument("--branch-a-validation-summary", action="append", default=[])
+    parser.add_argument("--branch-b-evidence-summary", action="append", default=[])
+    parser.add_argument("--branch-s-summary", action="append", default=[])
+    parser.add_argument("--reference-id", default="")
+    parser.add_argument("--wisecondorx-predict-command", default="")
     parser.add_argument("--evaluation-summary", default="")
     parser.add_argument("--ml-summary", default="")
     parser.add_argument("--benchmark-summary", default="")
@@ -204,6 +209,140 @@ def read_optional_json(path_value):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _sample_from_summary_path(path):
+    name = path.name
+    for suffix in [".summary.json", ".json"]:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return path.stem
+
+
+def _format_count_dict(value):
+    if not isinstance(value, dict) or not value:
+        return "not_recorded"
+    return ";".join(f"{key}={int(count)}" for key, count in sorted(value.items()))
+
+
+def load_branch_b_evidence_summaries(paths):
+    rows = []
+    for path_value in paths:
+        path = Path(path_value)
+        if not path.exists():
+            continue
+        summary = read_optional_json(path)
+        if not summary:
+            continue
+        p3_counts = summary.get("p3_disposition_counts", {})
+        review_required_count = int(p3_counts.get("REVIEW_REQUIRED", summary.get("review_burden_count", 0)) or 0)
+        rows.append(
+            {
+                "sample_id": str(summary.get("sample_id") or _sample_from_summary_path(path)),
+                "branch_b_evidence_candidate_count": int(summary.get("candidate_count", 0) or 0),
+                "branch_b_evidence_review_required_count": review_required_count,
+                "branch_b_evidence_missing_count": int(summary.get("missing_evidence_candidate_count", 0) or 0),
+                "branch_b_evidence_background_source": _format_count_dict(summary.get("background_source_counts", {})),
+                "branch_b_evidence_background_status": _format_count_dict(summary.get("background_status_counts", {})),
+                "branch_b_evidence_disposition_counts": _format_count_dict(p3_counts),
+                "branch_b_evidence_final_report_impact": str(summary.get("final_report_impact", "not_recorded")),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def load_branch_a_validation_summaries(paths):
+    rows = []
+    for path_value in paths:
+        path = Path(path_value)
+        if not path.exists():
+            continue
+        summary = read_optional_json(path)
+        if not summary:
+            continue
+        rows.append(
+            {
+                "path": str(path),
+                "reference_id": str(summary.get("reference_id", "")),
+                "sample_count": int(summary.get("sample_count", 0) or 0),
+                "truth_event_count": int(summary.get("truth_event_count", 0) or 0),
+                "truth_detected_count": int(summary.get("truth_detected_count", 0) or 0),
+                "FN_count": int(summary.get("FN_count", 0) or 0),
+                "H6_chr21_status": str(summary.get("H6_chr21_status", "not_applicable")),
+                "status": str(summary.get("status", "unknown")),
+            }
+        )
+    return rows
+
+
+def summarize_branch_a_validation_gate(reference_id, summaries):
+    if not summaries:
+        return {
+            "status": "not_configured",
+            "summary_count": 0,
+            "truth_event_count": 0,
+            "truth_detected_count": 0,
+            "FN_count": 0,
+            "H6_chr21_status": "not_configured",
+            "same_reference_config_status": "not_configured",
+            "summaries": [],
+        }
+    reference_values = {str(item.get("reference_id", "")) for item in summaries}
+    same_reference = reference_values == {str(reference_id)}
+    fn_count = int(sum(int(item.get("FN_count", 0) or 0) for item in summaries))
+    truth_event_count = int(sum(int(item.get("truth_event_count", 0) or 0) for item in summaries))
+    truth_detected_count = int(sum(int(item.get("truth_detected_count", 0) or 0) for item in summaries))
+    h6_statuses = [str(item.get("H6_chr21_status", "")) for item in summaries]
+    if "detected" in h6_statuses:
+        h6_status = "detected"
+    elif h6_statuses:
+        h6_status = ";".join(sorted(set(status for status in h6_statuses if status)))
+    else:
+        h6_status = "not_recorded"
+    if not same_reference:
+        status = "reference_mismatch"
+        same_reference_status = "mismatch"
+    elif truth_event_count <= 0:
+        status = "no_truth_events"
+        same_reference_status = "matched"
+    elif fn_count == 0 and truth_detected_count >= truth_event_count:
+        status = "passed_no_fn"
+        same_reference_status = "matched"
+    else:
+        status = "failed_or_incomplete"
+        same_reference_status = "matched"
+    return {
+        "status": status,
+        "summary_count": int(len(summaries)),
+        "truth_event_count": truth_event_count,
+        "truth_detected_count": truth_detected_count,
+        "FN_count": fn_count,
+        "H6_chr21_status": h6_status,
+        "same_reference_config_status": same_reference_status,
+        "summaries": summaries,
+    }
+
+
+def load_branch_s_summaries(paths):
+    rows = []
+    for path_value in paths:
+        path = Path(path_value)
+        if not path.exists():
+            continue
+        summary = read_optional_json(path)
+        if not summary:
+            continue
+        rows.append(
+            {
+                "sample_id": str(summary.get("sample_id") or summary.get("sample") or _sample_from_summary_path(path)),
+                "sca_candidate_state": str(summary.get("sca_candidate_state", "not_available")),
+                "sca_confidence_tier": str(summary.get("sca_confidence_tier", "not_available")),
+                "sca_output_mode": str(summary.get("sca_output_mode", "not_available")),
+                "sca_uncertainty_reason": str(summary.get("sca_uncertainty_reason", "")),
+                "report_text_status": str(summary.get("report_text_status", "not_available")),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def text_or_empty(value):
     if pd.isna(value):
         return ""
@@ -257,6 +396,26 @@ def format_branch_b_top_event(row):
         f"{row['chrom']}:{int(row['start'])}-{int(row['end'])} {row['state']} "
         f"[{row['artifact_status']}/{row['technical_confidence']}{suffix}]"
     )
+
+
+def format_branch_b_evidence_status(row):
+    count = row.get("branch_b_evidence_candidate_count", "")
+    if pd.isna(count) or count == "":
+        return "not_available"
+    background = text_or_empty(row.get("branch_b_evidence_background_status", "")) or "not_recorded"
+    impact = text_or_empty(row.get("branch_b_evidence_final_report_impact", "")) or "not_recorded"
+    review = int(row.get("branch_b_evidence_review_required_count", 0) or 0)
+    return f"candidates={int(count)}; review_required={review}; background={background}; impact={impact}"
+
+
+def format_sca_report_status(row):
+    mode = text_or_empty(row.get("sca_output_mode", ""))
+    if not mode:
+        return "not_available"
+    state = text_or_empty(row.get("sca_candidate_state", "")) or "not_available"
+    tier = text_or_empty(row.get("sca_confidence_tier", "")) or "not_available"
+    text_status = text_or_empty(row.get("report_text_status", "")) or "not_available"
+    return f"mode={mode}; state={state}; tier={tier}; status={text_status}"
 
 
 def summarize_branch_b_events(events_df):
@@ -427,20 +586,42 @@ def format_technical_conclusion(row):
     a_branch_review_count = int(row.get("a_branch_review_candidate_count", 0) or 0)
     a_branch_strong_count = int(row.get("a_branch_strong_signal_count", 0) or 0)
     a_branch_shortlist = text_or_empty(row.get("a_branch_review_shortlist", "")) or "none"
-    return (
-        f"Branch B kept {int(row['branch_b_kept_events'])} events; "
-        f"top event: {top_event}; "
-        f"fraction={top_fraction}; "
-        f"flags={top_flags}; "
-        f"downgrade={top_downgrade}; "
-        f"sex_review_suppressed={suppressed_count}; "
-        f"A-branch_sensitive_candidates={a_branch_count}; "
-        f"A-branch_review_shortlist_top{A_BRANCH_REVIEW_SHORTLIST_SIZE}={a_branch_review_count}; "
-        f"A-branch_strong_signals_z{A_BRANCH_STRONG_SIGNAL_Z:g}={a_branch_strong_count}; "
-        f"A-branch_top_signal={a_branch_top_event}; "
-        f"A-branch_review_shortlist={a_branch_shortlist}; "
-        f"QC={text_or_empty(row.get('qc_status', 'NA')) or 'NA'}; sex={text_or_empty(row.get('sex_call', 'NA')) or 'NA'}"
-    )
+    parts = [
+        f"Branch B kept {int(row['branch_b_kept_events'])} events",
+        f"top event: {top_event}",
+        f"fraction={top_fraction}",
+        f"flags={top_flags}",
+        f"downgrade={top_downgrade}",
+        f"sex_review_suppressed={suppressed_count}",
+        f"A-branch_sensitive_candidates={a_branch_count}",
+        f"A-branch_review_shortlist_top{A_BRANCH_REVIEW_SHORTLIST_SIZE}={a_branch_review_count}",
+        f"A-branch_strong_signals_z{A_BRANCH_STRONG_SIGNAL_Z:g}={a_branch_strong_count}",
+        f"A-branch_top_signal={a_branch_top_event}",
+        f"A-branch_review_shortlist={a_branch_shortlist}",
+    ]
+    evidence_count = row.get("branch_b_evidence_candidate_count", "")
+    if not pd.isna(evidence_count) and evidence_count != "":
+        parts.extend(
+            [
+                f"P3_branch_b_evidence_candidates={int(evidence_count)}",
+                f"P3_review_required={int(row.get('branch_b_evidence_review_required_count', 0) or 0)}",
+                f"P3_background={text_or_empty(row.get('branch_b_evidence_background_status', 'not_recorded')) or 'not_recorded'}",
+                f"P3_report_impact={text_or_empty(row.get('branch_b_evidence_final_report_impact', 'not_recorded')) or 'not_recorded'}",
+            ]
+        )
+    sca_mode = text_or_empty(row.get("sca_output_mode", ""))
+    if sca_mode:
+        parts.extend(
+            [
+                f"SCA_mode={sca_mode}",
+                f"SCA_state={text_or_empty(row.get('sca_candidate_state', 'not_available')) or 'not_available'}",
+                f"SCA_tier={text_or_empty(row.get('sca_confidence_tier', 'not_available')) or 'not_available'}",
+                f"SCA_status={text_or_empty(row.get('report_text_status', 'not_available')) or 'not_available'}",
+            ]
+        )
+    parts.append(f"QC={text_or_empty(row.get('qc_status', 'NA')) or 'NA'}")
+    parts.append(f"sex={text_or_empty(row.get('sex_call', 'NA')) or 'NA'}")
+    return "; ".join(parts)
 
 
 def format_biological_candidate_conclusion(row):
@@ -464,6 +645,9 @@ def main():
     gender_df = load_one_row_tables(args.gender_tsv)
     qc_df = load_one_row_tables(args.qc_tsv)
     a_branch_df = load_a_branch(args.a_branch_bed)
+    branch_a_validation_summaries = load_branch_a_validation_summaries(args.branch_a_validation_summary)
+    branch_b_evidence_df = load_branch_b_evidence_summaries(args.branch_b_evidence_summary)
+    branch_s_df = load_branch_s_summaries(args.branch_s_summary)
     evaluation_summary = read_optional_json(args.evaluation_summary)
     ml_summary = read_optional_json(args.ml_summary)
     benchmark_summary = read_optional_json(args.benchmark_summary)
@@ -501,15 +685,39 @@ def main():
         )
     if not a_branch_df.empty:
         sample_df = sample_df.merge(a_branch_df, on="sample_id", how="left")
+    if not branch_b_evidence_df.empty:
+        sample_df = sample_df.merge(branch_b_evidence_df, on="sample_id", how="left")
+    if not branch_s_df.empty:
+        sample_df = sample_df.merge(branch_s_df, on="sample_id", how="left")
 
     sample_df["technical_conclusion"] = sample_df.apply(format_technical_conclusion, axis=1)
     sample_df["biological_candidate_conclusion"] = sample_df.apply(format_biological_candidate_conclusion, axis=1)
+    sample_df["branch_b_evidence_status"] = sample_df.apply(format_branch_b_evidence_status, axis=1)
+    sample_df["sca_report_status"] = sample_df.apply(format_sca_report_status, axis=1)
     sample_df = sample_df.drop(columns=[column for column in A_BRANCH_INTERNAL_COLUMNS if column in sample_df.columns])
 
     ensure_parent(args.output_tsv)
     sample_df.to_csv(args.output_tsv, sep="\t", index=False)
+    branch_a_validation_gate = summarize_branch_a_validation_gate(args.reference_id, branch_a_validation_summaries)
+    report_contract = {
+        "status": "development_only_not_final_release",
+        "reference_id": str(args.reference_id or "not_configured"),
+        "wisecondorx_predict_command": str(args.wisecondorx_predict_command or "not_configured"),
+        "branch_a_validation_summary_count": int(len(branch_a_validation_summaries)),
+        "branch_a_no_fn_status": branch_a_validation_gate["status"],
+        "same_reference_config_status": branch_a_validation_gate["same_reference_config_status"],
+        "branch_b_evidence_summary_count": int(len(branch_b_evidence_df)),
+        "branch_s_summary_count": int(len(branch_s_df)),
+        "branch_b_raw_ledger_used": False,
+        "branch_s_raw_evidence_used": False,
+        "note": "P6 report package carries P3/P5 review summaries only; it does not promote Branch B or SCA.",
+    }
     payload = {
         "status": "completed",
+        "report_contract": report_contract,
+        "reference_id": report_contract["reference_id"],
+        "wisecondorx_predict_command": report_contract["wisecondorx_predict_command"],
+        "branch_a_validation_gate": branch_a_validation_gate,
         "evaluation_summary": evaluation_summary,
         "ml_summary": ml_summary,
         "benchmark_summary": benchmark_summary,
@@ -528,11 +736,19 @@ def main():
         f"- Evaluation status: `{evaluation_summary.get('status', 'not_run')}`",
         f"- ML status: `{ml_summary.get('status', 'not_run')}`",
         f"- Benchmark status: `{benchmark_summary.get('status', 'not_run')}`",
+        f"- Report release status: `{report_contract['status']}`",
+        f"- Reference ID: `{report_contract['reference_id']}`",
+        f"- Branch A no-FN status: `{branch_a_validation_gate['status']}`",
+        f"- Branch A no-FN truth: `{branch_a_validation_gate['truth_detected_count']}/{branch_a_validation_gate['truth_event_count']}`",
+        f"- Branch A no-FN FN count: `{branch_a_validation_gate['FN_count']}`",
+        f"- H6 chr21 status: `{branch_a_validation_gate['H6_chr21_status']}`",
+        f"- Branch B evidence summaries: `{report_contract['branch_b_evidence_summary_count']}`",
+        f"- Branch S summaries: `{report_contract['branch_s_summary_count']}`",
         "",
         "## Sample Table",
         "",
-        "| Sample | QC | Sex | Plot | Branch B Top Event | Technical Conclusion | Biological Candidate Conclusion |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| Sample | QC | Sex | Plot | Branch B Top Event | P3 Evidence | SCA Status | Technical Conclusion | Biological Candidate Conclusion |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     if fraction_benchmark:
         md_lines[8:8] = [
@@ -565,7 +781,10 @@ def main():
         md_lines.append(
             f"| `{row.sample_id}` | `{getattr(row, 'qc_status', 'NA')}` | `{getattr(row, 'sex_call', 'NA')}` | "
             f"{plot_link or ''} | "
-            f"{getattr(row, 'branch_b_top_event', '') or 'none'} | {row.technical_conclusion} | {row.biological_candidate_conclusion} |"
+            f"{getattr(row, 'branch_b_top_event', '') or 'none'} | "
+            f"{getattr(row, 'branch_b_evidence_status', 'not_available')} | "
+            f"{getattr(row, 'sca_report_status', 'not_available')} | "
+            f"{row.technical_conclusion} | {row.biological_candidate_conclusion} |"
         )
     ensure_parent(args.output_md).write_text("\n".join(md_lines) + "\n", encoding="utf-8")
 
@@ -579,6 +798,8 @@ def main():
             f"<td>{html_lib.escape(str(getattr(row, 'sex_call', 'NA')))}</td>"
             f"<td>{plot_link}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'branch_b_top_event', '') or 'none'))}</td>"
+            f"<td>{html_lib.escape(str(getattr(row, 'branch_b_evidence_status', 'not_available')))}</td>"
+            f"<td>{html_lib.escape(str(getattr(row, 'sca_report_status', 'not_available')))}</td>"
             f"<td>{html_lib.escape(str(row.technical_conclusion))}</td>"
             f"<td>{html_lib.escape(str(row.biological_candidate_conclusion))}</td>"
             "</tr>"
@@ -588,9 +809,10 @@ def main():
         "<style>body{font-family:Arial,sans-serif;margin:24px;}table{border-collapse:collapse;width:100%;}"
         "th,td{border:1px solid #ccc;padding:8px;vertical-align:top;}th{background:#f3f3f3;text-align:left;}</style>"
         "</head><body><h1>CNV Report</h1>"
-        f"<p>Samples: {sample_df['sample_id'].nunique()} | Branch B kept events: {int(sample_df['branch_b_kept_events'].sum())}</p>"
+        f"<p>Samples: {sample_df['sample_id'].nunique()} | Branch B kept events: {int(sample_df['branch_b_kept_events'].sum())} | "
+        f"Report release status: {html_lib.escape(report_contract['status'])}</p>"
         "<table><thead><tr><th>Sample</th><th>QC</th><th>Sex</th><th>Plot</th><th>Branch B Top Event</th>"
-        "<th>Technical Conclusion</th><th>Biological Candidate Conclusion</th></tr></thead><tbody>"
+        "<th>P3 Evidence</th><th>SCA Status</th><th>Technical Conclusion</th><th>Biological Candidate Conclusion</th></tr></thead><tbody>"
         + "".join(html_rows)
         + "</tbody></table></body></html>"
     )

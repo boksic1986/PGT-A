@@ -15,20 +15,40 @@ def merge_config(base, override):
     return merged
 
 
-if "base_config" in config:
-    base_cfg_path = Path(config["base_config"])
+def load_yaml_config(path):
+    with open(path, "r", encoding="utf-8") as config_handle:
+        return yaml.safe_load(config_handle) or {}
+
+
+def resolve_base_config_overlay(overlay_cfg, overlay_dir):
+    if "base_config" not in overlay_cfg:
+        return overlay_cfg
+    base_cfg_path = Path(overlay_cfg["base_config"])
     if not base_cfg_path.is_absolute():
-        base_cfg_path = (Path(workflow.basedir) / base_cfg_path).resolve()
-    with open(base_cfg_path, "r", encoding="utf-8") as base_cfg_handle:
-        base_cfg = yaml.safe_load(base_cfg_handle) or {}
-    override_cfg = {k: v for k, v in config.items() if k != "base_config"}
+        base_cfg_path = (Path(overlay_dir) / base_cfg_path).resolve()
+    base_cfg = resolve_base_config_overlay(load_yaml_config(base_cfg_path), base_cfg_path.parent)
+    override_cfg = {k: v for k, v in overlay_cfg.items() if k != "base_config"}
     override_mode = str(override_cfg.get("pipeline", {}).get("mode", "")).strip().lower()
     if override_mode == "predict":
         # Drop reference-only carryover while still allowing predict overlays to
         # add per-sample input contracts such as existing BAM/BAI paths.
         override_cfg = dict(override_cfg)
         override_cfg.pop("build_reference", None)
-    config = merge_config(base_cfg, override_cfg)
+    return merge_config(base_cfg, override_cfg)
+
+
+def select_raw_base_overlay_config():
+    configfiles = [Path(path) for path in getattr(workflow, "configfiles", [])]
+    for config_path in reversed(configfiles):
+        raw_cfg = load_yaml_config(config_path)
+        if "base_config" in raw_cfg:
+            return raw_cfg, config_path.parent
+    return config, Path(workflow.basedir)
+
+
+if "base_config" in config:
+    raw_overlay_cfg, raw_overlay_dir = select_raw_base_overlay_config()
+    config = resolve_base_config_overlay(raw_overlay_cfg, raw_overlay_dir)
 
 
 SAMPLES = sorted(config["samples"].keys())
@@ -234,6 +254,33 @@ rule cnv:
                 else []
             )
         ) if CNV_ENABLED else []
+
+
+rule reference_audit:
+    input:
+        [CNV_REFERENCE_AUDIT_TSV, CNV_REFERENCE_AUDIT_SUMMARY] if CNV_ENABLED else []
+
+
+rule branch_a_validation:
+    input:
+        [CNV_BRANCH_A_VALIDATION_SAMPLE_SUMMARY, CNV_BRANCH_A_VALIDATION_TRUTH_METRICS, CNV_BRANCH_A_VALIDATION_SUMMARY] if CNV_ENABLED else []
+
+
+rule branch_b_evidence:
+    input:
+        (
+            expand(CNV_B_EVIDENCE_LEDGER, sample=SAMPLES)
+            + expand(CNV_B_EVIDENCE_SUMMARY, sample=SAMPLES)
+        ) if CNV_ENABLED and CNV_POSTPROCESS_ENABLE_BRANCH_B else []
+
+
+rule branch_s_review:
+    input:
+        (
+            expand(CNV_BRANCH_S_EVIDENCE, sample=SAMPLES)
+            + expand(CNV_BRANCH_S_SCORES, sample=SAMPLES)
+            + expand(CNV_BRANCH_S_SUMMARY, sample=SAMPLES)
+        ) if CNV_ENABLED and CNV_POSTPROCESS_ENABLE_BRANCH_B else []
 
 
 rule cnv_eval:

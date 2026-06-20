@@ -15,6 +15,58 @@ def test_predict_dispatcher_exposes_phase1_phase2_actions():
 
     assert '"cnv_evidence_ledger": "pgta.predict.branch_b.evidence_ledger"' in dispatcher
     assert '"negative_bank_labels": "pgta.predict.branch_b.negative_bank"' in dispatcher
+    assert '"reference_candidate_audit": "pgta.reference.audit"' in dispatcher
+
+
+def test_reference_audit_target_is_branch_a_level_and_report_safe():
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+    pipeline_modes = read_text("rules/pipeline_modes.smk")
+    target_assembly = read_text("rules/target_assembly.smk")
+    snakefile = read_text("Snakefile")
+
+    assert "CNV_REFERENCE_AUDIT_TSV" in layout
+    assert "CNV_REFERENCE_AUDIT_SUMMARY" in layout
+    assert '"reference_audit"' in pipeline_modes
+    assert "CNV_REFERENCE_AUDIT_TSV" in target_assembly
+    assert "rule cnv_reference_candidate_audit" in workflow
+    assert "SCRIPT_REFERENCE_CANDIDATE_AUDIT_ACTION" in workflow
+    assert "rule reference_audit" in snakefile
+
+    audit_rule = workflow.split("rule cnv_reference_candidate_audit:", 1)[1].split("if CNV_POSTPROCESS_ENABLE_BRANCH_B:", 1)[0]
+    assert "CNV_A_CANDIDATES" in audit_rule
+    assert "CNV_QC_TSV" in audit_rule
+    assert "CNV_B_FINAL_EVENTS" not in audit_rule
+    assert "CNV_B_ARTIFACT_SUMMARY" not in audit_rule
+    assert "CNV_B_MATCHED_NEGATIVE" not in audit_rule
+
+    report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
+    assert "CNV_REFERENCE_AUDIT_TSV" not in report_rule
+
+
+def test_branch_a_validation_target_is_branch_a_only_and_report_safe():
+    dispatcher = read_text("scripts/_compat_entry.py")
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+    pipeline_modes = read_text("rules/pipeline_modes.smk")
+    target_assembly = read_text("rules/target_assembly.smk")
+    snakefile = read_text("Snakefile")
+
+    assert '"branch_a_validation": "pgta.predict.branch_a_validation"' in dispatcher
+    assert "SCRIPT_BRANCH_A_VALIDATION_ACTION" in workflow
+    assert "CNV_BRANCH_A_VALIDATION_SAMPLE_SUMMARY" in layout
+    assert '"branch_a_validation"' in pipeline_modes
+    assert "CNV_BRANCH_A_VALIDATION_SAMPLE_SUMMARY" in target_assembly
+    assert "rule branch_a_validation" in snakefile
+
+    validation_rule = workflow.split("rule cnv_branch_a_validation:", 1)[1].split("if \"reference_audit\" in AVAILABLE_TARGETS:", 1)[0]
+    assert "CNV_A_CANDIDATES" in validation_rule
+    assert "CNV_B_FINAL_EVENTS" not in validation_rule
+    assert "CNV_B_ARTIFACT_SUMMARY" not in validation_rule
+    assert "CNV_B_MATCHED_NEGATIVE" not in validation_rule
+
+    report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
+    assert "CNV_BRANCH_A_VALIDATION_SAMPLE_SUMMARY" not in report_rule
 
 
 def test_predict_workflow_has_shadow_ledger_without_report_promotion():
@@ -30,6 +82,29 @@ def test_predict_workflow_has_shadow_ledger_without_report_promotion():
 
     report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
     assert "CNV_B_EVIDENCE_LEDGER" not in report_rule
+    assert "CNV_B_EVIDENCE_SUMMARY" in report_rule
+
+
+def test_branch_b_evidence_target_is_p3_only_and_report_safe():
+    workflow = read_text("rules/predict_workflow.smk")
+    pipeline_modes = read_text("rules/pipeline_modes.smk")
+    target_assembly = read_text("rules/target_assembly.smk")
+    snakefile = read_text("Snakefile")
+
+    assert '"branch_b_evidence"' in pipeline_modes
+    assert "CNV_B_EVIDENCE_LEDGER" in target_assembly
+    assert "rule branch_b_evidence" in snakefile
+
+    evidence_target = target_assembly.split('if "branch_b_evidence" in REQUESTED_TARGETS', 1)[1].split('if "reference_audit" in REQUESTED_TARGETS', 1)[0]
+    assert "CNV_B_EVIDENCE_LEDGER" in evidence_target
+    assert "CNV_B_EVIDENCE_SUMMARY" in evidence_target
+    assert "CNV_B_V2_CLASSIFIER" not in evidence_target
+    assert "CNV_BRANCH_S_EVIDENCE" not in evidence_target
+    assert "CNV_REPORT_TSV" not in evidence_target
+
+    report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
+    assert "CNV_B_EVIDENCE_LEDGER" not in report_rule
+    assert "CNV_B_EVIDENCE_SUMMARY" in report_rule
 
 
 def test_negative_bank_rule_is_config_gated_and_not_automatic_n0():
@@ -100,4 +175,49 @@ def test_phase5_branch_s_is_shadow_only_and_report_safe():
     report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
     assert "CNV_BRANCH_S_EVIDENCE" not in report_rule
     assert "CNV_BRANCH_S_SCORES" not in report_rule
-    assert "CNV_BRANCH_S_SUMMARY" not in report_rule
+    assert "CNV_BRANCH_S_SUMMARY" in report_rule
+
+
+def test_branch_s_review_target_is_p5_only_and_report_safe():
+    workflow = read_text("rules/predict_workflow.smk")
+    pipeline_modes = read_text("rules/pipeline_modes.smk")
+    target_assembly = read_text("rules/target_assembly.smk")
+    snakefile = read_text("Snakefile")
+
+    assert '"branch_s_review"' in pipeline_modes
+    assert "rule branch_s_review" in snakefile
+
+    branch_s_target = target_assembly.split('if "branch_s_review" in REQUESTED_TARGETS', 1)[1].split('if "cnv_eval" in REQUESTED_TARGETS', 1)[0]
+    assert "CNV_BRANCH_S_EVIDENCE" in branch_s_target
+    assert "CNV_BRANCH_S_SCORES" in branch_s_target
+    assert "CNV_BRANCH_S_SUMMARY" in branch_s_target
+    assert "CNV_B_V2_CLASSIFIER" not in branch_s_target
+    assert "CNV_B_MATCHED_NEGATIVE" not in branch_s_target
+    assert "CNV_REPORT_TSV" not in branch_s_target
+
+    report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
+    assert "CNV_BRANCH_S_EVIDENCE" not in report_rule
+    assert "CNV_BRANCH_S_SCORES" not in report_rule
+    assert "CNV_BRANCH_S_SUMMARY" in report_rule
+
+
+def test_p6_report_package_consumes_review_summaries_only():
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+
+    assert "CNV_REPORT_BRANCH_A_VALIDATION_SUMMARIES" in layout
+
+    report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
+    assert "CNV_B_EVIDENCE_SUMMARY" in report_rule
+    assert "CNV_BRANCH_S_SUMMARY" in report_rule
+    assert "CNV_REPORT_BRANCH_A_VALIDATION_SUMMARIES" in report_rule
+    assert "--reference-id" in report_rule
+    assert "--wisecondorx-predict-command" in report_rule
+    assert "--branch-a-validation-summary" in report_rule
+    assert "--branch-b-evidence-summary" in report_rule
+    assert "--branch-s-summary" in report_rule
+    assert "CNV_B_EVIDENCE_LEDGER" not in report_rule
+    assert "CNV_BRANCH_S_EVIDENCE" not in report_rule
+    assert "CNV_BRANCH_S_SCORES" not in report_rule
+    assert "CNV_B_MATCHED_NEGATIVE" not in report_rule
+    assert "CNV_B_V2_CLASSIFIER" not in report_rule

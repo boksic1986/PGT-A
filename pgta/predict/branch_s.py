@@ -313,6 +313,83 @@ def make_state_score(sample_id, state, source_region_class, source_value, contex
     }
 
 
+def expected_sex_ploidy(sex_call):
+    sex = str(sex_call or "").strip().upper()
+    if sex == "XX":
+        return 2, 0
+    if sex == "XY":
+        return 1, 1
+    return np.nan, np.nan
+
+
+def _score_value(scores, state):
+    if scores is None or scores.empty or "sca_state" not in scores.columns:
+        return np.nan
+    matched = scores[scores["sca_state"].astype(str).eq(str(state))]
+    if matched.empty or "state_score" not in matched.columns:
+        return np.nan
+    return float(pd.to_numeric(matched["state_score"], errors="coerce").iloc[0])
+
+
+def axis_direction_from_scores(scores, axis, min_abs_score=5.0):
+    gain_score = _score_value(scores, f"{axis}_GAIN")
+    loss_score = _score_value(scores, f"{axis}_LOSS")
+    gain_value = gain_score if np.isfinite(gain_score) else -np.inf
+    loss_value = loss_score if np.isfinite(loss_score) else -np.inf
+    best = max(gain_value, loss_value)
+    if not np.isfinite(best) or best < float(min_abs_score):
+        return "neutral_or_uncertain"
+    return "gain" if gain_value >= loss_value else "loss"
+
+
+def dominant_sca_state(scores, min_score=5.0):
+    if scores is None or scores.empty or "state_score" not in scores.columns:
+        return "none_detected", np.nan
+    frame = scores.copy()
+    frame["state_score"] = pd.to_numeric(frame["state_score"], errors="coerce")
+    frame = frame[frame["state_score"].notna()].copy()
+    if frame.empty:
+        return "none_detected", np.nan
+    idx = frame["state_score"].idxmax()
+    best_score = float(frame.loc[idx, "state_score"])
+    if best_score < float(min_score):
+        return "none_detected", best_score
+    return str(frame.loc[idx, "sca_state"]), best_score
+
+
+def region_context(evidence, region_class_name):
+    if evidence is None or evidence.empty or "region_class" not in evidence.columns:
+        return "not_available"
+    return "available" if evidence["region_class"].astype(str).eq(region_class_name).any() else "not_available"
+
+
+def branch_a_axis_support(evidence, axis):
+    if evidence is None or evidence.empty or "region_class" not in evidence.columns or "a_candidate_count" not in evidence.columns:
+        return "unknown"
+    frame = evidence[evidence["region_class"].astype(str).str.startswith(f"{axis}_")].copy()
+    if frame.empty:
+        return "unknown"
+    counts = pd.to_numeric(frame["a_candidate_count"], errors="coerce").fillna(0)
+    return "present" if int(counts.sum()) > 0 else "absent"
+
+
+def sca_confidence_tier(sca_state, score):
+    if str(sca_state) == "none_detected" or not np.isfinite(score):
+        return "SCA_NO_CALL"
+    if score >= 30.0:
+        return "SCA_REVIEW_STRONG"
+    return "SCA_REVIEW_WEAK"
+
+
+def sca_uncertainty_reason(sca_state, context):
+    reasons = ["locked_sca_truth_incomplete", "branch_s_not_final_validated"]
+    if not str(context.get("sex_call", "")).strip():
+        reasons.append("sex_call_missing")
+    if str(sca_state) == "none_detected":
+        reasons.append("insufficient_sca_evidence")
+    return ";".join(reasons)
+
+
 def build_branch_s_shadow(sample_id, bins, a_candidates, gender=None, version=BRANCH_S_VERSION):
     context = gender_context(gender)
     sex_bins = prepare_bins(bins)
@@ -394,6 +471,8 @@ def build_branch_s_shadow(sample_id, bins, a_candidates, gender=None, version=BR
 
 def summarize_branch_s_shadow(sample_id, evidence, scores, gender=None, version=BRANCH_S_VERSION):
     context = gender_context(gender)
+    expected_x_ploidy, expected_y_ploidy = expected_sex_ploidy(context["sex_call"])
+    sca_state, sca_score = dominant_sca_state(scores)
     available_scores = (
         scores["state_score_status"].fillna("").astype(str).eq("AVAILABLE").sum()
         if scores is not None and "state_score_status" in scores.columns
@@ -411,6 +490,20 @@ def summarize_branch_s_shadow(sample_id, evidence, scores, gender=None, version=
         "final_report_impact": "none_shadow_only",
         "replaces_current_sex_calling": False,
         "replaces_final_report": False,
+        "sample": str(sample_id),
+        "expected_x_ploidy": expected_x_ploidy,
+        "expected_y_ploidy": expected_y_ploidy,
+        "x_nonpar_direction": axis_direction_from_scores(scores, "X"),
+        "x_par_context": region_context(evidence, "X_PAR"),
+        "y_nonpar_direction": axis_direction_from_scores(scores, "Y"),
+        "y_par_or_homology_context": region_context(evidence, "Y_PAR"),
+        "branch_a_x_support": branch_a_axis_support(evidence, "X"),
+        "branch_a_y_support": branch_a_axis_support(evidence, "Y"),
+        "sca_candidate_state": sca_state,
+        "sca_confidence_tier": sca_confidence_tier(sca_state, sca_score),
+        "sca_output_mode": "review_development_only",
+        "sca_uncertainty_reason": sca_uncertainty_reason(sca_state, context),
+        "report_text_status": "development_only_not_final_reportable",
     }
 
 

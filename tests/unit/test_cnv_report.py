@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -19,6 +20,10 @@ else:
         build_plot_lookup,
         format_biological_candidate_conclusion,
         format_technical_conclusion,
+        load_branch_a_validation_summaries,
+        load_branch_b_evidence_summaries,
+        load_branch_s_summaries,
+        summarize_branch_a_validation_gate,
         summarize_branch_b_events,
     )
 
@@ -226,6 +231,146 @@ class CnvReportRankingTest(unittest.TestCase):
         self.assertEqual(int(row["branch_b_reportable_events"]), 1)
         self.assertEqual(int(row["branch_b_review_tier_events"]), 1)
         self.assertEqual(row["branch_b_top_event"], "chr16:46000001-90000000 gain [review/moderate; reportable]")
+
+    def test_report_loads_p3_and_p5_summary_only_status(self):
+        with tempfile.TemporaryDirectory() as temp_dir_value:
+            temp_dir = Path(temp_dir_value)
+            branch_b_summary = temp_dir / "S1.branch_b.summary.json"
+            branch_b_summary.write_text(
+                """
+                {
+                  "sample_id": "S1",
+                  "candidate_count": 4,
+                  "p3_disposition_counts": {"REVIEW_REQUIRED": 3, "NO_CALL_CONTRACT_RISK": 1},
+                  "review_burden_count": 3,
+                  "missing_evidence_candidate_count": 1,
+                  "background_status_counts": {"UNKNOWN_BACKGROUND": 4},
+                  "final_report_impact": "none_shadow_only"
+                }
+                """,
+                encoding="utf-8",
+            )
+            branch_s_summary = temp_dir / "S1.branch_s.summary.json"
+            branch_s_summary.write_text(
+                """
+                {
+                  "sample_id": "S1",
+                  "sca_candidate_state": "X_LOSS",
+                  "sca_confidence_tier": "SCA_REVIEW_WEAK",
+                  "sca_output_mode": "review_development_only",
+                  "report_text_status": "development_only_not_final_reportable",
+                  "sca_uncertainty_reason": "locked_sca_truth_incomplete"
+                }
+                """,
+                encoding="utf-8",
+            )
+
+            branch_b_df = load_branch_b_evidence_summaries([str(branch_b_summary)])
+            branch_s_df = load_branch_s_summaries([str(branch_s_summary)])
+
+        self.assertEqual(int(branch_b_df.iloc[0]["branch_b_evidence_candidate_count"]), 4)
+        self.assertEqual(int(branch_b_df.iloc[0]["branch_b_evidence_review_required_count"]), 3)
+        self.assertEqual(branch_b_df.iloc[0]["branch_b_evidence_background_status"], "UNKNOWN_BACKGROUND=4")
+        self.assertEqual(branch_b_df.iloc[0]["branch_b_evidence_final_report_impact"], "none_shadow_only")
+        self.assertEqual(branch_s_df.iloc[0]["sca_candidate_state"], "X_LOSS")
+        self.assertEqual(branch_s_df.iloc[0]["sca_output_mode"], "review_development_only")
+
+    def test_technical_conclusion_marks_p6_review_development_context(self):
+        row = pd.Series(
+            {
+                "branch_b_kept_events": 0,
+                "branch_b_suppressed_sex_review_events": 0,
+                "a_branch_event_count": 2,
+                "a_branch_top_event": "chr21:20700000-22300000 gain",
+                "a_branch_review_candidate_count": 2,
+                "a_branch_review_shortlist": "chr21:20700000-22300000 gain z=7.11",
+                "a_branch_strong_signal_count": 0,
+                "branch_b_evidence_candidate_count": 2,
+                "branch_b_evidence_review_required_count": 2,
+                "branch_b_evidence_background_status": "UNKNOWN_BACKGROUND=2",
+                "branch_b_evidence_final_report_impact": "none_shadow_only",
+                "sca_candidate_state": "X_LOSS",
+                "sca_confidence_tier": "SCA_REVIEW_WEAK",
+                "sca_output_mode": "review_development_only",
+                "report_text_status": "development_only_not_final_reportable",
+                "qc_status": "PASS",
+                "sex_call": "XX",
+            }
+        )
+
+        conclusion = format_technical_conclusion(row)
+
+        self.assertIn("P3_branch_b_evidence_candidates=2", conclusion)
+        self.assertIn("P3_review_required=2", conclusion)
+        self.assertIn("P3_background=UNKNOWN_BACKGROUND=2", conclusion)
+        self.assertIn("P3_report_impact=none_shadow_only", conclusion)
+        self.assertIn("SCA_mode=review_development_only", conclusion)
+        self.assertIn("SCA_status=development_only_not_final_reportable", conclusion)
+
+    def test_report_summarizes_branch_a_no_fn_gate_for_same_reference(self):
+        with tempfile.TemporaryDirectory() as temp_dir_value:
+            temp_dir = Path(temp_dir_value)
+            y_summary = temp_dir / "y.branch_a.summary.json"
+            y_summary.write_text(
+                """
+                {
+                  "reference_id": "h_r0_shadow_ref_20260619",
+                  "sample_count": 8,
+                  "truth_event_count": 10,
+                  "truth_detected_count": 10,
+                  "FN_count": 0,
+                  "H6_chr21_status": "not_applicable"
+                }
+                """,
+                encoding="utf-8",
+            )
+            h_summary = temp_dir / "h.branch_a.summary.json"
+            h_summary.write_text(
+                """
+                {
+                  "reference_id": "h_r0_shadow_ref_20260619",
+                  "sample_count": 16,
+                  "truth_event_count": 10,
+                  "truth_detected_count": 10,
+                  "FN_count": 0,
+                  "H6_chr21_status": "detected"
+                }
+                """,
+                encoding="utf-8",
+            )
+
+            summaries = load_branch_a_validation_summaries([str(y_summary), str(h_summary)])
+            gate = summarize_branch_a_validation_gate("h_r0_shadow_ref_20260619", summaries)
+
+        self.assertEqual(gate["status"], "passed_no_fn")
+        self.assertEqual(gate["summary_count"], 2)
+        self.assertEqual(gate["truth_event_count"], 20)
+        self.assertEqual(gate["truth_detected_count"], 20)
+        self.assertEqual(gate["FN_count"], 0)
+        self.assertEqual(gate["H6_chr21_status"], "detected")
+        self.assertEqual(gate["same_reference_config_status"], "matched")
+
+    def test_report_flags_branch_a_validation_reference_mismatch(self):
+        with tempfile.TemporaryDirectory() as temp_dir_value:
+            temp_dir = Path(temp_dir_value)
+            summary_path = temp_dir / "old.branch_a.summary.json"
+            summary_path.write_text(
+                """
+                {
+                  "reference_id": "old_ref",
+                  "truth_event_count": 10,
+                  "truth_detected_count": 10,
+                  "FN_count": 0
+                }
+                """,
+                encoding="utf-8",
+            )
+
+            summaries = load_branch_a_validation_summaries([str(summary_path)])
+            gate = summarize_branch_a_validation_gate("h_r0_shadow_ref_20260619", summaries)
+
+        self.assertEqual(gate["status"], "reference_mismatch")
+        self.assertEqual(gate["same_reference_config_status"], "mismatch")
 
 
 if __name__ == "__main__":

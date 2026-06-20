@@ -57,6 +57,20 @@ LEDGER_COLUMNS = [
     "sample_noise_status",
     "cnvpro_like_evidence_status",
     "evidence_missing_reason",
+    "sample",
+    "branch_b_direction_support",
+    "copy_number_like_amplitude",
+    "mosaic_proxy",
+    "loh_evidence",
+    "upd_evidence",
+    "background_source",
+    "background_status",
+    "region_risk_context",
+    "sample_noise_context",
+    "cnvpro_consistency_status",
+    "disposition",
+    "disposition_reason",
+    "report_impact",
 ]
 
 
@@ -486,6 +500,79 @@ def derive_disposition(event_row):
     return "REVIEW_REQUIRED"
 
 
+def has_branch_a_positive_support(candidate_row):
+    support_level = str(candidate_row.get("a_support_level", "")).strip().lower()
+    a_abs_zscore = safe_float(candidate_row.get("a_abs_zscore", np.nan), default=np.nan)
+    return "strong" in support_level or "sensitive" in support_level or (np.isfinite(a_abs_zscore) and a_abs_zscore >= 5.0)
+
+
+def classify_branch_b_direction_support(candidate_row, same_direction_fraction, raw_amplitude, corrected_amplitude):
+    if np.isfinite(same_direction_fraction):
+        if same_direction_fraction >= 0.70:
+            return "SUPPORTED"
+        if same_direction_fraction >= 0.50:
+            return "BORDERLINE_SUPPORTED"
+        return "DISCORDANT"
+    direction = state_direction(candidate_row.get("state", ""))
+    for value in [corrected_amplitude, raw_amplitude]:
+        if np.isfinite(value) and direction != 0.0:
+            return "SUPPORTED" if value * direction > 0.0 else "DISCORDANT"
+    return "UNKNOWN"
+
+
+def p3_copy_number_like_amplitude(corrected_amplitude, raw_amplitude):
+    if np.isfinite(corrected_amplitude):
+        return corrected_amplitude
+    if np.isfinite(raw_amplitude):
+        return raw_amplitude
+    return np.nan
+
+
+def p3_mosaic_proxy(mosaic_fraction_proxy, mosaic_proxy_status):
+    if str(mosaic_proxy_status).upper() == "AVAILABLE" and np.isfinite(mosaic_fraction_proxy):
+        return mosaic_fraction_proxy
+    return "not_available"
+
+
+def p3_background_status(source):
+    text = str(source or "").strip()
+    return text if text else "UNKNOWN_BACKGROUND"
+
+
+def p3_region_risk_context(refmap_status, hard_region_fraction):
+    status = str(refmap_status or "").strip().upper()
+    if status and status not in {"OK", "UNKNOWN"}:
+        return status
+    if np.isfinite(hard_region_fraction) and hard_region_fraction >= 0.50:
+        return "HIGH_REGION_RISK"
+    if status == "OK":
+        return "OK"
+    return "UNKNOWN"
+
+
+def derive_p3_disposition(candidate_row, final_disposition, refmap_status):
+    if str(refmap_status or "").strip().upper() == "SAME_CHROM_REF_LEAKAGE":
+        return "NO_CALL_CONTRACT_RISK"
+    # P3 is evidence refinement, not final confirmation/suppression. Legacy
+    # dispositions are retained in final_disposition but do not become P3 hard
+    # report decisions.
+    return "REVIEW_REQUIRED"
+
+
+def derive_p3_disposition_reason(candidate_row, final_disposition, evidence_missing_reason, refmap_status):
+    reasons = []
+    if evidence_missing_reason:
+        reasons.extend([item for item in str(evidence_missing_reason).split(";") if item])
+    legacy = str(final_disposition or "").strip().upper()
+    if legacy:
+        append_reason(reasons, f"legacy_final_disposition={legacy}")
+    if legacy == "LIKELY_ARTIFACT" and has_branch_a_positive_support(candidate_row):
+        append_reason(reasons, "legacy_artifact_not_hard_suppressed")
+    if str(refmap_status or "").strip().upper() == "SAME_CHROM_REF_LEAKAGE":
+        append_reason(reasons, "same_chrom_ref_leakage_contract_risk")
+    return ";".join(reasons) if reasons else "p3_review_required"
+
+
 def build_candidate_evidence_ledger(
     sample_id,
     a_candidates,
@@ -549,6 +636,9 @@ def build_candidate_evidence_ledger(
         waviness = sample_noise_mad
         sample_noise_status = classify_sample_noise_status(waviness)
         cnvpro_like_evidence_status = classify_cnvpro_like_evidence_status(event_bins)
+        same_direction_fraction = calculate_same_direction_fraction(candidate_row, event_bins)
+        flank_contrast = calculate_flank_contrast(candidate_row, event_bins, flanks)
+        hard_region_fraction = calculate_hard_region_fraction(event_row, event_bins)
         reasons = []
         if event_row is None:
             append_reason(reasons, "branch_b_event_missing")
@@ -558,6 +648,20 @@ def build_candidate_evidence_ledger(
             append_reason(reasons, "calibration_null_missing")
         if event_bins.empty:
             append_reason(reasons, "event_bins_missing")
+        matched_negative_source = "UNKNOWN_BACKGROUND"
+        final_disposition = derive_disposition(event_row)
+        evidence_missing_reason = ";".join(reasons)
+        copy_number_like_amplitude = p3_copy_number_like_amplitude(corrected_amplitude, raw_amplitude)
+        mosaic_proxy = p3_mosaic_proxy(mosaic_fraction_proxy, mosaic_proxy_status)
+        background_status = p3_background_status(matched_negative_source)
+        region_risk_context = p3_region_risk_context(refmap_status, hard_region_fraction)
+        disposition = derive_p3_disposition(candidate_row, final_disposition, refmap_status)
+        disposition_reason = derive_p3_disposition_reason(
+            candidate_row,
+            final_disposition,
+            evidence_missing_reason,
+            refmap_status,
+        )
 
         payload = {
             "sample_id": str(sample_id or candidate_row["sample_id"]),
@@ -576,19 +680,19 @@ def build_candidate_evidence_ledger(
             "branch_b_report_class": first_text(event_row, ["report_class"], default="") if event_row is not None else "",
             "branch_b_artifact_status": first_text(event_row, ["artifact_status"], default="") if event_row is not None else "",
             "branch_b_keep_event": first_numeric(event_row, ["keep_event"], default=np.nan) if event_row is not None else np.nan,
-            "final_disposition": derive_disposition(event_row),
+            "final_disposition": final_disposition,
             "raw_amplitude": raw_amplitude,
             "corrected_amplitude": corrected_amplitude,
             "attenuation_ratio": attenuation_ratio,
-            "same_direction_fraction": calculate_same_direction_fraction(candidate_row, event_bins),
-            "flank_contrast": calculate_flank_contrast(candidate_row, event_bins, flanks),
-            "hard_region_fraction": calculate_hard_region_fraction(event_row, event_bins),
+            "same_direction_fraction": same_direction_fraction,
+            "flank_contrast": flank_contrast,
+            "hard_region_fraction": hard_region_fraction,
             "sample_noise_mad": sample_noise_mad,
             "refmap_status": refmap_status,
             "calibration_null_status": calibration_null_status,
             "cnvpro_like_gc_rc_background_status": cnvpro_like_gc_rc_background_status,
             "dynamic_reference_status": dynamic_reference_status,
-            "matched_negative_source": "UNKNOWN_BACKGROUND",
+            "matched_negative_source": matched_negative_source,
             "matched_negative_percentile": np.nan,
             "copy_number_estimate": copy_number_estimate,
             "sex_adjusted_copy_number": sex_adjusted_copy_number,
@@ -603,16 +707,45 @@ def build_candidate_evidence_ledger(
             "waviness": waviness,
             "sample_noise_status": sample_noise_status,
             "cnvpro_like_evidence_status": cnvpro_like_evidence_status,
-            "evidence_missing_reason": ";".join(reasons),
+            "evidence_missing_reason": evidence_missing_reason,
+            "sample": str(sample_id or candidate_row["sample_id"]),
+            "branch_b_direction_support": classify_branch_b_direction_support(
+                candidate_row,
+                same_direction_fraction,
+                raw_amplitude,
+                corrected_amplitude,
+            ),
+            "copy_number_like_amplitude": copy_number_like_amplitude,
+            "mosaic_proxy": mosaic_proxy,
+            "loh_evidence": "not_available",
+            "upd_evidence": "not_available",
+            "background_source": matched_negative_source,
+            "background_status": background_status,
+            "region_risk_context": region_risk_context,
+            "sample_noise_context": sample_noise_status,
+            "cnvpro_consistency_status": cnvpro_like_evidence_status,
+            "disposition": disposition,
+            "disposition_reason": disposition_reason,
+            "report_impact": "none_shadow_only",
         }
         rows.append(payload)
     return pd.DataFrame(rows, columns=LEDGER_COLUMNS)
 
 
 def summarize_evidence_ledger(sample_id, ledger_df):
+    def _value_counts(column):
+        if column not in ledger_df.columns:
+            return {}
+        return ledger_df[column].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+
     disposition_counts = (
         ledger_df["final_disposition"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
         if "final_disposition" in ledger_df.columns
+        else {}
+    )
+    p3_disposition_counts = (
+        ledger_df["disposition"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "disposition" in ledger_df.columns
         else {}
     )
     missing_count = (
@@ -620,10 +753,19 @@ def summarize_evidence_ledger(sample_id, ledger_df):
         if "evidence_missing_reason" in ledger_df.columns
         else 0
     )
+    review_burden_count = (
+        int(ledger_df["disposition"].fillna("").astype(str).str.contains("REVIEW", case=False, regex=False).sum())
+        if "disposition" in ledger_df.columns
+        else 0
+    )
     return {
         "sample_id": str(sample_id),
         "candidate_count": int(len(ledger_df)),
         "disposition_counts": {str(key): int(value) for key, value in disposition_counts.items()},
+        "p3_disposition_counts": {str(key): int(value) for key, value in p3_disposition_counts.items()},
+        "background_source_counts": {str(key): int(value) for key, value in _value_counts("background_source").items()},
+        "background_status_counts": {str(key): int(value) for key, value in _value_counts("background_status").items()},
+        "review_burden_count": review_burden_count,
         "missing_evidence_candidate_count": missing_count,
         "final_report_impact": "none_shadow_only",
     }
