@@ -26,10 +26,10 @@ Immediate execution order:
    logical loop.
 2. Preserve LF line endings for workflow sources when syncing the remote mirror;
    the 2026-06-21 Snakemake parse blocker has been repaired and verified.
-3. Branch A burden optimization Phase 1 is complete as config plumbing and
-   ablation evidence. Defaults remain unchanged. If continuing Branch A burden
-   reduction, materialize an explicit `merge_gap_bp=2_000_000` config and rerun
-   Branch A validation before any downstream benchmark.
+3. Branch A burden optimization Phase 1 is complete as config plumbing,
+   ablation evidence, and isolated `merge_gap_bp=2_000_000` materialization.
+   Defaults remain unchanged. The next benchmark can use the explicit gap2m
+   overlay, but promotion still requires the fixed A/B/S chain and report gate.
 4. Implement Branch B V2-only evidence/disposition benchmark against Y1-Y8 and
    H1-H6 truth, excluding `final_disposition`, `branch_b_keep_event`, legacy
    artifact labels, old `N0=0`, and N1-only matched-negative promotion from
@@ -74,8 +74,9 @@ Current planning constraints:
 
 Minimum next implementation plan:
 
-- Decide whether the next benchmark should use default Branch A
-  `merge_gap_bp=0` or an explicit `merge_gap_bp=2_000_000` candidate config.
+- Use the explicit Branch A `merge_gap_bp=2_000_000` overlay for the next
+  benchmark unless a blocking regression appears; keep the default
+  `merge_gap_bp=0` path as rollback/control.
 - Define a V2-only benchmark that consumes Branch A candidates, P3/V2 evidence
   fields, and Y1-Y8/H1-H6 truth tables.
 - Explicitly exclude `final_disposition`, `branch_b_keep_event`, legacy artifact

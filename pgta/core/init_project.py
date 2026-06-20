@@ -143,6 +143,9 @@ def load_template_config() -> dict:
                     "branch_a": {
                         "merge_gap_bp": 0,
                         "strong_z": 10.0,
+                        "output_dir": "wisecondorx/cnv/a_branch",
+                        "validation_dir": "wisecondorx/cnv/branch_a_validation",
+                        "log_dir": "logs/cnv",
                     },
                     "qc": {"min_total_counts": 1000000, "min_nonzero_fraction": 0.4, "max_mad_log1p": 1.2},
                 },

@@ -11,10 +11,10 @@ def test_current_context_index_exists_and_pins_active_context():
 
     required_tokens = [
         "status: active_current_index",
-        "active_handoff: docs/handoff/2026-06-21_0127_p1_p6_credibility_audit_handoff.md",
+        "active_handoff: docs/handoff/2026-06-21_0318_branch_a_gap2m_materialization_handoff.md",
         "active_reference_id: h_r0_shadow_ref_20260619",
         "reference_status: fixed_shadow_baseline_not_production",
-        "branch_a_status: burden_phase1_config_plumbing_done_default_unchanged",
+        "branch_a_status: burden_phase1_gap2m_materialized_default_unchanged",
         "branch_b_status: v2_evidence_design_legacy_excluded",
         "branch_s_status: review_reportable_with_limitations",
         "report_status: final_delivery_target_after_a_b_strengthening",

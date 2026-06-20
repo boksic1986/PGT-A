@@ -76,6 +76,9 @@ def test_branch_a_assembly_exposes_configured_gap_without_branch_b_filters():
     assert "CNV_BRANCH_A_CFG" in layout
     assert "CNV_BRANCH_A_MERGE_GAP_BP" in layout
     assert "CNV_BRANCH_A_STRONG_Z" in layout
+    assert "CNV_BRANCH_A_OUTPUT_DIR" in layout
+    assert "CNV_BRANCH_A_VALIDATION_DIR" in layout
+    assert "CNV_BRANCH_A_LOG_DIR" in layout
 
     assembly_rule = workflow.split("rule a_branch_candidate_assembly:", 1)[1].split("rule cnv_branch_a_validation:", 1)[0]
     assert "merge_gap_bp=CNV_BRANCH_A_MERGE_GAP_BP" in assembly_rule
@@ -85,6 +88,20 @@ def test_branch_a_assembly_exposes_configured_gap_without_branch_b_filters():
     assert "CNV_B_FINAL_EVENTS" not in assembly_rule
     assert "CNV_B_ARTIFACT_SUMMARY" not in assembly_rule
     assert "CNV_B_MATCHED_NEGATIVE" not in assembly_rule
+
+
+def test_branch_a_output_dirs_are_configurable_without_overwriting_default_candidates():
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+
+    assert 'CNV_BRANCH_A_CFG.get("output_dir"' in layout
+    assert 'CNV_BRANCH_A_CFG.get("validation_dir"' in layout
+    assert 'CNV_BRANCH_A_CFG.get("log_dir"' in layout
+    assert 'Path(CNV_BRANCH_A_OUTPUT_DIR) / "{sample}.candidate_events.tsv"' in layout
+    assert 'Path(CNV_BRANCH_A_VALIDATION_DIR) / "summary.json"' in layout
+    assert 'Path(CNV_BRANCH_A_LOG_DIR) / "{sample}.a_branch_candidates.log"' in workflow
+    assert 'Path(CNV_BRANCH_A_LOG_DIR) / "branch_a_validation.log"' in workflow
+    assert '"--a-candidates-dir", CNV_BRANCH_A_OUTPUT_DIR' in workflow
 
 
 def test_predict_workflow_has_shadow_ledger_without_report_promotion():

@@ -103,6 +103,46 @@ Interpretation:
 - Merge-gap optimization changes candidate granularity only. It does not
   suppress WisecondorX signals or apply Branch B rules.
 
+## Explicit 2 Mb Materialization
+
+The first formal burden-reduction candidate, `merge_gap_bp=2_000_000`, has now
+been materialized through Snakemake as an isolated overlay. This was done after
+adding config-controlled Branch A output, validation, and log directories so the
+run does not overwrite the default P2 `merge_gap_bp=0` evidence.
+
+Overlay configs:
+
+- `config_predict_y_h_r0_shadow_branch_a_gap2m_validation_20260621.yaml`
+- `config_predict_h_20260608_h_r0_shadow_branch_a_gap2m_validation_20260621.yaml`
+- `config_predict_20260615_h_r0_shadow_branch_a_gap2m_validation_20260621.yaml`
+
+Isolated output contract:
+
+```text
+branch_a.output_dir=wisecondorx/cnv/a_branch_gap2m
+branch_a.validation_dir=wisecondorx/cnv/branch_a_validation_gap2m
+branch_a.log_dir=logs/cnv_branch_a_gap2m
+branch_a.merge_gap_bp=2000000
+branch_a.strong_z=10.0
+```
+
+Remote materialized results:
+
+| cohort | default candidates | gap2m candidates | truth events | detected | FN | key note |
+|---|---:|---:|---:|---:|---:|---|
+| Y1-Y8 | 131 | 97 | 10 | 10 | 0 | no-FN retained |
+| H1-H16 | 221 | 105 | 10 | 10 | 0 | H6 chr21 retained |
+| 2026-06-15 | 201 | 165 | 0 | 0 | 0 | burden context only; no truth |
+
+Decision:
+
+- `merge_gap_bp=2_000_000` is now a materialized Branch A candidate setting,
+  not just a post-hoc ablation.
+- It remains an explicit overlay, not the default Branch A behavior.
+- It can be used for the next fixed A/B/S chain benchmark because it reduced
+  candidate burden while preserving current Y1-Y8/H1-H6 truth coverage.
+- It still cannot prove general no-FN behavior beyond the current truth set.
+
 ## Implementation
 
 Added config plumbing:
@@ -114,12 +154,17 @@ core:
       branch_a:
         merge_gap_bp: 0
         strong_z: 10.0
+        output_dir: "wisecondorx/cnv/a_branch"
+        validation_dir: "wisecondorx/cnv/branch_a_validation"
+        log_dir: "logs/cnv"
 ```
 
 Workflow behavior:
 
 - `a_branch_candidate_assembly` now passes `--merge-gap-bp` and `--strong-z`
   to the existing `pgta.predict.branch_a` CLI.
+- Branch A output, validation, and log directories can be set by config for
+  isolated materialization runs.
 - Defaults preserve the previous behavior.
 - Branch A candidate summaries record the active `merge_gap_bp` and `strong_z`.
 
@@ -131,6 +176,14 @@ Remote unit tests:
 executable: /biosoftware/miniconda/envs/snakemake_env/bin/python
 command: python -m pytest tests/unit/test_branch_a_candidates.py tests/unit/test_branch_a_validation.py tests/unit/test_branch_ab_phase12_workflow_contract.py tests/unit/test_workflow_line_endings_contract.py -q
 result: 18 passed in 0.98s
+```
+
+After adding isolated output/log directory plumbing:
+
+```text
+executable: /biosoftware/miniconda/envs/snakemake_env/bin/python
+command: python -m pytest tests/unit/test_branch_a_candidates.py tests/unit/test_branch_a_validation.py tests/unit/test_branch_ab_phase12_workflow_contract.py tests/unit/test_workflow_line_endings_contract.py tests/unit/test_current_context_index.py -q
+result: 22 passed in 1.05s
 ```
 
 Remote dry-runs:
@@ -163,12 +216,39 @@ H1-H16: FN=0, truth_detected=10/10, H6 chr21=detected, Branch A candidates=221
 2026-06-15: no truth table, Branch A candidates=201
 ```
 
+Remote dry-runs for the three explicit gap2m overlay configs parsed
+successfully and planned only:
+
+```text
+a_branch_candidate_assembly
+cnv_branch_a_validation
+branch_a_validation
+```
+
+No WisecondorX predict jobs were requested by these overlay validations.
+
+Remote gap2m materialization completed for:
+
+```text
+config_predict_y_h_r0_shadow_branch_a_gap2m_validation_20260621.yaml
+config_predict_h_20260608_h_r0_shadow_branch_a_gap2m_validation_20260621.yaml
+config_predict_20260615_h_r0_shadow_branch_a_gap2m_validation_20260621.yaml
+```
+
+Result:
+
+```text
+Y1-Y8: FN=0, truth_detected=10/10, Branch A candidates=97
+H1-H16: FN=0, truth_detected=10/10, H6 chr21=detected, Branch A candidates=105
+2026-06-15: no truth table, Branch A candidates=165
+```
+
 ## Current Decision
 
 This phase does not promote a new Branch A default. It makes the already
-implemented Branch A merge-gap behavior workflow-configurable and records
-evidence that `merge_gap_bp=2_000_000` is the next formal materialization
-candidate.
+implemented Branch A merge-gap behavior workflow-configurable and records that
+`merge_gap_bp=2_000_000` has passed the first isolated Branch A materialization
+gate under the active shadow reference.
 
 Before promoting `merge_gap_bp=2_000_000`, rerun the fixed A/B/S chain under the
 same reference/config contract:

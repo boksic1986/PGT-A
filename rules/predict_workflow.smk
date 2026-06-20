@@ -325,7 +325,7 @@ if CNV_ENABLED:
             candidates=CNV_A_CANDIDATES,
             summary=CNV_A_CANDIDATE_SUMMARY
         log:
-            project_path("logs", "cnv", "{sample}.a_branch_candidates.log")
+            str(Path(CNV_BRANCH_A_LOG_DIR) / "{sample}.a_branch_candidates.log")
         params:
             merge_gap_bp=CNV_BRANCH_A_MERGE_GAP_BP,
             strong_z=CNV_BRANCH_A_STRONG_Z
@@ -363,7 +363,7 @@ if CNV_ENABLED:
             truth_metrics=CNV_BRANCH_A_VALIDATION_TRUTH_METRICS,
             summary=CNV_BRANCH_A_VALIDATION_SUMMARY
         log:
-            project_path("logs", "cnv", "branch_a_validation.log")
+            str(Path(CNV_BRANCH_A_LOG_DIR) / "branch_a_validation.log")
         threads: 1
         run:
             from pgta.core.logging import write_rule_audit_log
@@ -429,7 +429,7 @@ if CNV_ENABLED:
                     config["biosoft"]["python"],
                     SCRIPT_REFERENCE_CANDIDATE_AUDIT,
                     SCRIPT_REFERENCE_CANDIDATE_AUDIT_ACTION,
-                    "--a-candidates-dir", str(Path(CNV_DIR) / "a_branch"),
+                    "--a-candidates-dir", CNV_BRANCH_A_OUTPUT_DIR,
                     "--qc-dir", CNV_QC_DIR,
                     "--reference-id", CNV_REFERENCE_ID,
                     "--output-audit", output.audit,

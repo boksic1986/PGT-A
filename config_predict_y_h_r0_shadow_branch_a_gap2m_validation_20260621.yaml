@@ -1,0 +1,18 @@
+base_config: "/data/project/CNV/PGT-A/refactor_validation_20260419/config_predict_y_h_r0_shadow_20260619.yaml"
+
+pipeline:
+  mode: "predict"
+  targets:
+    - "metadata"
+    - "cnv_qc"
+    - "branch_a_validation"
+
+core:
+  wisecondorx:
+    cnv:
+      branch_a:
+        merge_gap_bp: 2000000
+        strong_z: 10.0
+        output_dir: "wisecondorx/cnv/a_branch_gap2m"
+        validation_dir: "wisecondorx/cnv/branch_a_validation_gap2m"
+        log_dir: "logs/cnv_branch_a_gap2m"
