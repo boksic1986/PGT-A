@@ -2,6 +2,11 @@
 
 Date: 2026-06-20
 
+Status: `active_design_constraint`
+
+Decision use: Branch B V2 and Branch S design direction only. It is not a
+validated performance result. Use with `docs/CURRENT_CONTEXT_INDEX.md`.
+
 ## Scope
 
 This document updates the Branch B V2 design after the H R0 shadow-reference

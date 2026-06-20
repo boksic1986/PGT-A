@@ -1,0 +1,449 @@
+# CURRENT_STATE.md
+
+## 2026-06-21 Current Context Index Override
+
+Current context entrypoint:
+`docs/CURRENT_CONTEXT_INDEX.md`.
+
+This override applies to the whole R&D cycle, not only G1. The purpose is to
+prevent future work from resuming from stale handoffs, legacy Branch B results,
+or old N0/N1 assumptions.
+
+Current fixed baseline:
+
+- `active_reference_id=h_r0_shadow_ref_20260619`.
+- Reference status is `fixed_shadow_baseline_not_production`.
+- P2 Branch A no-FN validation passed under this reference for Y1-Y8 and H1-H6.
+- P2 also exposed high Branch A candidate burden, so the next Branch A work is
+  burden optimization under no-FN and H6 chr21 preservation constraints.
+
+Current Branch B state:
+
+- Branch B remains necessary for candidate-level refinement, including mosaic,
+  LOH, UPD, CN-like amplitude, region-risk, sample-noise, background, and
+  CNVpro-inspired consistency evidence.
+- Legacy/current-code Branch B outputs are excluded from Branch B V2 performance
+  evidence. `final_disposition`, `branch_b_keep_event`, legacy artifact labels,
+  old `N0=0`, and N1-only matched-negative promotion must not drive V2
+  decisions, benchmarks, or report release.
+- The next Branch B gate is a V2-only truth benchmark and evidence/disposition
+  path using Y1-Y8 and H1-H6 truth. Reference-cohort background can be used only
+  as labeled limited context until formal N0/cross-fit evidence exists.
+
+Current Branch S state:
+
+- Branch S is not final SCA.
+- Branch S must still be carried into report development as
+  `review_reportable_with_limitations`, with visible sex-chromosome/SCA output
+  mode and uncertainty.
+- The immediate Branch S target is to reduce SCA/sex-chromosome FP burden in
+  reference or negative-like samples while preserving sex-call concordance.
+
+Current P6/report state:
+
+- The already materialized 2026-06-15 P6 package remains historical
+  `development_only_not_final_release` evidence.
+- Future P6/report remains the delivery target after Branch A burden
+  optimization and Branch B V2 evidence/disposition strengthening. It should not
+  be permanently classified as "cannot produce a report"; it should be generated
+  by workflow once the fixed A/B/S contracts are represented and limitations are
+  explicit.
+
+## 2026-06-21 P1-P6 Credibility Audit Override
+
+Current audit report:
+`docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`.
+
+This audit reclassifies the current G1/P1-P6 outputs by evidentiary value:
+
+- G1/P1 reference audit is valid current evidence for R0/R1/R2 reference-rebuild
+  eligibility only. It does not promote `h_r0_shadow_ref_20260619` to
+  production and does not define N0/N1/N2.
+- P2 Branch A validation is the current performance-relevant evidence under the
+  shadow reference: Y1-Y8 truth detected 10/10, H1-H16 truth detected 10/10,
+  and 2026-06-15 has no truth table.
+- P3 Branch B evidence ledger is a valid engineering artifact only. It provides
+  one review-safe row per Branch A candidate with `report_impact=none_shadow_only`;
+  it is not Branch B V2 performance validation.
+- Current-code Branch B fields such as `final_disposition`,
+  `branch_b_keep_event`, and artifact status are historical/shadow context only
+  and must not be used as Branch B V2 evidence, N0/N1, benchmark truth, or
+  report-release evidence.
+- Current Branch B V2 classifier shadow output is not valid V2-only performance
+  evidence because it still reads legacy `final_disposition` and produces
+  legacy-derived shadow classes.
+- P5 Branch S is a valid engineering/report-boundary artifact only. It remains
+  `review_development_only` and is not final SCA.
+- P6 2026-06-15 report package is development-only:
+  `report_contract.status=development_only_not_final_release`.
+
+Remote audit notes from 2026-06-21:
+
+- Result-file inspection on `ssh fengxian` succeeded.
+- The requested Snakemake dry-run for
+  `branch_b_evidence branch_s_review cnv_report` failed at remote Snakefile
+  parse time with an `IndentationError`. The first 40 lines of the remote
+  Snakefile looked consistent with local tracked `Snakefile`, and local
+  `git diff -- Snakefile` was empty.
+- Therefore current materialized results can be used for credibility audit, but
+  no new workflow-validation claim should be made until the remote mirror or
+  Snakemake parse issue is fixed.
+
+## 2026-06-20 Current State Override
+
+Current source of truth for phase order:
+`docs/reports/branch_ab_v2_gate_phase_plan_2026-06-20.md`.
+
+Current constraints-only document:
+`docs/reports/branch_ab_v2_rnd_constraints_2026-06-18.md`.
+
+Older Branch B V2 / N1 shadow-background sections below remain historical
+context only. They do not define the current report route, production reference
+route, or N0/N1/N2 promotion state.
+
+Current G1/P1 state:
+
+- H7-H16 reference audit has been materialized remotely under
+  `h_r0_shadow_ref_20260619`.
+- Current H R labels are `R0=H9,H10,H11,H12,H15,H16`, `R1=H7,H8,H13,H14`,
+  `R2=none`.
+- The stable decision artifact is
+  `docs/reports/h7_h16_reference_cohort_decision_2026-06-20.md` plus TSV.
+- `R0/R1/R2` are reference-rebuild labels only and must not be reused as
+  `N0/N1/N2`.
+- The H-augmented reference remains shadow-only. P2 must rerun WisecondorX
+  predict and Branch A under the same named reference/config before any Branch B
+  or report-facing promotion.
+
+Current P2 state:
+
+- A formal `branch_a_validation` workflow target now exists for Branch A no-FN
+  validation without consuming Branch B, Branch S, or report outputs.
+- Under `h_r0_shadow_ref_20260619`, remote P2 materialization produced:
+  - Y1-Y8: 10/10 truth detected, FN=0, Branch A candidates=131.
+  - H1-H16: 10/10 truth detected, FN=0, Branch A candidates=221.
+  - H6 chr21 status: detected.
+  - 2026-06-15: no truth table, Branch A candidates=201, exploratory burden
+    only.
+- P2 supports Branch A sensitivity under the current shadow reference. It does
+  not promote the H reference to production and does not make Branch B, Branch S,
+  or 2026-06-15 reports final-reportable.
+- Detailed report:
+  `docs/reports/branch_a_validation_h_r0_shadow_2026-06-20.md`.
+
+Current P3 state:
+
+- A formal `branch_b_evidence` workflow target now exists for P3 Branch B
+  candidate-level evidence materialization without requesting Branch B V2
+  classifier, Branch S, matched-negative percentile, or report outputs.
+- Under `h_r0_shadow_ref_20260619`, remote P3 evidence ledger materialization
+  produced one row per Branch A candidate:
+  - Y1-Y8: 8 ledger files, 131 candidate rows.
+  - H1-H16: 16 ledger files, 221 candidate rows.
+  - 2026-06-15: 5 ledger files, 201 candidate rows.
+- The P3 schema includes explicit review-safe fields:
+  `branch_b_direction_support`, `copy_number_like_amplitude`,
+  `mosaic_proxy`, `loh_evidence`, `upd_evidence`, `background_source`,
+  `background_status`, `region_risk_context`, `sample_noise_context`,
+  `cnvpro_consistency_status`, `disposition`, `disposition_reason`, and
+  `report_impact`.
+- Current P3 output is evidence/refinement only. All rows are
+  `REVIEW_REQUIRED` with `report_impact=none_shadow_only`; this does not
+  promote Branch B, suppress Branch A positives, or make 2026-06-15 reports
+  releasable.
+- Detailed report:
+  `docs/reports/branch_b_p3_evidence_contract_2026-06-20.md`.
+
+Current P5 state:
+
+- A formal `branch_s_review` workflow target now exists for Branch S/SCA
+  report-boundary materialization without requesting Branch B V2 classifier,
+  matched-negative percentile, or report outputs.
+- Under `h_r0_shadow_ref_20260619`, remote P5 Branch S materialization produced
+  report-boundary summaries:
+  - Y1-Y8: 8 evidence tables, 8 score tables, 8 summary JSON files.
+  - H1-H16: 16 evidence tables, 16 score tables, 16 summary JSON files.
+  - 2026-06-15: 5 evidence tables, 5 score tables, 5 summary JSON files.
+- The P5 summary schema includes explicit report-boundary fields:
+  `expected_x_ploidy`, `expected_y_ploidy`, `x_nonpar_direction`,
+  `x_par_context`, `y_nonpar_direction`, `y_par_or_homology_context`,
+  `branch_a_x_support`, `branch_a_y_support`, `sca_candidate_state`,
+  `sca_confidence_tier`, `sca_output_mode`, `sca_uncertainty_reason`, and
+  `report_text_status`.
+- Current Branch S remains review/development-only:
+  `sca_output_mode=review_development_only` for all materialized summaries.
+  This satisfies the G5-review boundary only; it does not satisfy G5-final
+  promotion because locked SCA truth coverage remains incomplete.
+- Detailed report:
+  `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`.
+
+Current P6 state:
+
+- The `cnv_report` workflow now carries P3/P5 review context through
+  summary-only inputs:
+  - `CNV_B_EVIDENCE_SUMMARY`;
+  - `CNV_BRANCH_S_SUMMARY`.
+- The report workflow still does not consume P3 raw evidence ledger TSV,
+  Branch S raw evidence TSV, Branch S score TSV, matched-negative percentile
+  TSV, or Branch B V2 classifier TSV.
+- The 2026-06-15 P6 report package was materialized remotely under
+  `h_r0_shadow_ref_20260619`:
+  - `wisecondorx/cnv/report/cnv_summary.tsv`;
+  - `wisecondorx/cnv/report/cnv_summary.json`;
+  - `wisecondorx/cnv/report/cnv_summary.md`;
+  - `wisecondorx/cnv/report/cnv_summary.html`.
+- The report JSON has
+  `report_contract.status=development_only_not_final_release`,
+  `branch_b_evidence_summary_count=5`, and `branch_s_summary_count=5`.
+- All 2026-06-15 report rows explicitly show
+  `UNKNOWN_BACKGROUND` P3 background and
+  `review_development_only` Branch S/SCA status.
+- P6 is a development/report-boundary package only. It does not release the
+  2026-06-15 samples as final reports and does not promote Branch B or Branch S.
+- Detailed report:
+  `docs/reports/p6_report_package_contract_2026-06-20.md`.
+
+> 更新日期：2026-06-19
+
+## 文档定位
+本文件只记录当前已确认的项目事实、有效入口、有效验证结论与当前阻塞点，不承担计划文档职责。
+
+## 当前阶段
+当前项目处于：
+
+`Branch B 收敛 + re-sequencing cohort 回流设计阶段`
+
+补充说明：
+- 项目算法主线仍然是 Branch B 结果收敛。
+- 本轮代码结构审查、runtime tracking 修复、report 输入闭环修复和 modular dry-run，属于中间代码质控与工程稳定性工作。
+- 这些工作与项目算法本身没有直接等价关系，不应被误写成“项目主阶段已切换”。
+- 当前新增的生产约束是：FAIL 样本需要 re-sequencing 后重新进入 QC 与 reference cohort 候选路径，不能继续作为口头状态或手工补丁处理。
+
+## 已确认的代码与仓库状态
+1. 模块化代码已进入 `main`。当前 tracked `main` 已同步到 `origin/main`；本地仍存在若干未跟踪的历史脚本/样本表，不应在无明确需求时纳入提交。
+2. 当前有效的主入口仍是根目录下：
+   - `Snakefile`
+   - `build_samples.yaml`
+   - `config_qc.yaml`
+   - `config_reference.yaml`
+   - `predict_samples.yaml`
+   - `config_predict.yaml`
+3. 当前规则文件已按模块拆分在 `rules/` 下，实际落地的关键文件包括：
+   - `common_preprocess.smk`
+   - `pipeline_modes.smk`
+   - `reference_layout.smk`
+   - `reference_workflow.smk`
+   - `reference_assets.smk`
+   - `predict_layout.smk`
+   - `predict_workflow.smk`
+   - `runtime_layout.smk`
+   - `runtime_tracking.smk`
+   - `qc_workflow.smk`
+   - `qc_framework.smk`
+   - `target_assembly.smk`
+   - `script_entrypoints.smk`
+4. 当前 Python 实现已按包沉淀到 `pgta/` 下，核心子包为：
+   - `pgta/core`
+   - `pgta/qc`
+   - `pgta/reference`
+   - `pgta/predict`
+   - `pgta/validation`
+5. 顶层 `scripts/` 当前主要承担 CLI / 初始化 / 兼容入口，不再是全部分析逻辑的唯一承载位置。
+
+## 本轮已确认的新事实
+1. `rules/runtime_tracking.smk` 已修复为跟踪按 `ref_set` 生成的真实 benchmark 与输出路径，不再继续记录旧的非 `ref_set` reference benchmark 路径。
+2. `rules/predict_workflow.smk` 中 `cnv_report_summary` 已改为只在 summary 真正属于本次 rule 输入时才传：
+   - `--evaluation-summary`
+   - `--ml-summary`
+   - `--benchmark-summary`
+3. 上述修复已提交并推送：
+   - `e784187` `fix: align runtime tracking and report inputs`
+4. 上述修复属于流程工程侧质控，不构成 Branch B 算法主线变更。
+5. FAIL 样本 re-sequencing 后重新加入建模样本已有首轮正式 manifest / cohort 决策入口：
+   - `build_reference.resequencing.manifest`
+   - `build_reference.resequencing.allowed_statuses_for_reference`
+   - 默认只有 `promoted` 状态可进入 reference cohort selection
+   - `replacement_policy=replace_original` 会替换原始 `source_sample_id`
+6. `build_reference.groups` 现在会在 Snakemake 解析阶段 fail fast，如果引用了不存在于 `samples` 的样本。
+7. `rules/predict_workflow.smk` 中 Branch B 后处理 rule 重复定义已收敛为单一实现。
+8. `pgta/predict/evaluation.py` 与 `pgta/predict/benchmark.py` 的 truth/event 匹配公共逻辑已收敛到 `pgta/predict/truth.py`。
+
+## 当前已确认的 remote 验证结论
+以下结论都来自 remote `fengxian`，不是本地替代验证：
+
+1. 本轮 remote dry-run 使用的是：
+   - 代码树：`/data/project/CNV/PGT-A/refactor_validation_20260419`
+   - 配置/运行目录：`/data/project/CNV/PGT-A/refactor_validation_run_20260419`
+2. `reference_qc reference` dry-run 已通过，DAG 已正确展开到按 `ref_set` 的 benchmark 路径：
+   - `monitor/benchmarks/reference/select_cohort/pass_warn.tsv`
+   - `reference_prefilter/pass_warn/XX.tsv`
+   - `reference_prefilter/pass_warn/XY.tsv`
+   - `tune_wisecondorx_reference_qc/pass_warn.tsv`
+   - `build_reference/pass_warn/XX.tsv`
+   - `build_reference/pass_warn/XY.tsv`
+   - `build_gender_reference/pass_warn.tsv`
+3. `cnv_qc cnv` dry-run 已通过；当前结果为 `Nothing to be done`。
+4. `cnv_report` 在两种配置口径下都已做 remote dry-run：
+   - 现有远端 predict 配置包含 `cnv_eval / cnv_benchmark / cnv_report`，因此 summary 输入存在，符合配置事实。
+   - 额外构造的临时配置只保留 `mapping / metadata / cnv_qc / cnv / cnv_report` 时，`cnv_report_summary` 的输入列表中已不再出现 `evaluation_summary / benchmark_summary`，说明本轮修复已生效。
+5. 本轮新增的 re-sequencing manifest 契约已通过 remote 单元测试与 Snakemake dry-run 验证：
+   - promoted re-sequenced sample can replace source sample
+   - candidate re-sequenced sample is not selected until promoted
+   - manifest appears as `select_reference_cohort` input when configured
+   - missing `build_reference.groups` sample raises a parse-time error
+6. 本轮 remote 验证是单元测试与 dry-run，不是完整真实执行；不能把它写成“流程已完整跑通”。
+
+## 当前仍有效的较早 remote 结果基线
+以下较早结论仍来自 remote 结果文件，且本轮没有证据推翻它们：
+
+1. 2026-04-23 的 predict 基线结果仍显示：
+   - `truth_recall = 1.0`
+   - `truth_detected_count = 10`
+   - `branch_b_detection_rate = 1.0`
+2. `sex-aware ranking / report suppression` 的结果口径仍保持有效。
+3. 本轮没有重新做完整 predict 真实运行，因此这些结论本轮是“沿用既有 remote 结果”，不是“本轮重新实跑确认”。
+
+## 当前有效路径与文件
+1. 本地仓库路径：
+   - `D:\Pipeline\PGT-A`
+2. 当前 remote 验证代码树：
+   - `/data/project/CNV/PGT-A/refactor_validation_20260419`
+3. 当前 remote 验证运行目录：
+   - `/data/project/CNV/PGT-A/refactor_validation_run_20260419`
+4. 本轮直接相关文件：
+   - `rules/runtime_tracking.smk`
+   - `rules/predict_workflow.smk`
+   - `tests/server_validation/03_snakemake_dryrun.sh`
+   - `config_predict.yaml`
+   - `README.md`
+
+## 当前阻塞点与风险
+1. remote `/data/project/CNV/PGT-A` 根目录不是 Git 工作树；remote 验证当前依赖已有代码副本目录，验证过程需要显式同步和恢复文件。
+2. 当前 remote 验证入口仍分散在：
+   - 代码树目录
+   - 运行结果目录
+   - 临时配置副本
+   这增加了“代码版本与运行目录脱钩”的风险。
+3. 本轮只完成了 dry-run 级别验证，尚未完成“基于当前 `main` 的完整 remote 真实运行验证”。
+4. 当前本地默认 `config_predict.yaml` 仅请求：
+   - `mapping`
+   - `metadata`
+   - `cnv_qc`
+   - `cnv`
+   而 remote 验证配置还显式请求了：
+   - `cnv_eval`
+   - `cnv_benchmark`
+   - `cnv_report`
+   后续需要明确哪套配置口径作为持续验证默认口径。
+5. re-sequencing 样本回流已有版本化 manifest 入口，但真实 FAIL 样本重测数据尚未在本轮完成非 dry-run 验证。
+6. 默认 reference 发布路径会复制单一 `DEFAULT_REF_SET` 到通用输出；后续比较 re-sequencing cohort 时，需要区分 cohort 比较产物与发布产物。
+
+## 当前不应误判为已完成的事项
+1. 不能因为 dry-run 已通过，就宣称模块化 workflow 已完成最终 remote 验证。
+2. 不能把 remote 临时同步补丁目录的 dry-run，等同于“remote Git checkout 已统一”。
+3. 不能把较早的 Branch B full-result 基线，写成“本轮重新实跑完成”。
+4. 不能把 FAIL 样本 re-sequencing 需求写成“已重新纳入建模”，除非已有真实 manifest、QC 结果、cohort 决策和 remote 非 dry-run 验证证据。
+5. 不能通过新增临时脚本或平行 workflow 来处理 re-sequencing 回流；应优先收敛到正式 config、manifest、rule 或 `pgta/` 模块内。
+
+## 2026-06-18 已确认研发事实
+
+1. `docs/branch_b_independent_detector_methodology_2026-04-22.md` 中“Branch B 独立 detector”方向已不再作为当前研发主线。
+2. 当前主线以 `docs/reports/branch_ab_v2_rnd_constraints_2026-06-18.md` 为准：
+   - WisecondorX-first 保持不变；
+   - Branch A 是高灵敏度候选发现层；
+   - Branch B V2 应收缩为 candidate-level evidence/classification shadow layer；
+   - legacy Branch B 只作为对照，不继续增加补丁式 hard filter。
+3. 2026-06-17 的 refmap/calibration 风险仍有效：
+   - 当前 0615 run 中 event-level refmap count 证据缺失；
+   - `calibration_null_eligible` 全为 0 的情况下，Branch B calibration 会 fallback 到宽背景；
+   - 这会使强 Branch A 候选被弱 Branch B calibrated evidence 过度过滤。
+4. 远端 `results_h_20260608_mask_only/wisecondorx/cnv/report/cnv_summary.tsv` 显示：
+   - H7-H16 均为 QC PASS/XY；
+   - H8/H13/H14 有 Branch B kept review event；
+   - H7/H9/H10/H11/H12/H15/H16 虽然 Branch B kept=0，但仍存在强 A-sensitive signal。
+5. 因此 H7-H16 当前不能直接作为 N0 high-confidence negative；但这只限制 Branch B matched-negative calibration，不等于禁止 reference-rebuild exploration。
+6. 当前可写入计划的 reference 候选状态需要拆分为两套标签：
+   - `R0/R1/R2`：reference-rebuild eligibility；
+   - `N0/N1/N2`：Branch B empirical-null / matched-negative calibration。
+7. 旧 32-ref 下的 H7-H16 Branch A signal 可能代表 reference mismatch、batch shift、高重复区域不稳定或真实个体异常，不能单独作为 R0/R1 排除标准。
+8. 当前建议先建立 H7-H16 的 `R0/R1/R2` 表，并构建 named shadow reference variant，而不是直接 promote 到 production reference。
+9. 若构建新的 reference，但 binsize/mask/preprocess contract 不变，已有 predict NPZ 可复用；但 WisecondorX predict、Branch A candidate、Branch B、evaluation、benchmark、report 必须重跑。
+10. 若 binsize、mask 或 preprocessing 发生变化，reference 和 predict 样本 NPZ 都必须重建。
+11. Branch A/B V2 Phase 1 evidence ledger 已落地为 shadow-only 输出：
+   - `wisecondorx/cnv/postprocess/evidence_ledger/{sample}.candidate_evidence.tsv`
+   - 不改变当前 final report。
+12. Branch A/B V2 Phase 2 negative bank 已落地：
+   - seed 文件：`docs/reports/branch_ab_v2_negative_bank_seed_2026-06-18.tsv`
+   - 当前 `N0=0`、`N1=6`、`N2=4`。
+13. Branch A/B V2 Phase 3 matched-negative percentile shadow path 已落地：
+   - `wisecondorx/cnv/postprocess/matched_negative/{sample}.candidate_evidence.tsv`
+   - 当前因为无 N0，Y1-Y8 结果全部为 `UNKNOWN_BACKGROUND` / `REVIEW_NO_CALL`
+   - 该输出不进入 `cnv_report`，也不作为 hard artifact filter。
+14. Branch A/B V2 negative-bank readiness contract 已落地：
+   - `negative_bank_summary.json` 现在输出 `matched_negative_ready`、`matched_negative_blocking_reason`、`n0_sample_ids`、`n1_shadow_reference_candidate_count`、`n2_holdout_count`；
+   - 当前远端结果为 `matched_negative_ready=false`；
+   - 当前阻塞原因是 `no_n0_locked_clean_negative_samples`；
+   - 详细报告：`docs/reports/branch_ab_v2_negative_bank_readiness_2026-06-19.md`。
+
+## 2026-06-18 仍待验证事项
+
+1. Phase 3 目前只有安全 fallback 结果；当前 summary 已机器可读地标记为 `matched_negative_ready=false`。这是旧 32-ref / 当前 seed labels 下的状态，不是新 reference rebuild 后的最终 Phase 3 结论。
+2. `matched_negative_ready=false` 只阻塞 Branch B calibration，不阻塞 reference-rebuild shadow experiment。
+3. H7-H16 需要重新按 `R0/R1/R2` reference-rebuild eligibility 分层；该分层不能只依赖旧 32-ref 下的 Branch A signal。
+4. 若 H7-H16 或其子集进入 named shadow reference，必须在新 ref 后重跑 WisecondorX predict、Branch A、Branch B evidence、negative-bank labeling、evaluation、benchmark 和 report，并生成新的 negative-bank version。
+5. H7-H16 的 named shadow reference 尚未完成正式 Snakemake workflow 验证。
+6. Branch B V2 final-report promotion 仍需 post-rebuild FN=0、H6 chr21 跟踪、FP/review burden 评估、unknown background 安全行为和 rollback path；当前只能作为 shadow evidence。
+7. Branch S 仍只是研发方向，尚未替换或改变当前 sex calling / SCA report 逻辑；它需要 locked SCA truth 和 clean XX/XY negatives，不能因 reference rebuild 完成而自动 promotion。
+8. 任何基于 H7-H16 的阈值、artifact rule 或 matched-negative null，都必须先经过 ablation，不能直接写入 production 规则。
+
+## 2026-06-19 Branch S / SCA 验证状态
+
+1. Branch S 当前仍为 shadow-only：
+   - 不替换 WisecondorX predict；
+   - 不替换 Branch A candidate；
+   - 不替换 legacy Branch B final events；
+   - 不替换当前 sex calling；
+   - 不进入 `cnv_report`。
+2. 远端当前已 materialized 的 Branch S 输出覆盖：
+   - Y1-Y8：`results_build_ref_v2_mask_only/wisecondorx/cnv/postprocess/branch_s`，8 个 evidence / 8 个 score / 8 个 summary；
+   - H1-H16：`results_h_20260608_mask_only/wisecondorx/cnv/postprocess/branch_s`，16 个 evidence / 16 个 score / 16 个 summary；
+   - 2026-06-15 五样本：`results_20260615_mask_only/wisecondorx/cnv/postprocess/branch_s`，5 个 evidence / 5 个 score / 5 个 summary；
+   - summary 均保持 `final_report_impact=none_shadow_only`、`replaces_final_report=false`。
+3. Branch S 已完成正式结果目录物化，但还不能用于 SCA 性能 promotion；它只能作为 shadow evidence 和 review 设计依据。
+4. 当前 SCA truth 覆盖不足：
+   - 已有 Y3 `chrX loss / 45,XO`；
+   - H5/H6 有 `chrX loss` truth，且 Branch S 输出已 materialize，当前 score direction 与 Branch A chrX-loss evidence 一致；
+   - 缺少 X gain、XXY、XXX、XYY、Y loss、mosaic SCA fraction series 和跨批次 clean XX/XY negative。
+5. 新增研发文档：
+   - `docs/reports/branch_s_sca_validation_plan_2026-06-19.md`
+   - `docs/reports/branch_s_materialization_2026-06-19.md`
+6. 当前判断：
+   - Branch S 可以用于 SCA review 设计；
+   - 不能生成 `PASS` / `CONFIRMED` SCA 报告结论；
+   - 不能作为 2026-06-15 五个样本报告放行或过滤依据。
+## 2026-06-19 Branch A/B Phase 1B asset decision matrix
+
+1. Phase 1B has been consolidated as an asset-decision document:
+   - `docs/reports/branch_ab_v2_phase1b_asset_decision_matrix_2026-06-19.md`
+2. Current production-path asset evidence was refreshed from remote:
+   - `/data/project/CNV/PGT-A/refactor_validation_20260419/results_build_ref_v2_mask_only/reference/assets`
+3. Current asset contract remains unchanged:
+   - WisecondorX-first;
+   - Branch A remains WisecondorX predict/CBS candidate discovery;
+   - Branch B V2 asset evidence remains shadow/candidate-level unless locked ablation proves no recall regression;
+   - Branch S remains shadow-only.
+4. Current Phase 1B decision:
+   - `annotation_only` remains the default for PAR, sex-homology, low-map, repeat/segdup, CNVseq unique-bin, and mappability-style evidence.
+   - `reference_build_mask` is allowed only as a named shadow reference experiment.
+   - `full_remap_reference` using `hg19.mapability.fa.gz`, `maskpar`, or another altered FASTA is not justified now.
+5. Current remote mask asset counts:
+   - atomic 50 kb bins: `61,927`;
+   - analysis 100 kb bins: `30,970`;
+   - QC 1 Mb bins: `3,113`;
+   - combined mask labels: `pass=81,406`, `hard=7,892`, `soft=6,710`, `dynamic=2`.
+6. Current hard-mask BED contains `4,881` atomic BED3 intervals and is still a WisecondorX predict blacklist asset.
+7. Current analysis-level PAR and sex-homology annotations remain annotation-only:
+   - PAR bins: `31`;
+   - sex-homology bins: `31`;
+   - XTR bins: `0`.
+8. Repeat/segmental-duplication/low-mappability burden must not be promoted into a hard event-level filter without locked ablation, because previous evidence showed known positives and FP-like events can share similar soft-mask burden.

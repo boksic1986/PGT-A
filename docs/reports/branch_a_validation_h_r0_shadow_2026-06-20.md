@@ -2,6 +2,12 @@
 
 Date: 2026-06-20
 
+Status: `active_current_evidence`
+
+Decision use: Branch A sensitivity evidence under
+`h_r0_shadow_ref_20260619`. It supports no-FN status for Y1-Y8 and H1-H6, but
+also exposes candidate-burden optimization work.
+
 ## Scope
 
 This report records the P2 Branch A no-FN validation materialized under:

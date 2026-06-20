@@ -2,6 +2,12 @@
 
 Date: 2026-06-20
 
+Status: `active_gate_contract`
+
+Decision use: current gate/phase order. Pair with
+`docs/CURRENT_CONTEXT_INDEX.md` for the latest Branch S/P6 report-direction
+override.
+
 ## Purpose
 
 This file is the current gate/phase control document for the PGT-A CNV-seq R&D

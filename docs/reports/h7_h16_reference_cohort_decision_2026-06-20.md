@@ -2,6 +2,11 @@
 
 Date: 2026-06-20
 
+Status: `active_current_evidence`
+
+Decision use: reference-rebuild R0/R1/R2 decision under
+`h_r0_shadow_ref_20260619`. This does not define N0/N1/N2.
+
 ## Scope
 
 This is the G1/P1 decision artifact derived from the H7-H16 reference-candidate

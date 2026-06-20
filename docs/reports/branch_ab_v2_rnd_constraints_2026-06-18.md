@@ -1,5 +1,10 @@
 # Branch A/B/S R&D Constraints
 
+Status: `active_constraints`
+
+Decision use: current hard constraints for Branch A/B/S R&D. Pair with
+`docs/CURRENT_CONTEXT_INDEX.md` for the latest report-direction override.
+
 ## Purpose
 
 This file is the constraints-only record for the current Branch A/B/S R&D

@@ -2,6 +2,12 @@
 
 Date: 2026-06-20
 
+Status: `engineering_artifact_with_report_boundary`
+
+Decision use: SCA/sex-chromosome review-output boundary. Current output is not
+final SCA, but Branch S should be carried into report development as
+review-reportable evidence with explicit limitations.
+
 ## Scope
 
 This report records the P5 Branch S/SCA report-boundary materialization under:

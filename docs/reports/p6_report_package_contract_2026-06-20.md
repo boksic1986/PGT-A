@@ -2,6 +2,12 @@
 
 Date: 2026-06-20
 
+Status: `engineering_artifact_current_contract`
+
+Decision use: historical P6 package contract for the already materialized 0615
+development report. Future P6/report remains the delivery target after Branch A
+burden optimization and Branch B/S contract strengthening.
+
 ## Scope
 
 This report records the P6 report-package integration under:
