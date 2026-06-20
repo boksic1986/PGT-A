@@ -61,6 +61,42 @@ Current P6/report state:
   by workflow once the fixed A/B/S contracts are represented and limitations are
   explicit.
 
+## 2026-06-21 Branch A Burden Optimization Phase 1
+
+Current report:
+`docs/reports/branch_a_burden_optimization_phase1_2026-06-21.md`.
+
+This phase tightened the Branch A workflow contract without changing the
+default Branch A behavior:
+
+- Branch A is still WisecondorX predict/CBS-derived candidate discovery.
+- Current WisecondorX predict parameters remain `zscore=5`, `alpha=0.001`,
+  `maskrepeats=5`, and `minrefbins=150`.
+- `core.wisecondorx.cnv.branch_a.merge_gap_bp` and
+  `core.wisecondorx.cnv.branch_a.strong_z` are now passed through the workflow
+  into `pgta.predict.branch_a`.
+- Defaults are `merge_gap_bp=0` and `strong_z=10.0`, so current P2 behavior is
+  preserved.
+- No Branch B artifact, matched-negative, calibration, or legacy disposition
+  field is used by Branch A.
+
+Remote validation under default `merge_gap_bp=0`:
+
+- Y1-Y8: truth detected 10/10, FN=0, Branch A candidates=131.
+- H1-H16: truth detected 10/10, FN=0, H6 chr21 detected, Branch A
+  candidates=221.
+- 2026-06-15: no truth labels, Branch A candidates=201.
+
+Ablation conclusions:
+
+- Hard z tightening is unsafe as a Branch A inclusion filter: `z>=8` would miss
+  H6 chr21 gain and `z>=10` would miss Y6 chr7 loss plus H6 chr21 gain.
+- Existing-BED merge-gap ablation supports `merge_gap_bp=2_000_000` as the
+  first candidate for a formal burden-reduction run, but it has not been
+  promoted to default.
+- Before any promotion, the explicit 2 Mb config must rerun Branch A
+  validation and then the fixed Branch B V2 / Branch S / report chain.
+
 ## 2026-06-21 P1-P6 Credibility Audit Override
 
 Current audit report:

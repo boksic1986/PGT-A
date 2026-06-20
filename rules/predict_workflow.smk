@@ -326,6 +326,9 @@ if CNV_ENABLED:
             summary=CNV_A_CANDIDATE_SUMMARY
         log:
             project_path("logs", "cnv", "{sample}.a_branch_candidates.log")
+        params:
+            merge_gap_bp=CNV_BRANCH_A_MERGE_GAP_BP,
+            strong_z=CNV_BRANCH_A_STRONG_Z
         threads: 1
         run:
             from pgta.core.logging import write_rule_audit_log
@@ -341,6 +344,8 @@ if CNV_ENABLED:
                     "--input-bed", input.bed,
                     "--output-candidates", output.candidates,
                     "--output-summary", output.summary,
+                    "--merge-gap-bp", str(params.merge_gap_bp),
+                    "--strong-z", str(params.strong_z),
                     "--log", log[0],
                 ],
                 check=True,

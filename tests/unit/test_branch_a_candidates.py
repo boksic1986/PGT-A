@@ -60,6 +60,25 @@ class BranchACandidateAssemblyTest(unittest.TestCase):
         self.assertEqual(len(candidates), 2)
         self.assertEqual(set(candidates["state"].tolist()), {"gain", "loss"})
 
+    def test_configured_gap_merges_nearby_same_state_candidates(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bed_path = Path(tmpdir) / "S3_aberrations.bed"
+            pd.DataFrame(
+                [
+                    {"chr": "7", "start": 1, "end": 100, "ratio": 0.10, "zscore": 6.0, "type": "gain"},
+                    {"chr": "7", "start": 401, "end": 500, "ratio": 0.20, "zscore": 12.0, "type": "gain"},
+                ]
+            ).to_csv(bed_path, sep="\t", index=False)
+
+            default_candidates, _raw = assemble_a_branch_candidates(bed_path, "S3")
+            gap_candidates, _raw = assemble_a_branch_candidates(bed_path, "S3", merge_gap_bp=300)
+
+        self.assertEqual(len(default_candidates), 2)
+        self.assertEqual(len(gap_candidates), 1)
+        row = gap_candidates.iloc[0]
+        self.assertEqual((int(row["start"]), int(row["end"])), (1, 500))
+        self.assertEqual(int(row["a_source_event_count"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

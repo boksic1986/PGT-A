@@ -69,6 +69,24 @@ def test_branch_a_validation_target_is_branch_a_only_and_report_safe():
     assert "CNV_BRANCH_A_VALIDATION_SAMPLE_SUMMARY" not in report_rule
 
 
+def test_branch_a_assembly_exposes_configured_gap_without_branch_b_filters():
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+
+    assert "CNV_BRANCH_A_CFG" in layout
+    assert "CNV_BRANCH_A_MERGE_GAP_BP" in layout
+    assert "CNV_BRANCH_A_STRONG_Z" in layout
+
+    assembly_rule = workflow.split("rule a_branch_candidate_assembly:", 1)[1].split("rule cnv_branch_a_validation:", 1)[0]
+    assert "merge_gap_bp=CNV_BRANCH_A_MERGE_GAP_BP" in assembly_rule
+    assert "strong_z=CNV_BRANCH_A_STRONG_Z" in assembly_rule
+    assert '"--merge-gap-bp", str(params.merge_gap_bp)' in assembly_rule
+    assert '"--strong-z", str(params.strong_z)' in assembly_rule
+    assert "CNV_B_FINAL_EVENTS" not in assembly_rule
+    assert "CNV_B_ARTIFACT_SUMMARY" not in assembly_rule
+    assert "CNV_B_MATCHED_NEGATIVE" not in assembly_rule
+
+
 def test_predict_workflow_has_shadow_ledger_without_report_promotion():
     layout = read_text("rules/predict_layout.smk")
     workflow = read_text("rules/predict_workflow.smk")

@@ -27,7 +27,7 @@ active_handoff: docs/handoff/2026-06-21_0127_p1_p6_credibility_audit_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
-branch_a_status: p2_no_fn_passed_burden_optimization_next
+branch_a_status: burden_phase1_config_plumbing_done_default_unchanged
 branch_b_status: v2_evidence_design_legacy_excluded
 branch_s_status: review_reportable_with_limitations
 report_status: final_delivery_target_after_a_b_strengthening
@@ -37,6 +37,7 @@ report_status: final_delivery_target_after_a_b_strengthening
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
 - `docs/reports/h7_h16_reference_cohort_decision_2026-06-20.md`
 - `docs/reports/branch_a_validation_h_r0_shadow_2026-06-20.md`
+- `docs/reports/branch_a_burden_optimization_phase1_2026-06-21.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
 - `docs/reports/p6_report_package_contract_2026-06-20.md`
@@ -57,13 +58,22 @@ as `N0/N1/N2` background labels.
 ### Branch A
 
 Branch A remains WisecondorX predict/CBS-derived candidate discovery. P2 no-FN
-validation passed on Y1-Y8 and H1-H6 under the active reference. The next Branch
-A task is burden optimization while preserving known-positive recall, especially
-the weak H6 chr21 event.
+validation passed on Y1-Y8 and H1-H6 under the active reference.
+
+Branch A burden optimization Phase 1 is now completed as config plumbing and
+ablation evidence only. The workflow exposes `core.wisecondorx.cnv.branch_a`
+settings for `merge_gap_bp` and `strong_z`; defaults remain
+`merge_gap_bp=0` and `strong_z=10.0`, preserving current P2 behavior.
 
 `strong_z=10` is a strong/sensitive tier marker only. It is not a hard inclusion
 or exclusion filter. Signals below 10 can still represent weak positives or
 mosaic-positive candidates.
+
+Remote materialization with default `merge_gap_bp=0` still gives FN=0 on
+Y1-Y8/H1-H6 and keeps H6 chr21 detected. Existing-BED ablation indicates
+`merge_gap_bp=2_000_000` can reduce Branch A candidate burden while preserving
+the current truth set, but it is not promoted as a default until the fixed
+A/B/S chain is rerun and benchmarked under that explicit config.
 
 ### Branch B
 
@@ -124,8 +134,9 @@ A, Branch B, Branch S, background source, and limitations explicitly.
 2. Keep workflow source line endings LF on the remote mirror before making new
    Snakemake validation claims. The 2026-06-21 parser blocker was repaired by
    normalizing `Snakefile`, `.smk`, Python, and YAML workflow sources to LF.
-3. Evaluate Branch A burden under the fixed reference while preserving FN=0 on
-   Y1-Y8/H1-H6 and preserving H6 chr21.
+3. If Branch A burden is further reduced, materialize an explicit
+   `merge_gap_bp=2_000_000` config through Branch A validation first; do not
+   change defaults or hard-filter by z without remote no-FN evidence.
 4. Implement Branch B V2-only truth benchmark and evidence/disposition output,
    excluding legacy/current-code Branch B fields from decisions.
 5. Upgrade Branch S toward review-reportable output with controlled negative/ref

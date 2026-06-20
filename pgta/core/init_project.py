@@ -140,6 +140,10 @@ def load_template_config() -> dict:
                     "alpha": 0.001,
                     "maskrepeats": 5,
                     "minrefbins": 150,
+                    "branch_a": {
+                        "merge_gap_bp": 0,
+                        "strong_z": 10.0,
+                    },
                     "qc": {"min_total_counts": 1000000, "min_nonzero_fraction": 0.4, "max_mad_log1p": 1.2},
                 },
             },
