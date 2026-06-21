@@ -88,6 +88,37 @@ Current Branch B V2 burden stratification:
   but it is not a final Branch B V2 FP-reduction proof and not report-promotion
   evidence.
 
+Current Branch B V2 report-contract integration:
+
+- Current report:
+  `docs/reports/branch_b_v2_report_contract_2026-06-21.md`.
+- `cnv_report` is being updated to consume the V2 benchmark summary and
+  sample-summary table as report-display evidence only.
+- Required report fields are:
+  `branch_b_v2_burden_status`,
+  `branch_b_v2_background_unknown_review_count`,
+  `branch_b_v2_branch_s_review_count`,
+  `branch_b_v2_technical_risk_review_count`,
+  `branch_b_v2_report_candidate_count`,
+  `branch_b_v2_legacy_fields_used=false`, and
+  `branch_b_v2_final_impact=development_review_only`.
+- This integration does not change Branch A, does not add hard filters, does
+  not use legacy/current-code Branch B decisions, and does not promote Branch B
+  V2 or Branch S.
+- Remote validation completed on `ssh fengxian`:
+  - `tests/unit/test_cnv_report.py`,
+    `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
+    `tests/unit/test_current_context_index.py`: `28 passed in 0.93s`.
+  - Snakemake dry-runs passed for `branch_b_v2_benchmark branch_s_review
+    cnv_report` under all three active gap2m configs.
+  - Materialized `cnv_report` for Y1-Y8, H1-H16, and 2026-06-15.
+- Materialized report checks:
+  - Y1-Y8 V2 truth preserved 10/10, FN=0, hard-suppressed truth=0.
+  - H1-H16 V2 truth preserved 10/10, FN=0, hard-suppressed truth=0; H6 chr21
+    remains visible.
+  - 2026-06-15 V2 benchmark status is `skipped_no_truth`, so it remains
+    burden/context only.
+
 ## 2026-06-21 Branch A Burden Optimization Phase 1
 
 Current report:

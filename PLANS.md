@@ -77,16 +77,21 @@ Immediate execution order:
    it does not yet reduce total review burden: current outputs remain
    `background_unknown_review` and `branch_s_review`. Treat it as a reporting
    and auditability improvement, not FP-reduction proof.
-15. The next Branch B V2 gate is burden-display and report-contract
-   integration: decide how to show background-unknown, Branch S, length-tier,
-   clean-support, GC/RC, and B-side signal context without hard-suppressing
-   locked truth. Any future demotion/suppression rule must be ablated against
-   Y1-Y8/H1-H6, explicitly retain H6 chr21, and keep H7-H16/0615 as context
-   unless locked truth labels are added.
-16. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+15. Branch B V2 report-contract integration is now materialized:
+   `cnv_report` displays V2 burden/status fields as
+   `development_review_only` evidence without changing Branch A, adding hard
+   filters, using legacy/current-code Branch B decision fields, or promoting
+   Branch B V2 / Branch S.
+16. The next gate is review of the materialized report contract and then
+   cautious burden-display refinement only if it preserves Y1-Y8/H1-H6 truth,
+   H6 chr21 visibility, and 0615 context-only handling.
+17. Any future demotion/suppression rule must be ablated against Y1-Y8/H1-H6,
+   explicitly retain H6 chr21, and keep H7-H16/0615 as context unless locked
+   truth labels are added.
+18. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-17. Generate the next P6/report package from workflow outputs after fixed Branch
+19. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 
