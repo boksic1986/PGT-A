@@ -268,6 +268,8 @@ def load_branch_b_v2_burden_summaries(sample_summary_path="", benchmark_summary_
             "branch_b_v2_final_impact": "development_review_only",
             "branch_b_v2_same_reference_config_status": "not_configured",
             "branch_b_v2_sample_summary_count": 0,
+            "branch_b_v2_sample_report_burden_flag_count": 0,
+            "branch_b_v2_sample_report_burden_threshold": 0,
             "branch_b_v2_note": "Branch B V2 burden stratification is not configured for this report.",
         }
 
@@ -292,6 +294,12 @@ def load_branch_b_v2_burden_summaries(sample_summary_path="", benchmark_summary_
         "branch_b_v2_final_impact": "development_review_only",
         "branch_b_v2_same_reference_config_status": same_reference_status,
         "branch_b_v2_sample_summary_count": int(summary.get("sample_count", 0) or 0),
+        "branch_b_v2_sample_report_burden_flag_count": int(
+            summary.get("sample_report_burden_flag_count", 0) or 0
+        ),
+        "branch_b_v2_sample_report_burden_threshold": int(
+            summary.get("sample_report_burden_threshold", 0) or 0
+        ),
         "branch_b_v2_note": (
             "Branch B V2 burden stratification is displayed as development_review_only evidence; "
             "it is not FP-reduction proof and does not promote Branch B V2 or Branch S."
@@ -323,6 +331,10 @@ def load_branch_b_v2_burden_summaries(sample_summary_path="", benchmark_summary_
                 "branch_b_v2_internal_review_event_count": int(row.get("v2_internal_review_event_count", 0) or 0),
                 "branch_b_v2_filtered_event_count": int(row.get("v2_filtered_event_count", 0) or 0),
                 "branch_b_v2_branch_s_event_count": int(row.get("v2_branch_s_event_count", 0) or 0),
+                "branch_b_v2_sample_report_burden_flag": int(row.get("sample_report_burden_flag", 0) or 0),
+                "branch_b_v2_sample_report_burden_reason": str(
+                    row.get("sample_report_burden_reason", "") or ""
+                ),
                 "branch_b_v2_legacy_fields_used": legacy_used,
                 "branch_b_v2_final_impact": "development_review_only",
                 "branch_b_v2_same_reference_config_status": same_reference_status,
@@ -504,6 +516,7 @@ def format_branch_b_v2_burden_status(row):
         f"internal_review_event={int(row.get('branch_b_v2_internal_review_event_count', 0) or 0)}; "
         f"filtered_event={int(row.get('branch_b_v2_filtered_event_count', 0) or 0)}; "
         f"branch_s_event={int(row.get('branch_b_v2_branch_s_event_count', 0) or 0)}; "
+        f"sample_report_burden_flag={int(row.get('branch_b_v2_sample_report_burden_flag', 0) or 0)}; "
         f"impact={text_or_empty(row.get('branch_b_v2_final_impact', 'development_review_only')) or 'development_review_only'}"
     )
 
@@ -722,6 +735,7 @@ def format_technical_conclusion(row):
                 f"Bv2_internal_review_event={int(row.get('branch_b_v2_internal_review_event_count', 0) or 0)}",
                 f"Bv2_filtered_event={int(row.get('branch_b_v2_filtered_event_count', 0) or 0)}",
                 f"Bv2_branch_s_event={int(row.get('branch_b_v2_branch_s_event_count', 0) or 0)}",
+                f"Bv2_sample_report_burden_flag={int(row.get('branch_b_v2_sample_report_burden_flag', 0) or 0)}",
                 f"Bv2_final_impact={text_or_empty(row.get('branch_b_v2_final_impact', 'development_review_only')) or 'development_review_only'}",
                 f"Bv2_legacy_fields_used={bool(row.get('branch_b_v2_legacy_fields_used', False))}",
             ]
@@ -909,6 +923,8 @@ def main():
         f"- Branch B V2 internal review events: `{report_contract['branch_b_v2_internal_review_event_count']}`",
         f"- Branch B V2 filtered events: `{report_contract['branch_b_v2_filtered_event_count']}`",
         f"- Branch B V2 Branch S events: `{report_contract['branch_b_v2_branch_s_event_count']}`",
+        f"- Branch B V2 sample report-burden flags: `{report_contract['branch_b_v2_sample_report_burden_flag_count']}`"
+        f" (threshold `{report_contract['branch_b_v2_sample_report_burden_threshold']}` report events/sample; audit-only)",
         "- Branch B V2 limitation: `development_review_only display; not FP-reduction proof; not final promotion`",
         "",
         "## Sample Table",
@@ -982,7 +998,8 @@ def main():
         f"<p>Branch B V2 report-layer events: report={int(report_contract['branch_b_v2_report_event_count'])}; "
         f"internal_review={int(report_contract['branch_b_v2_internal_review_event_count'])}; "
         f"filtered={int(report_contract['branch_b_v2_filtered_event_count'])}; "
-        f"branch_s={int(report_contract['branch_b_v2_branch_s_event_count'])}</p>"
+        f"branch_s={int(report_contract['branch_b_v2_branch_s_event_count'])}; "
+        f"sample_report_burden_flags={int(report_contract['branch_b_v2_sample_report_burden_flag_count'])}</p>"
         "<p>Branch B V2 burden display is development_review_only evidence; it is not FP-reduction proof and is not final promotion.</p>"
         "<table><thead><tr><th>Sample</th><th>QC</th><th>Sex</th><th>Plot</th><th>Legacy Branch B Top Event</th>"
         "<th>P3 Evidence</th><th>Branch B V2 Burden</th><th>SCA Status</th><th>Technical Conclusion</th><th>Biological Candidate Conclusion</th></tr></thead><tbody>"

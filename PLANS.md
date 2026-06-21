@@ -91,22 +91,23 @@ Immediate execution order:
    overlay. It preserves G1-G8 truth 10/10 with FN=0 and no report-layer
    filtered truth, while exposing a high G2 review/report burden that should be
    reviewed before the next demotion pass.
-18. The second Branch B V2 report-burden pass is now materialized. It demotes
-   selected multi-report, background-unknown, GC/RC-unstable events from
-   `report_event` to `internal_review_event`, preserves Y/H/G truth 10/10 with
-   FN=0, keeps H6 chr21 visible, and reduces report events from Y 21->9,
-   H 6->4, G 15->12, and 0615 52->15.
-19. The next gate is inspection of the remaining V2 `report_events.tsv` rows,
-   especially G2 and 0615 sample `JZ26125846-61-61`, before any third demotion
-   or filtering pass. Do not use 2026-06-15 as truth and do not reintroduce
-   legacy/current-code Branch B.
-20. Any future demotion/suppression rule must be ablated against Y1-Y8/H1-H6
+18. The second Branch B V2 report-burden pass has been retracted as a current
+   candidate-level decision rule. The condition `sample report_event count >=3`
+   is now sample-level burden audit only and must not demote/filter individual
+   candidates.
+19. Corrected rematerialization is complete for Y/H/G/2026-06-15. Y/H/G truth
+   remains preserved with FN=0; H6 chr21 and G2 truth remain visible; sample
+   report burden is now audit-only in summary/report outputs.
+20. The next burden-reduction design must begin with candidate-level evidence
+   audit. Do not use truth labels, sample report counts, or 2026-06-15 burden
+   counts to reverse-engineer demotion/filtering rules.
+21. Any future demotion/suppression rule must be ablated against Y1-Y8/H1-H6
    and G1-G8, explicitly retain H6 chr21 and G1-G8 locked truth, and keep
    H7-H16/0615 as context unless locked truth labels are added.
-21. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+22. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-22. Generate the next P6/report package from workflow outputs after fixed Branch
+23. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 

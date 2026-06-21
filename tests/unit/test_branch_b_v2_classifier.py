@@ -1064,7 +1064,7 @@ def test_report_layer_routes_sex_chromosome_to_branch_s_event():
     assert row["v2_report_visibility"] == "branch_s_report_section"
 
 
-def test_report_layer_pass2_demotes_multi_report_unknown_background_unstable_context():
+def test_report_layer_pass2_does_not_demote_candidate_from_sample_report_burden():
     frame = pd.DataFrame(
         [
             {
@@ -1119,15 +1119,13 @@ def test_report_layer_pass2_demotes_multi_report_unknown_background_unstable_con
 
     assert classified.loc["S1.anchor", "v2_report_layer_class"] == "report_event"
     assert classified.loc["S1.stable", "v2_report_layer_class"] == "report_event"
-    assert classified.loc["S1.demote", "v2_report_layer_class"] == "internal_review_event"
-    assert classified.loc["S1.demote", "v2_report_visibility"] == "internal_review"
-    assert (
-        classified.loc["S1.demote", "v2_filter_action"]
-        == "downgrade_report_to_internal_review_multi_event_uncertain_context"
+    assert classified.loc["S1.demote", "v2_report_layer_class"] == "report_event"
+    assert classified.loc["S1.demote", "v2_report_visibility"] == "final_report"
+    assert classified.loc["S1.demote", "v2_filter_action"] != (
+        "downgrade_report_to_internal_review_multi_event_uncertain_context"
     )
     assert classified.loc["S1.demote", "v2_filter_hard_suppression_allowed"] == 0
-    assert "multi_report_sample" in classified.loc["S1.demote", "v2_report_filter_rule_tags"]
-    assert "gc_rc_unstable" in classified.loc["S1.demote", "v2_report_filter_rule_tags"]
+    assert "multi_report_sample" not in classified.loc["S1.demote", "v2_report_filter_rule_tags"]
 
 
 def test_report_layer_pass2_single_unstable_unknown_background_signal_stays_report_event():
@@ -1159,7 +1157,7 @@ def test_report_layer_pass2_single_unstable_unknown_background_signal_stays_repo
     assert row["v2_report_visibility"] == "final_report"
 
 
-def test_report_layer_pass2_handles_missing_a_zscore_as_uncertain_context():
+def test_report_layer_pass2_missing_a_zscore_uses_candidate_level_contract_risk_only():
     frame = pd.DataFrame(
         [
             {
@@ -1213,4 +1211,5 @@ def test_report_layer_pass2_handles_missing_a_zscore_as_uncertain_context():
 
     assert classified.loc["S1.missing_z", "v2_report_layer_class"] == "internal_review_event"
     assert classified.loc["S1.missing_z", "v2_report_visibility"] == "internal_review"
+    assert "multi_report_sample" not in classified.loc["S1.missing_z", "v2_report_filter_rule_tags"]
     assert classified.loc["S1.missing_z", "v2_filter_hard_suppression_allowed"] == 0
