@@ -1,0 +1,29 @@
+base_config: "/data/project/CNV/PGT-A/refactor_validation_20260419/config_predict_20260615_h_r0_shadow_20260619.yaml"
+
+pipeline:
+  mode: "predict"
+  targets:
+    - "metadata"
+    - "cnv_qc"
+    - "branch_a_validation"
+
+core:
+  project_path: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_h_r0_shadow_ref_20260619_2mb"
+  wisecondorx:
+    reference_model_root: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619_2mb/reference"
+    reference_output_by_sex:
+      XX: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619_2mb/reference/XX/result/ref_xx_best.npz"
+      XY: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619_2mb/reference/XY/result/ref_xy_best.npz"
+    gender_reference_output: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619_2mb/reference/gender/result/ref_gender_best.npz"
+    common_reference_binsize_output: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619_2mb/reference/gender/common_best_binsize.txt"
+    cnv:
+      reference_id: "h_r0_shadow_ref_20260619_2mb"
+      convert_binsize: 2000000
+      branch_a:
+        merge_gap_bp: 2000000
+        strong_z: 10.0
+        output_dir: "wisecondorx/cnv/a_branch_gap2m"
+        validation_dir: "wisecondorx/cnv/branch_a_validation_gap2m"
+        log_dir: "logs/cnv_branch_a_gap2m"
+      postprocess:
+        output_dir: "wisecondorx/cnv/postprocess_gap2m"

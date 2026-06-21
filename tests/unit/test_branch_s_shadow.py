@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pandas as pd
 
-from pgta.predict.branch_s import build_branch_s_shadow, summarize_branch_s_shadow
+from pgta.predict.branch_s import (
+    build_branch_s_shadow,
+    prepare_candidates,
+    summarize_branch_s_shadow,
+    summarize_sex_chrom_lowres_context,
+)
 
 
 def test_branch_s_shadow_partitions_sex_chromosome_regions_and_never_changes_report():
@@ -216,6 +221,166 @@ def test_branch_s_does_not_call_strong_x_gain_from_uncorroborated_xy_branch_a_ca
     assert summary["sca_confidence_tier"] == "SCA_NO_CALL"
     assert summary["sca_report_layer_class"] == "sca_filtered_or_sex_consistent_event"
     assert "branch_a_only_uncorroborated" in summary["sca_report_layer_reason"]
+
+
+def test_branch_s_uses_segment_level_nonpar_support_when_global_median_is_neutral():
+    bins = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": idx * 1_000_000,
+                "end": (idx + 1) * 1_000_000,
+                "calibrated_z": 4.0 if idx in {2, 3} else 0.0,
+                "robust_z": 8.0 if idx in {2, 3} else 0.0,
+                "is_PAR": False,
+            }
+            for idx in range(10)
+        ]
+    )
+    a_candidates = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 2_000_000,
+                "end": 4_000_000,
+                "state": "gain",
+                "a_zscore": 12.5,
+                "a_abs_zscore": 12.5,
+            }
+        ]
+    )
+    gender = pd.DataFrame(
+        [
+            {
+                "sample_id": "XY_SEGMENT",
+                "sex_call": "XY",
+                "predict_gender": "M",
+                "sex_call_source": "wisecondorx_bam_consensus",
+            }
+        ]
+    )
+
+    evidence, scores = build_branch_s_shadow(
+        sample_id="XY_SEGMENT",
+        bins=bins,
+        a_candidates=a_candidates,
+        gender=gender,
+    )
+    summary = summarize_branch_s_shadow("XY_SEGMENT", evidence, scores, gender)
+    x_gain = scores.loc[scores["sca_state"] == "X_GAIN"].iloc[0]
+
+    assert x_gain["state_score"] == 12.5
+    assert x_gain["state_score_reason"] == "branch_a_candidate_zscore_segment_nonpar_corroborated"
+    assert summary["x_nonpar_direction"] == "gain"
+    assert summary["sca_candidate_state"] == "X_GAIN"
+    assert summary["sca_report_layer_class"] == "sca_internal_review_event"
+
+
+def test_branch_s_par_only_signal_is_context_not_sca_call():
+    bins = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 0,
+                "end": 1_000_000,
+                "calibrated_z": 9.0,
+                "robust_z": 12.0,
+                "par_overlap_fraction": 1.0,
+            },
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 4_000_000,
+                "calibrated_z": 0.0,
+                "robust_z": 0.0,
+                "is_PAR": False,
+            },
+        ]
+    )
+    gender = pd.DataFrame(
+        [
+            {
+                "sample_id": "PAR_ONLY",
+                "sex_call": "XY",
+                "predict_gender": "M",
+                "sex_call_source": "wisecondorx_bam_consensus",
+            }
+        ]
+    )
+
+    evidence, scores = build_branch_s_shadow(
+        sample_id="PAR_ONLY",
+        bins=bins,
+        a_candidates=pd.DataFrame(),
+        gender=gender,
+    )
+    summary = summarize_branch_s_shadow("PAR_ONLY", evidence, scores, gender)
+
+    assert summary["x_par_context"] == "available"
+    assert summary["sca_candidate_state"] == "none_detected"
+    assert summary["sca_report_layer_class"] == "sca_no_call"
+
+
+def test_branch_s_lowres_absence_is_context_not_suppression_for_short_segment():
+    bins = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": idx * 1_000_000,
+                "end": (idx + 1) * 1_000_000,
+                "calibrated_z": -3.0 if idx in {5, 6} else 0.0,
+                "robust_z": -8.0 if idx in {5, 6} else 0.0,
+                "is_PAR": False,
+            }
+            for idx in range(10)
+        ]
+    )
+    a_candidates = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 5_000_000,
+                "end": 7_000_000,
+                "state": "loss",
+                "a_zscore": -11.0,
+                "a_abs_zscore": 11.0,
+            }
+        ]
+    )
+    gender = pd.DataFrame(
+        [
+            {
+                "sample_id": "XY_SHORT_XLOSS",
+                "sex_call": "XY",
+                "predict_gender": "M",
+                "sex_call_source": "wisecondorx_bam_consensus",
+            }
+        ]
+    )
+    lowres_context = summarize_sex_chrom_lowres_context(
+        prepare_candidates(a_candidates),
+        lowres_2mb_events=pd.DataFrame(),
+        lowres_3mb_events=pd.DataFrame(),
+    )
+
+    evidence, scores = build_branch_s_shadow(
+        sample_id="XY_SHORT_XLOSS",
+        bins=bins,
+        a_candidates=a_candidates,
+        gender=gender,
+    )
+    summary = summarize_branch_s_shadow(
+        "XY_SHORT_XLOSS",
+        evidence,
+        scores,
+        gender,
+        lowres_context=lowres_context,
+    )
+
+    assert summary["sex_chrom_lowres_2mb_context"] == "not_informative_short_or_boundary_event"
+    assert summary["sex_chrom_lowres_3mb_context"] == "not_informative_short_or_boundary_event"
+    assert summary["sca_candidate_state"] == "X_LOSS"
+    assert summary["sca_report_layer_class"] == "sca_internal_review_event"
 
 
 def test_branch_s_preserves_x_loss_when_branch_a_is_nonpar_corroborated():
@@ -435,4 +600,6 @@ def test_branch_s_summary_contains_p5_report_boundary_contract():
     assert summary["sca_confidence_tier"] == "SCA_REVIEW_STRONG"
     assert summary["sca_output_mode"] == "review_development_only"
     assert summary["report_text_status"] == "development_only_not_final_reportable"
+    assert summary["sex_chrom_lowres_2mb_context"] == "not_configured"
+    assert summary["sex_chrom_lowres_final_impact"] == "context_only_not_filter"
     assert "locked_sca_truth_incomplete" in summary["sca_uncertainty_reason"]

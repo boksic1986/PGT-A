@@ -1,3 +1,5 @@
+from glob import glob
+
 CNV_ENABLED = bool(CNV_CFG.get("enable", False))
 CNV_DIR = resolve_path(CNV_CFG.get("output_dir", "wisecondorx/cnv"))
 CNV_PREPROCESS_CFG = CNV_CFG.get("preprocess", {})
@@ -128,18 +130,26 @@ CNV_LOWRES_3MB_EVENTS = (
     if CNV_LOWRES_3MB_EVENTS_DIR
     else ""
 )
-CNV_LOWRES_REF_NPZ_PATHS = [
-    resolve_path(item)
-    for item in CNV_LOWRES_EVIDENCE_CFG.get("reference_npz", [])
-    if str(item).strip()
-]
+CNV_LOWRES_REF_NPZ_PATHS = []
+for item in CNV_LOWRES_EVIDENCE_CFG.get("reference_npz", []):
+    if str(item).strip():
+        CNV_LOWRES_REF_NPZ_PATHS.append(resolve_path(item))
+CNV_LOWRES_REF_NPZ_GLOBS = CNV_LOWRES_EVIDENCE_CFG.get("reference_npz_glob", [])
+if isinstance(CNV_LOWRES_REF_NPZ_GLOBS, str):
+    CNV_LOWRES_REF_NPZ_GLOBS = [CNV_LOWRES_REF_NPZ_GLOBS]
+for pattern in CNV_LOWRES_REF_NPZ_GLOBS:
+    if str(pattern).strip():
+        CNV_LOWRES_REF_NPZ_PATHS.extend(sorted(glob(resolve_path(pattern))))
+CNV_LOWRES_REF_NPZ_PATHS = list(dict.fromkeys(CNV_LOWRES_REF_NPZ_PATHS))
 CNV_LOWRES_REF_SAMPLE_IDS = [
     str(item)
     for item in CNV_LOWRES_EVIDENCE_CFG.get("reference_sample_ids", [])
     if str(item).strip()
 ]
 if CNV_LOWRES_EVIDENCE_ENABLE and not CNV_LOWRES_REF_NPZ_PATHS:
-    raise ValueError("core.wisecondorx.cnv.lowres_evidence.enable=true requires lowres_evidence.reference_npz")
+    raise ValueError(
+        "core.wisecondorx.cnv.lowres_evidence.enable=true requires lowres_evidence.reference_npz or reference_npz_glob"
+    )
 if (
     CNV_LOWRES_EVIDENCE_ENABLE
     and CNV_LOWRES_REF_SAMPLE_IDS

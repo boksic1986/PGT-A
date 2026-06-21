@@ -984,6 +984,8 @@ if CNV_ENABLED:
                 bins=CNV_B_CALIBRATED_BINS,
                 a_candidates=CNV_A_CANDIDATES,
                 gender_tsv=([CNV_GENDER_TSV] if PREDICT_BY_SEX_ENABLED else []),
+                lowres_2mb=([CNV_LOWRES_2MB_EVENTS] if CNV_LOWRES_EVIDENCE_ENABLE and CNV_LOWRES_2MB_EVENTS else []),
+                lowres_3mb=([CNV_LOWRES_3MB_EVENTS] if CNV_LOWRES_EVIDENCE_ENABLE and CNV_LOWRES_3MB_EVENTS else []),
                 metadata=RUN_METADATA
             output:
                 evidence=CNV_BRANCH_S_EVIDENCE,
@@ -1011,6 +1013,10 @@ if CNV_ENABLED:
                 ]
                 if input.gender_tsv:
                     command.extend(["--gender-tsv", input.gender_tsv[0]])
+                if input.lowres_2mb:
+                    command.extend(["--lowres-2mb-events", input.lowres_2mb[0]])
+                if input.lowres_3mb:
+                    command.extend(["--lowres-3mb-events", input.lowres_3mb[0]])
                 subprocess.run(command, check=True)
 
     if CNV_MOSAIC_FRACTION_TRUTH_TSV and ("cnv_benchmark" in AVAILABLE_TARGETS or "cnv_report" in AVAILABLE_TARGETS):
