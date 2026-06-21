@@ -322,6 +322,8 @@ def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Pa
     summary = tmp_path / "summary.json"
     filtered_events = tmp_path / "filtered_events.tsv"
     filtered_events_json = tmp_path / "filtered_events.json"
+    report_events = tmp_path / "report_events.tsv"
+    report_events_json = tmp_path / "report_events.json"
 
     pd.DataFrame(
         [
@@ -387,6 +389,8 @@ def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Pa
         output_summary=str(summary),
         output_filtered_events=str(filtered_events),
         output_filtered_events_json=str(filtered_events_json),
+        output_report_events=str(report_events),
+        output_report_events_json=str(report_events_json),
     )
 
     row = written_sample_summary.iloc[0]
@@ -409,6 +413,12 @@ def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Pa
         "low_clean_high_risk": 1,
         "short_or_focal": 1,
     }
+
+    report_df = pd.read_csv(report_events, sep="\t")
+    assert report_df["candidate_id"].tolist() == ["S1.report"]
+    report_payload = json.loads(report_events_json.read_text(encoding="utf-8"))
+    assert report_payload["report_event_count"] == 1
+    assert report_payload["report_event_ids"] == ["S1.report"]
 
 
 def test_v2_report_layer_filtered_truth_overlap_counts_as_fn(tmp_path: Path):

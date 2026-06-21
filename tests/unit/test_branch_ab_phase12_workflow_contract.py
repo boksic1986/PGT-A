@@ -158,6 +158,8 @@ def test_branch_b_v2_benchmark_is_v2_only_and_report_safe():
     assert "CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY" in layout
     assert "CNV_B_V2_BENCHMARK_FILTERED_EVENTS" in layout
     assert "CNV_B_V2_BENCHMARK_FILTERED_EVENTS_JSON" in layout
+    assert "CNV_B_V2_BENCHMARK_REPORT_EVENTS" in layout
+    assert "CNV_B_V2_BENCHMARK_REPORT_EVENTS_JSON" in layout
     assert "CNV_B_V2_BENCHMARK_SUMMARY" in layout
     assert "rule cnv_branch_b_v2_benchmark" in workflow
     assert "rule branch_b_v2_benchmark" in snakefile
@@ -167,8 +169,12 @@ def test_branch_b_v2_benchmark_is_v2_only_and_report_safe():
     assert "CNV_B_V2_CLASSIFIER" in benchmark_rule
     assert "filtered_events=CNV_B_V2_BENCHMARK_FILTERED_EVENTS" in benchmark_rule
     assert "filtered_events_json=CNV_B_V2_BENCHMARK_FILTERED_EVENTS_JSON" in benchmark_rule
+    assert "report_events=CNV_B_V2_BENCHMARK_REPORT_EVENTS" in benchmark_rule
+    assert "report_events_json=CNV_B_V2_BENCHMARK_REPORT_EVENTS_JSON" in benchmark_rule
     assert "--output-filtered-events" in benchmark_rule
     assert "--output-filtered-events-json" in benchmark_rule
+    assert "--output-report-events" in benchmark_rule
+    assert "--output-report-events-json" in benchmark_rule
     assert "CNV_B_FINAL_EVENTS" not in benchmark_rule
     assert "CNV_B_ARTIFACT_SUMMARY" not in benchmark_rule
     assert "CNV_B_MATCHED_NEGATIVE" not in benchmark_rule
@@ -178,6 +184,8 @@ def test_branch_b_v2_benchmark_is_v2_only_and_report_safe():
     assert "CNV_B_V2_BENCHMARK_SUMMARY" in benchmark_target
     assert "CNV_B_V2_BENCHMARK_FILTERED_EVENTS" in benchmark_target
     assert "CNV_B_V2_BENCHMARK_FILTERED_EVENTS_JSON" in benchmark_target
+    assert "CNV_B_V2_BENCHMARK_REPORT_EVENTS" in benchmark_target
+    assert "CNV_B_V2_BENCHMARK_REPORT_EVENTS_JSON" in benchmark_target
     assert "CNV_REPORT_TSV" not in benchmark_target
 
     report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
