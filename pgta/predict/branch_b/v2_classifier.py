@@ -50,7 +50,9 @@ V2_CLASSIFIER_COLUMNS = [
 
 V2_FILTER_VERSION = "branch_b_v2_truth_safe_filter_v1"
 V2_BURDEN_REDUCTION_VERSION = "branch_b_v2_burden_stratification_v1"
-V2_REPORT_LAYER_VERSION = "branch_b_v2_report_layer_filter_v1"
+V2_REPORT_LAYER_VERSION = "branch_b_v2_report_layer_filter_v2"
+PASS2_MULTI_REPORT_EVENT_THRESHOLD = 3
+PASS2_VERY_STRONG_A_Z = 50.0
 
 
 def parse_args():
@@ -548,6 +550,60 @@ def report_layer_payload(row, candidate_class, disposition, length_label, clean_
     }
 
 
+def apply_report_layer_burden_pass2(classified_df):
+    if classified_df is None or classified_df.empty or "v2_report_layer_class" not in classified_df.columns:
+        return classified_df
+
+    frame = classified_df.copy()
+    report_event = frame["v2_report_layer_class"].fillna("").astype(str).eq("report_event")
+    if not report_event.any():
+        return frame
+
+    report_counts = report_event.groupby(frame["sample_id"].fillna("").astype(str)).transform("sum")
+    a_abs_zscore = pd.to_numeric(
+        frame.get("a_abs_zscore", pd.Series(math.nan, index=frame.index)),
+        errors="coerce",
+    )
+    background_label = frame.get("v2_background_context_label", pd.Series("", index=frame.index)).fillna("").astype(str)
+    gc_label = frame.get("v2_gc_rc_context_label", pd.Series("", index=frame.index)).fillna("").astype(str)
+
+    unknown_or_no_null_background = (
+        background_label.str.startswith("UNKNOWN_BACKGROUND")
+        | background_label.str.startswith("NO_")
+        | background_label.str.contains("NO_NULL_SUPPORT", regex=False)
+    )
+    gc_rc_unstable = gc_label.isin({"GC_RC_ATTENUATED", "GC_RC_ATTENUATED_SEVERE", "GC_RC_AMPLIFIED"})
+    not_very_strong_a = a_abs_zscore.lt(PASS2_VERY_STRONG_A_Z) | a_abs_zscore.isna()
+    demote_mask = (
+        report_event
+        & report_counts.ge(PASS2_MULTI_REPORT_EVENT_THRESHOLD)
+        & unknown_or_no_null_background
+        & gc_rc_unstable
+        & not_very_strong_a
+    )
+
+    if not demote_mask.any():
+        return frame
+
+    reason = "multi_report_unknown_background_gc_rc_unstable_internal_review"
+    tags = "multi_report_sample;unknown_background_no_null;gc_rc_unstable;not_very_strong_a_signal"
+    frame.loc[demote_mask, "v2_report_layer_class"] = "internal_review_event"
+    frame.loc[demote_mask, "v2_report_visibility"] = "internal_review"
+    frame.loc[demote_mask, "v2_report_filter_reason"] = reason
+    frame.loc[demote_mask, "v2_report_filter_rule_tags"] = tags
+    frame.loc[demote_mask, "v2_report_filter_evidence_count"] = 4
+    frame.loc[demote_mask, "v2_filter_action"] = "downgrade_report_to_internal_review_multi_event_uncertain_context"
+    frame.loc[demote_mask, "v2_filter_reason"] = reason
+    frame.loc[demote_mask, "v2_filter_scope"] = "report_layer_burden_pass2"
+    frame.loc[demote_mask, "v2_filter_hard_suppression_allowed"] = 0
+    frame.loc[demote_mask, "v2_burden_reduction_tier"] = "background_unknown_review"
+    frame.loc[demote_mask, "v2_burden_reduction_action"] = (
+        "downgrade_report_to_internal_review_multi_event_uncertain_context"
+    )
+    frame.loc[demote_mask, "v2_burden_reduction_reason"] = reason
+    return frame
+
+
 def burden_evidence_tags(row, length_label, clean_label, gc_label):
     tags = [f"[CNVpro-inspired] length_tier={length_label}"]
     if is_acrocentric_chromosome_candidate(row):
@@ -748,7 +804,8 @@ def classify_branch_b_v2_candidates(candidate_ledger, version="branch_ab_v2"):
         payload["v2_final_report_impact"] = "none_shadow_only"
         payloads.append(payload)
     payload_df = pd.DataFrame(payloads)
-    return pd.concat([frame.reset_index(drop=True), payload_df[V2_CLASSIFIER_COLUMNS]], axis=1)
+    classified = pd.concat([frame.reset_index(drop=True), payload_df[V2_CLASSIFIER_COLUMNS]], axis=1)
+    return apply_report_layer_burden_pass2(classified)
 
 
 def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"):

@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_1810_g1_g8_current_scheme_validation_handoff.md`
+2. `docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,15 +23,15 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_1810_g1_g8_current_scheme_validation_handoff.md
-previous_handoff: docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md
+active_handoff: docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md
+previous_handoff: docs/handoff/2026-06-21_1810_g1_g8_current_scheme_validation_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_report_layer_filter_materialized_development_only
+branch_b_status: v2_report_burden_pass2_materialized_development_only
 branch_s_status: review_reportable_with_limitations
-report_status: branch_b_v2_report_layer_filter_integrated_development_only
+report_status: branch_b_v2_report_burden_pass2_integrated_development_only
 
 ## Current Evidence Files
 
@@ -50,6 +50,8 @@ report_status: branch_b_v2_report_layer_filter_integrated_development_only
 - `docs/reports/branch_b_v2_report_contract_2026-06-21.md`
 - `docs/reports/branch_b_v2_report_layer_filter_2026-06-21.md`
 - `docs/reports/branch_b_v2_g1_g8_validation_2026-06-21.md`
+- `docs/reports/branch_b_v2_report_event_audit_2026-06-21.md`
+- `docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md`
 - `docs/handoff/2026-06-21_1810_g1_g8_current_scheme_validation_handoff.md`
 - `docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
@@ -345,6 +347,31 @@ the shadow reference, Branch B V2, or Branch S to production-final status. G2
 remains the main G-batch review-burden outlier and should be reviewed before
 designing a second demotion pass.
 
+The second Branch B V2 report-burden pass is now materialized and documented in
+`docs/reports/branch_b_v2_report_event_audit_2026-06-21.md`. It does not modify
+Branch A, does not rebuild the reference, and does not promote Branch B V2 or
+Branch S. It only demotes selected `report_event` rows to
+`internal_review_event` when combined evidence is present:
+
+```text
+sample report_event count >= 3
++ unknown/no-null background context
++ unstable GC/RC context
++ a_abs_zscore < 50
+```
+
+Materialized pass2 result:
+
+- Y1-Y8: report events 21 -> 9; truth preserved 10/10; FN=0; truth filtered=0.
+- H1-H16: report events 6 -> 4; truth preserved 10/10; FN=0; truth filtered=0;
+  H6 chr21 remains visible as internal review.
+- G1-G8: report events 15 -> 12; truth preserved 10/10; FN=0; truth filtered=0;
+  G2 report events 6 -> 3.
+- 2026-06-15: report events 52 -> 15; no locked truth, context only.
+
+Benchmark output now includes `report_events.tsv` and `report_events.json`.
+Further rules must inspect remaining report events before adding new filters.
+
 ### Branch S
 
 Branch S is not final SCA, but it must not be omitted from report development.
@@ -390,8 +417,8 @@ A, Branch B, Branch S, background source, and limitations explicitly.
    Branch B V2-only benchmark unless a blocking regression appears; keep
    default `merge_gap_bp=0` as rollback/control.
 4. Continue refining Branch B V2 evidence/disposition for remaining autosomal
-   FP and review burden while preserving the materialized
-   no-FN/no-hard-suppression benchmark.
+   report/internal-review burden while preserving the materialized
+   no-FN/no-truth-filtered benchmark.
 5. Direction support is now materialized as a review label only; do not turn it
    into a hard filter, final benign/artifact call, or universal demotion.
 6. Background context is now materialized as a review label only; do not treat
@@ -412,3 +439,6 @@ A, Branch B, Branch S, background source, and limitations explicitly.
    FP burden; final SCA promotion remains a separate truth gate.
 11. Generate the next P6/report package only after the fixed A/B/S contracts are
    represented in workflow outputs.
+12. The next Branch B V2 pass must start from remaining `report_events.tsv`
+   rows, especially G2 and 0615 sample `JZ26125846-61-61`; do not add broad
+   demotion/filter rules without Y/H/G locked-truth ablation.

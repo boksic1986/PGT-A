@@ -187,6 +187,34 @@ active reference and explicit gap2m Branch A overlay:
   events, 16 internal-review events, 3 filtered audit-only events, and 3
   Branch S events.
 
+Current Branch B V2 report burden pass2:
+
+- Current report:
+  `docs/reports/branch_b_v2_report_event_audit_2026-06-21.md`.
+- This loop did not modify Branch A, did not rebuild the reference, and did not
+  promote `merge_gap_bp=2_000_000` to default.
+- It added a second report-layer demotion pass that can move selected
+  `report_event` rows to `internal_review_event` when combined evidence is
+  present: multi-report sample burden, unknown/no-null background, unstable
+  GC/RC context, and `a_abs_zscore < 50`.
+- It does not hard-filter truth-overlap events and does not use legacy/current
+  Branch B decision fields.
+- Remote materialized result:
+  - Y1-Y8: candidates=97, truth preserved 10/10, FN=0, report-layer filtered
+    truth=0, report=9, internal_review=62, filtered audit-only=13,
+    Branch S=13.
+  - H1-H16: candidates=105, truth preserved 10/10, FN=0, report-layer filtered
+    truth=0, H6 chr21 retained as internal review, report=4,
+    internal_review=51, filtered audit-only=8, Branch S=42.
+  - G1-G8: candidates=75, truth preserved 10/10, FN=0, report-layer filtered
+    truth=0, report=12, internal_review=43, filtered audit-only=7,
+    Branch S=13.
+  - 2026-06-15: candidates=165, no locked truth, context only, report=15,
+    internal_review=113, filtered audit-only=23, Branch S=14.
+- Benchmark output now includes `report_events.tsv` and `report_events.json`.
+- This is still `development_review_only`. Remaining report events must be
+  inspected before further demotion or filtering rules are added.
+
 ## 2026-06-21 Branch A Burden Optimization Phase 1
 
 Current report:

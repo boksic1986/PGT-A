@@ -87,6 +87,8 @@ def parse_args():
     parser.add_argument("--output-sample-summary", required=True)
     parser.add_argument("--output-filtered-events", default="")
     parser.add_argument("--output-filtered-events-json", default="")
+    parser.add_argument("--output-report-events", default="")
+    parser.add_argument("--output-report-events-json", default="")
     parser.add_argument("--output-summary", required=True)
     return parser.parse_args()
 
@@ -260,6 +262,8 @@ def build_v2_benchmark(
     output_summary: str,
     output_filtered_events: str = "",
     output_filtered_events_json: str = "",
+    output_report_events: str = "",
+    output_report_events_json: str = "",
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]:
     inferred_samples = [_sample_from_classification_path(path) for path in classification_paths]
     ordered_samples = list(dict.fromkeys([str(sample) for sample in sample_ids if str(sample)] + inferred_samples))
@@ -431,11 +435,27 @@ def build_v2_benchmark(
             else []
         ),
     }
+    report_classifications = classifications.loc[
+        classifications.get("v2_report_layer_class", pd.Series("", index=classifications.index))
+        .fillna("")
+        .astype(str)
+        .eq("report_event")
+    ].copy()
+    report_payload = {
+        "report_event_count": int(len(report_classifications)),
+        "report_event_rule_counts": _rule_tag_counts(report_classifications, "v2_report_filter_rule_tags"),
+        "report_event_ids": (
+            report_classifications.get("candidate_id", pd.Series([], dtype=object)).fillna("").astype(str).tolist()
+            if not report_classifications.empty
+            else []
+        ),
+    }
 
     for path_value, frame in [
         (output_truth_metrics, truth_metrics),
         (output_sample_summary, sample_summary),
         (output_filtered_events, filtered_classifications),
+        (output_report_events, report_classifications),
     ]:
         if not path_value:
             continue
@@ -446,6 +466,10 @@ def build_v2_benchmark(
         path = Path(output_filtered_events_json)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(filtered_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if output_report_events_json:
+        path = Path(output_report_events_json)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     summary_path = Path(output_summary)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -464,6 +488,8 @@ def main():
         output_summary=args.output_summary,
         output_filtered_events=args.output_filtered_events,
         output_filtered_events_json=args.output_filtered_events_json,
+        output_report_events=args.output_report_events,
+        output_report_events_json=args.output_report_events_json,
     )
     return 0
 
