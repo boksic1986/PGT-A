@@ -1,5 +1,78 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Branch S / SCA V2 Sex-Aware Review
+
+Current handoff:
+`docs/handoff/2026-06-22_0101_branch_s_sca_v2_handoff.md`.
+
+Current report:
+`docs/reports/branch_s_sca_v2_sex_aware_review_2026-06-22.md`.
+
+This loop only updates Branch S/SCA report-layer review behavior. It does not
+modify Branch A, the active reference, autosomal Branch B V2 report-layer
+filtering, or the default `merge_gap_bp=0` behavior. It also does not use the
+2Mb/3Mb low-resolution evidence outputs.
+
+Current Branch S behavior:
+
+- Branch A chrX/chrY candidates are anchors only.
+- Strong Branch A sex-chromosome support must be corroborated by X/Y non-PAR
+  median or robust bin evidence before it becomes strong SCA review.
+- Normal XY samples with chrX Branch A support but neutral X non-PAR evidence
+  are routed to `sca_filtered_or_sex_consistent_event`, not `X_GAIN` /
+  `SCA_REVIEW_STRONG`.
+- `XX + X_LOSS` with very strong Branch A support remains visible as review to
+  preserve current locked X-loss truth evidence.
+- Branch S still uses `review_development_only` / `review_reportable_with_limitations`
+  and is not final SCA.
+
+Remote materialized active gap2m Branch S results:
+
+- Y1-Y8: 1 strong SCA review, 7 no-call; Y3 remains visible as `X_LOSS`,
+  `SCA_REVIEW_STRONG`, `sca_report_review_event`.
+- H1-H16: 2 strong SCA review, 1 weak SCA review, 13 no-call; H5 and H6 remain
+  visible as `X_LOSS`, `SCA_REVIEW_STRONG`, `sca_report_review_event`.
+- H7-H16: all normal XY context samples are `SCA_NO_CALL` and no longer produce
+  false `X_GAIN` / `SCA_REVIEW_STRONG`.
+- G1-G8: 2 weak SCA internal-review events and 6 no-call; context only for SCA
+  because no locked SCA truth is currently assigned here.
+- 2026-06-15: 2 weak SCA internal-review events and 3 no-call; burden/context
+  only, no TP/FN/FP conclusion.
+
+Current report-layer totals from `wisecondorx/cnv/report/cnv_summary.tsv`:
+
+- Y1-Y8: report=21, internal_review=50, filtered audit-only=13,
+  Branch-S-routed=13, sample burden flags=2.
+- H1-H16: report=6, internal_review=49, filtered audit-only=8,
+  Branch-S-routed=42, sample burden flags=1.
+- G1-G8: report=15, internal_review=40, filtered audit-only=7,
+  Branch-S-routed=13, sample burden flags=1.
+- 2026-06-15: report=52, internal_review=76, filtered audit-only=23,
+  Branch-S-routed=14, sample burden flags=5.
+
+`Branch-S-routed` counts are sex-chromosome candidate routing burden, not SCA
+positive counts. The SCA correction reduces false strong SCA interpretation
+inside the Branch S section; it does not by itself reduce autosomal report
+events.
+
+Remote validation:
+
+- `tests/unit/test_branch_s_shadow.py`,
+  `tests/unit/test_cnv_report.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
+  `tests/unit/test_current_context_index.py`: `38 passed in 0.92s`.
+- `branch_s_review cnv_report` dry-run returned `RC=0` for all four active
+  gap2m configs: Y, H, G, and 2026-06-15.
+- Branch S/report outputs were forced and rematerialized for all four active
+  gap2m configs after the report-layer reason review fix; `cnv_report`
+  completed for Y=8, H=16, G=8, and 2026-06-15=5 samples.
+
+Remaining limitation:
+
+- SCA final promotion still needs a broader locked truth panel covering X gain,
+  XXY, XYY, Y loss, mosaic SCA fraction series, and cross-batch clean XX/XY
+  negatives.
+
 ## 2026-06-21 Current Context Index Override
 
 Current context entrypoint:

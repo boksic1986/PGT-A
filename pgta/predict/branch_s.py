@@ -12,6 +12,8 @@ from pgta.predict.branch_b.common import read_table, write_json, write_table
 
 
 BRANCH_S_VERSION = "branch_s_shadow_v1"
+NONPAR_MEDIAN_CALIBRATED_MIN_ABS_Z = 2.0
+NONPAR_MEDIAN_ROBUST_MIN_ABS_Z = 5.0
 EVIDENCE_COLUMNS = [
     "branch_s_version",
     "sample_id",
@@ -251,6 +253,35 @@ def state_direction(state):
     return 0.0
 
 
+def nonpar_directional_support(region_bins, state):
+    if region_bins is None or region_bins.empty:
+        return "missing"
+    direction = state_direction(state)
+    if direction == 0.0:
+        return "neutral"
+    calibrated_median = finite_median(region_bins.get("calibrated_z", pd.Series(dtype=float)))
+    robust_median = finite_median(region_bins.get("robust_z", pd.Series(dtype=float)))
+    calibrated_signed = direction * calibrated_median if np.isfinite(calibrated_median) else np.nan
+    robust_signed = direction * robust_median if np.isfinite(robust_median) else np.nan
+    if (
+        np.isfinite(calibrated_signed)
+        and calibrated_signed >= NONPAR_MEDIAN_CALIBRATED_MIN_ABS_Z
+    ) or (
+        np.isfinite(robust_signed)
+        and robust_signed >= NONPAR_MEDIAN_ROBUST_MIN_ABS_Z
+    ):
+        return "supported"
+    if (
+        np.isfinite(calibrated_signed)
+        and calibrated_signed <= -NONPAR_MEDIAN_CALIBRATED_MIN_ABS_Z
+    ) or (
+        np.isfinite(robust_signed)
+        and robust_signed <= -NONPAR_MEDIAN_ROBUST_MIN_ABS_Z
+    ):
+        return "opposite"
+    return "neutral"
+
+
 def candidate_abs_zscore(rows):
     if rows is None or rows.empty:
         return np.nan
@@ -264,7 +295,13 @@ def candidate_abs_zscore(rows):
     return float(np.max(values)) if values.size else np.nan
 
 
-def candidate_state_score(region_bins, candidates, state):
+def sex_call_compatible_uncorroborated_review(context, state):
+    sex = str((context or {}).get("sex_call", "") or "").strip().upper()
+    state_text = str(state).strip().upper()
+    return sex == "XX" and state_text == "X_LOSS"
+
+
+def candidate_state_score(region_bins, candidates, state, context=None):
     overlaps = overlapping_candidate_rows(region_bins, candidates)
     if overlaps.empty or "state" not in overlaps.columns:
         return np.nan, ""
@@ -278,10 +315,26 @@ def candidate_state_score(region_bins, candidates, state):
         same_value = same_z if np.isfinite(same_z) else 0.0
         opposite_value = opposite_z if np.isfinite(opposite_z) else 0.0
         if same_value >= opposite_value:
-            return float(same_value), "branch_a_candidate_zscore"
-        return float(-opposite_value), "branch_a_candidate_zscore"
+            support = nonpar_directional_support(region_bins, state)
+            if support == "supported":
+                return float(same_value), "branch_a_candidate_zscore_nonpar_corroborated"
+            if support == "neutral" and sex_call_compatible_uncorroborated_review(context, state):
+                return float(same_value), "branch_a_candidate_zscore_sex_call_compatible_uncorroborated_review"
+            if support == "opposite":
+                return float(-same_value), "branch_a_only_uncorroborated_by_nonpar_median"
+            return 0.0, "branch_a_only_uncorroborated_by_nonpar_median"
+        if nonpar_directional_support(region_bins, state) == "supported":
+            return np.nan, ""
+        return float(-opposite_value), "branch_a_candidate_zscore_opposite_direction"
     if not same.empty or not opposite.empty:
-        return (1.0 if len(same) >= len(opposite) else -1.0), "branch_a_candidate_overlap"
+        support = nonpar_directional_support(region_bins, state)
+        if len(same) >= len(opposite) and support == "supported":
+            return 1.0, "branch_a_candidate_overlap_nonpar_corroborated"
+        if len(same) >= len(opposite):
+            return 0.0, "branch_a_only_uncorroborated_by_nonpar_median"
+        if support == "supported":
+            return np.nan, ""
+        return -1.0, "branch_a_candidate_overlap_opposite_direction"
     return np.nan, ""
 
 
@@ -297,7 +350,7 @@ def make_state_score(sample_id, state, source_region_class, source_value, contex
     else:
         score = float(state_direction(state) * source_value)
         status = "AVAILABLE"
-        reason = "nonpar_mean_calibrated_z"
+        reason = "nonpar_median_calibrated_z"
     return {
         "branch_s_version": str(version),
         "sample_id": str(sample_id),
@@ -381,6 +434,45 @@ def sca_confidence_tier(sca_state, score):
     return "SCA_REVIEW_WEAK"
 
 
+def sca_report_layer_class(sca_state, confidence_tier, scores, evidence):
+    if str(sca_state) == "none_detected":
+        if branch_a_axis_support(evidence, "X") == "present" or branch_a_axis_support(evidence, "Y") == "present":
+            if has_uncorroborated_branch_a_support(scores):
+                return "sca_filtered_or_sex_consistent_event"
+        return "sca_no_call"
+    if str(confidence_tier) == "SCA_REVIEW_STRONG":
+        return "sca_report_review_event"
+    return "sca_internal_review_event"
+
+
+def sca_report_layer_reason(sca_state, confidence_tier, scores, evidence):
+    if str(sca_state) == "none_detected":
+        if has_uncorroborated_branch_a_support(scores):
+            return "branch_a_only_uncorroborated_by_nonpar_median"
+        return "insufficient_sca_evidence"
+    score_reason = dominant_state_score_reason(scores, sca_state)
+    if "sex_call_compatible_uncorroborated_review" in score_reason:
+        return f"{str(confidence_tier).lower()}_with_sex_call_compatible_branch_a_support"
+    return f"{str(confidence_tier).lower()}_with_nonpar_corroboration"
+
+
+def dominant_state_score_reason(scores, sca_state):
+    if scores is None or scores.empty or "sca_state" not in scores.columns:
+        return ""
+    matches = scores[scores["sca_state"].fillna("").astype(str).eq(str(sca_state))]
+    if matches.empty or "state_score_reason" not in matches.columns:
+        return ""
+    return str(matches.iloc[0].get("state_score_reason", "") or "")
+
+
+def has_uncorroborated_branch_a_support(scores):
+    if scores is None or scores.empty or "state_score_reason" not in scores.columns:
+        return False
+    return scores["state_score_reason"].fillna("").astype(str).str.contains(
+        "branch_a_only_uncorroborated", regex=False
+    ).any()
+
+
 def sca_uncertainty_reason(sca_state, context):
     reasons = ["locked_sca_truth_incomplete", "branch_s_not_final_validated"]
     if not str(context.get("sex_call", "")).strip():
@@ -406,7 +498,7 @@ def build_branch_s_shadow(sample_id, bins, a_candidates, gender=None, version=BR
     evidence = pd.DataFrame(evidence_rows, columns=EVIDENCE_COLUMNS)
 
     means = {
-        row["region_class"]: row["mean_calibrated_z"]
+        row["region_class"]: row["median_calibrated_z"]
         for _, row in evidence.iterrows()
         if row.get("region_class") in {"X_NONPAR", "Y_NONPAR"}
     }
@@ -424,7 +516,12 @@ def build_branch_s_shadow(sample_id, bins, a_candidates, gender=None, version=BR
         ("Y_GAIN", "Y_NONPAR"),
         ("Y_LOSS", "Y_NONPAR"),
     ]:
-        candidate_scores[state] = candidate_state_score(region_bins_by_class.get(source_region, pd.DataFrame()), candidates, state)
+        candidate_scores[state] = candidate_state_score(
+            region_bins_by_class.get(source_region, pd.DataFrame()),
+            candidates,
+            state,
+            context,
+        )
     scores = pd.DataFrame(
         [
             make_state_score(
@@ -473,6 +570,7 @@ def summarize_branch_s_shadow(sample_id, evidence, scores, gender=None, version=
     context = gender_context(gender)
     expected_x_ploidy, expected_y_ploidy = expected_sex_ploidy(context["sex_call"])
     sca_state, sca_score = dominant_sca_state(scores)
+    confidence_tier = sca_confidence_tier(sca_state, sca_score)
     available_scores = (
         scores["state_score_status"].fillna("").astype(str).eq("AVAILABLE").sum()
         if scores is not None and "state_score_status" in scores.columns
@@ -500,7 +598,9 @@ def summarize_branch_s_shadow(sample_id, evidence, scores, gender=None, version=
         "branch_a_x_support": branch_a_axis_support(evidence, "X"),
         "branch_a_y_support": branch_a_axis_support(evidence, "Y"),
         "sca_candidate_state": sca_state,
-        "sca_confidence_tier": sca_confidence_tier(sca_state, sca_score),
+        "sca_confidence_tier": confidence_tier,
+        "sca_report_layer_class": sca_report_layer_class(sca_state, confidence_tier, scores, evidence),
+        "sca_report_layer_reason": sca_report_layer_reason(sca_state, confidence_tier, scores, evidence),
         "sca_output_mode": "review_development_only",
         "sca_uncertainty_reason": sca_uncertainty_reason(sca_state, context),
         "report_text_status": "development_only_not_final_reportable",

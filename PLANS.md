@@ -1,5 +1,39 @@
 # PLANS.md
 
+## 2026-06-22 Branch S / SCA Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_0101_branch_s_sca_v2_handoff.md`.
+
+Branch S/SCA V2 now has a sex-aware report-layer correction:
+
+- normal XY chrX Branch A-only signals are routed to no-call / sex-consistent
+  audit instead of strong SCA review;
+- Y3/H5/H6 X-loss evidence remains visible;
+- Branch S remains `review_reportable_with_limitations`, not final SCA.
+
+Immediate next work should not change Branch A or reference. The next Branch S
+gate is:
+
+1. Build a broader locked SCA validation set:
+   - X gain;
+   - XXY;
+   - XYY;
+   - Y loss;
+   - mosaic SCA fraction series;
+   - PAR / XY-homology edge cases;
+   - cross-batch clean XX/XY negatives.
+2. Re-evaluate the conservative `XX + X_LOSS` Branch A preservation rule once
+   the broader truth panel exists.
+3. Keep Branch S as a separate report section:
+   - `sca_report_review_event`;
+   - `sca_internal_review_event`;
+   - `sca_filtered_or_sex_consistent_event`;
+   - `sca_no_call`.
+4. Do not use 2026-06-15 for TP/FN/FP until locked truth labels exist.
+5. Do not use 2Mb/3Mb low-resolution evidence for SCA decisions unless a
+   separate lowres/SCA validation gate is explicitly opened.
+
 ## 2026-06-21 Whole R&D Context And Report Gate Override
 
 Current context entrypoint:
