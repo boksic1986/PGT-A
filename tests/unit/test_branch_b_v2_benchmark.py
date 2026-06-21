@@ -421,6 +421,46 @@ def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Pa
     assert report_payload["report_event_ids"] == ["S1.report"]
 
 
+def test_v2_benchmark_marks_sample_report_burden_without_candidate_demotion(tmp_path: Path):
+    classification = tmp_path / "S1.candidate_classification.tsv"
+    sample_summary = tmp_path / "sample_summary.tsv"
+    summary = tmp_path / "summary.json"
+
+    pd.DataFrame(
+        [
+            {
+                "sample_id": "S1",
+                "candidate_id": f"S1.report{i}",
+                "chrom": f"chr{i}",
+                "start": i * 1_000_000,
+                "end": i * 1_000_000 + 20_000_000,
+                "state": "gain",
+                "v2_report_layer_class": "report_event",
+                "v2_report_visibility": "final_report",
+                "v2_filter_action": "keep_report_event",
+            }
+            for i in range(1, 4)
+        ]
+    ).to_csv(classification, sep="\t", index=False)
+
+    _, written_sample_summary, payload = build_v2_benchmark(
+        classification_paths=[str(classification)],
+        truth_tsv="",
+        sample_ids=["S1"],
+        reference_id="h_r0_shadow_ref_20260619",
+        output_truth_metrics=str(tmp_path / "truth_metrics.tsv"),
+        output_sample_summary=str(sample_summary),
+        output_summary=str(summary),
+    )
+
+    row = written_sample_summary.iloc[0]
+    assert row["v2_report_event_count"] == 3
+    assert row["sample_report_burden_flag"] == 1
+    assert row["sample_report_burden_reason"] == "report_event_count_ge_3"
+    assert payload["sample_report_burden_flag_count"] == 1
+    assert payload["sample_report_burden_threshold"] == 3
+
+
 def test_v2_report_layer_filtered_truth_overlap_counts_as_fn(tmp_path: Path):
     classification = tmp_path / "H6.candidate_classification.tsv"
     truth = tmp_path / "truth.tsv"

@@ -1,6 +1,6 @@
 ---
-status: active_handoff
-decision_use: current_context
+status: superseded_handoff
+decision_use: historical_audit_not_current_context
 created_at: 2026-06-21 20:49 Asia/Shanghai
 active_reference_id: h_r0_shadow_ref_20260619
 branch_a_overlay: merge_gap_bp_2000000
@@ -8,6 +8,12 @@ final_impact: development_review_only
 ---
 
 # Branch B V2 Report Burden Pass2 Handoff
+
+> Superseded on 2026-06-21 by
+> `docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md`.
+> The sample-level `report_event_count >= 3` condition was removed from
+> candidate-level demotion logic. The materialized pass2 result below is kept
+> only as historical output-burden exploration.
 
 ## Required Context
 

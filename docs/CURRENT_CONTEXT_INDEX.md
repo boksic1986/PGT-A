@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md`
+2. `docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,15 +23,15 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md
-previous_handoff: docs/handoff/2026-06-21_1810_g1_g8_current_scheme_validation_handoff.md
+active_handoff: docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md
+previous_handoff: docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_report_burden_pass2_materialized_development_only
+branch_b_status: v2_pass2_sample_report_burden_retracted_materialized_development_only
 branch_s_status: review_reportable_with_limitations
-report_status: branch_b_v2_report_burden_pass2_integrated_development_only
+report_status: branch_b_v2_pass2_correction_integrated_development_only
 
 ## Current Evidence Files
 
@@ -50,7 +50,9 @@ report_status: branch_b_v2_report_burden_pass2_integrated_development_only
 - `docs/reports/branch_b_v2_report_contract_2026-06-21.md`
 - `docs/reports/branch_b_v2_report_layer_filter_2026-06-21.md`
 - `docs/reports/branch_b_v2_g1_g8_validation_2026-06-21.md`
+- `docs/reports/branch_b_v2_pass2_correction_2026-06-21.md`
 - `docs/reports/branch_b_v2_report_event_audit_2026-06-21.md`
+- `docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md`
 - `docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md`
 - `docs/handoff/2026-06-21_1810_g1_g8_current_scheme_validation_handoff.md`
 - `docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md`
@@ -347,30 +349,41 @@ the shadow reference, Branch B V2, or Branch S to production-final status. G2
 remains the main G-batch review-burden outlier and should be reviewed before
 designing a second demotion pass.
 
-The second Branch B V2 report-burden pass is now materialized and documented in
-`docs/reports/branch_b_v2_report_event_audit_2026-06-21.md`. It does not modify
-Branch A, does not rebuild the reference, and does not promote Branch B V2 or
-Branch S. It only demotes selected `report_event` rows to
-`internal_review_event` when combined evidence is present:
+The second Branch B V2 report-burden pass has been retracted as a current
+candidate-level decision rule. It is documented only as superseded methodology
+audit in `docs/reports/branch_b_v2_report_event_audit_2026-06-21.md`.
+
+Current correction report:
+`docs/reports/branch_b_v2_pass2_correction_2026-06-21.md`.
+
+Corrected rule boundary:
 
 ```text
 sample report_event count >= 3
-+ unknown/no-null background context
-+ unstable GC/RC context
-+ a_abs_zscore < 50
 ```
 
-Materialized pass2 result:
+is a sample-level burden audit flag only. It must not change a candidate's
+`v2_report_layer_class`, `v2_report_visibility`, `v2_filter_action`, or
+`v2_burden_reduction_action`.
 
-- Y1-Y8: report events 21 -> 9; truth preserved 10/10; FN=0; truth filtered=0.
-- H1-H16: report events 6 -> 4; truth preserved 10/10; FN=0; truth filtered=0;
-  H6 chr21 remains visible as internal review.
-- G1-G8: report events 15 -> 12; truth preserved 10/10; FN=0; truth filtered=0;
-  G2 report events 6 -> 3.
-- 2026-06-15: report events 52 -> 15; no locked truth, context only.
+Benchmark output still includes `report_events.tsv` and `report_events.json`.
+The corrected classifier/benchmark/report outputs have been rematerialized for
+Y, H, G, and 2026-06-15. Corrected materialized counts:
 
-Benchmark output now includes `report_events.tsv` and `report_events.json`.
-Further rules must inspect remaining report events before adding new filters.
+- Y1-Y8: candidates=97, truth preserved 10/10, FN=0, truth filtered=0,
+  report=21, internal_review=50, filtered=13, Branch S=13,
+  sample burden flags=2.
+- H1-H16: candidates=105, truth preserved 10/10, FN=0, truth filtered=0,
+  report=6, internal_review=49, filtered=8, Branch S=42,
+  sample burden flags=1; H6 chr21 remains visible.
+- G1-G8: candidates=75, truth preserved 10/10, FN=0, truth filtered=0,
+  report=15, internal_review=40, filtered=7, Branch S=13,
+  sample burden flags=1; G2 truth remains visible.
+- 2026-06-15: candidates=165, no locked truth, context only,
+  report=52, internal_review=76, filtered=23, Branch S=14,
+  sample burden flags=5.
+
+Further rules must inspect candidate-level evidence, not sample report count.
 
 ### Branch S
 

@@ -187,33 +187,39 @@ active reference and explicit gap2m Branch A overlay:
   events, 16 internal-review events, 3 filtered audit-only events, and 3
   Branch S events.
 
-Current Branch B V2 report burden pass2:
+Current Branch B V2 pass2 correction:
 
 - Current report:
+  `docs/reports/branch_b_v2_pass2_correction_2026-06-21.md`.
+- Superseded report:
   `docs/reports/branch_b_v2_report_event_audit_2026-06-21.md`.
-- This loop did not modify Branch A, did not rebuild the reference, and did not
-  promote `merge_gap_bp=2_000_000` to default.
-- It added a second report-layer demotion pass that can move selected
-  `report_event` rows to `internal_review_event` when combined evidence is
-  present: multi-report sample burden, unknown/no-null background, unstable
-  GC/RC context, and `a_abs_zscore < 50`.
-- It does not hard-filter truth-overlap events and does not use legacy/current
-  Branch B decision fields.
-- Remote materialized result:
+- The previous pass2 demotion rule used same-sample report-event burden as part
+  of candidate-level evidence. That boundary is now retracted.
+- `sample report_event count >= 3` is retained only as a sample-level burden
+  audit flag in benchmark summaries. It must not modify
+  `v2_report_layer_class`, `v2_report_visibility`, `v2_filter_action`, or
+  `v2_burden_reduction_action`.
+- The current correction does not modify Branch A, does not rebuild the
+  reference, does not promote `merge_gap_bp=2_000_000` to default, and does not
+  promote Branch B V2 or Branch S to production-final.
+- Full remote rematerialization for Y/H/G/2026-06-15 is complete. Corrected
+  materialized result:
   - Y1-Y8: candidates=97, truth preserved 10/10, FN=0, report-layer filtered
-    truth=0, report=9, internal_review=62, filtered audit-only=13,
-    Branch S=13.
+    truth=0, report=21, internal_review=50, filtered audit-only=13,
+    Branch S=13, sample burden flags=2.
   - H1-H16: candidates=105, truth preserved 10/10, FN=0, report-layer filtered
-    truth=0, H6 chr21 retained as internal review, report=4,
-    internal_review=51, filtered audit-only=8, Branch S=42.
+    truth=0, H6 chr21 retained as internal review, report=6,
+    internal_review=49, filtered audit-only=8, Branch S=42,
+    sample burden flags=1.
   - G1-G8: candidates=75, truth preserved 10/10, FN=0, report-layer filtered
-    truth=0, report=12, internal_review=43, filtered audit-only=7,
-    Branch S=13.
-  - 2026-06-15: candidates=165, no locked truth, context only, report=15,
-    internal_review=113, filtered audit-only=23, Branch S=14.
-- Benchmark output now includes `report_events.tsv` and `report_events.json`.
-- This is still `development_review_only`. Remaining report events must be
-  inspected before further demotion or filtering rules are added.
+    truth=0, report=15, internal_review=40, filtered audit-only=7,
+    Branch S=13, sample burden flags=1. G2 truth remains visible.
+  - 2026-06-15: candidates=165, no locked truth, context only, report=52,
+    internal_review=76, filtered audit-only=23, Branch S=14,
+    sample burden flags=5.
+- Report summaries now display sample report-burden flags as audit-only
+  information. Previous pass2 counts remain historical methodology-audit output
+  only and must not be used as current V2 performance evidence.
 
 ## 2026-06-21 Branch A Burden Optimization Phase 1
 

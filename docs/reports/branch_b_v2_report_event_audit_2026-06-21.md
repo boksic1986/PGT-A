@@ -1,6 +1,6 @@
 ---
-status: development_evidence
-decision_use: branch_b_v2_report_burden_pass2
+status: superseded_methodology_audit_only
+decision_use: historical_audit_not_current_branch_b_v2_rule
 date: 2026-06-21
 active_reference_id: h_r0_shadow_ref_20260619
 branch_a_overlay: merge_gap_bp_2000000
@@ -8,6 +8,12 @@ final_impact: development_review_only
 ---
 
 # Branch B V2 Report Event Audit
+
+> Superseded on 2026-06-21 by
+> `docs/reports/branch_b_v2_pass2_correction_2026-06-21.md`.
+> The `same sample has >=3 report events` condition is retained only as a
+> sample-level burden audit flag. It must not drive per-candidate demotion,
+> filtering, or report-layer class changes.
 
 ## Scope
 

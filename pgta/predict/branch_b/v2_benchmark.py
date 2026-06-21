@@ -69,10 +69,14 @@ SAMPLE_SUMMARY_COLUMNS = [
     "v2_technical_risk_burden_count",
     "v2_branch_s_review_burden_count",
     "v2_report_event_count",
+    "sample_report_burden_flag",
+    "sample_report_burden_reason",
     "v2_internal_review_event_count",
     "v2_filtered_event_count",
     "v2_branch_s_event_count",
 ]
+
+SAMPLE_REPORT_BURDEN_THRESHOLD = 3
 
 
 def parse_args():
@@ -320,6 +324,11 @@ def build_v2_benchmark(
         sample_truth = truth_metrics[truth_metrics["sample_id"].astype(str).eq(str(sample_id))].copy()
         truth_event_count = int(len(sample_truth))
         truth_preserved = int(sample_truth["v2_preserved_count"].gt(0).sum()) if not sample_truth.empty else 0
+        report_event_count = _count_equals(sample_class, "v2_report_layer_class", "report_event")
+        sample_report_burden_flag = int(report_event_count >= SAMPLE_REPORT_BURDEN_THRESHOLD)
+        sample_report_burden_reason = (
+            f"report_event_count_ge_{SAMPLE_REPORT_BURDEN_THRESHOLD}" if sample_report_burden_flag else ""
+        )
         sample_rows.append(
             {
                 "sample_id": str(sample_id),
@@ -349,7 +358,9 @@ def build_v2_benchmark(
                 "v2_branch_s_review_burden_count": _count_equals(
                     sample_class, "v2_burden_reduction_tier", "branch_s_review"
                 ),
-                "v2_report_event_count": _count_equals(sample_class, "v2_report_layer_class", "report_event"),
+                "v2_report_event_count": report_event_count,
+                "sample_report_burden_flag": sample_report_burden_flag,
+                "sample_report_burden_reason": sample_report_burden_reason,
                 "v2_internal_review_event_count": _count_equals(
                     sample_class, "v2_report_layer_class", "internal_review_event"
                 ),
@@ -379,6 +390,10 @@ def build_v2_benchmark(
         "v2_technical_risk_burden_count": int(sample_summary["v2_technical_risk_burden_count"].sum()) if not sample_summary.empty else 0,
         "v2_branch_s_review_burden_count": int(sample_summary["v2_branch_s_review_burden_count"].sum()) if not sample_summary.empty else 0,
         "v2_report_event_count": int(sample_summary["v2_report_event_count"].sum()) if not sample_summary.empty else 0,
+        "sample_report_burden_threshold": SAMPLE_REPORT_BURDEN_THRESHOLD,
+        "sample_report_burden_flag_count": (
+            int(sample_summary["sample_report_burden_flag"].sum()) if not sample_summary.empty else 0
+        ),
         "v2_internal_review_event_count": int(sample_summary["v2_internal_review_event_count"].sum()) if not sample_summary.empty else 0,
         "v2_filtered_event_count": int(sample_summary["v2_filtered_event_count"].sum()) if not sample_summary.empty else 0,
         "v2_branch_s_event_count": int(sample_summary["v2_branch_s_event_count"].sum()) if not sample_summary.empty else 0,

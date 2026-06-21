@@ -296,10 +296,12 @@ class CnvReportRankingTest(unittest.TestCase):
                         "v2_background_unknown_review_burden_count",
                         "v2_technical_risk_burden_count",
                         "v2_branch_s_review_burden_count",
+                        "sample_report_burden_flag",
+                        "sample_report_burden_reason",
                     ]
                 )
                 + "\n"
-                + "\t".join(["S1", "5", "1", "2", "1", "1", "1", "3", "2", "1", "1"])
+                + "\t".join(["S1", "5", "1", "2", "1", "1", "1", "3", "2", "1", "1", "1", "report_event_count_ge_3"])
                 + "\n",
                 encoding="utf-8",
             )
@@ -320,6 +322,8 @@ class CnvReportRankingTest(unittest.TestCase):
                   "v2_background_unknown_review_burden_count": 2,
                   "v2_technical_risk_burden_count": 1,
                   "v2_branch_s_review_burden_count": 1,
+                  "sample_report_burden_flag_count": 1,
+                  "sample_report_burden_threshold": 3,
                   "legacy_branch_b_decision_fields_used": false,
                   "final_report_impact": "none_shadow_only",
                   "benchmark_scope": "v2_classifier_rows_only"
@@ -341,6 +345,8 @@ class CnvReportRankingTest(unittest.TestCase):
         self.assertEqual(v2_contract["branch_b_v2_internal_review_event_count"], 2)
         self.assertEqual(v2_contract["branch_b_v2_filtered_event_count"], 1)
         self.assertEqual(v2_contract["branch_b_v2_branch_s_event_count"], 1)
+        self.assertEqual(v2_contract["branch_b_v2_sample_report_burden_flag_count"], 1)
+        self.assertEqual(v2_contract["branch_b_v2_sample_report_burden_threshold"], 3)
         self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_report_candidate_count"]), 1)
         self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_report_event_count"]), 1)
         self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_internal_review_event_count"]), 2)
@@ -348,6 +354,8 @@ class CnvReportRankingTest(unittest.TestCase):
         self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_branch_s_event_count"]), 1)
         self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_background_unknown_review_count"]), 2)
         self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_branch_s_review_count"]), 1)
+        self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_sample_report_burden_flag"]), 1)
+        self.assertEqual(v2_df.iloc[0]["branch_b_v2_sample_report_burden_reason"], "report_event_count_ge_3")
 
     def test_technical_conclusion_marks_branch_b_v2_development_only_burden(self):
         row = pd.Series(
