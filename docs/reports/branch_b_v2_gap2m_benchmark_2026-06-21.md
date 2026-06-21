@@ -209,3 +209,17 @@ burden, still under shadow/no-final-impact mode. The immediate focus should be:
 3. Quantify positive-support burden on H7-H16 and 2026-06-15 context samples.
 4. Decide which V2 evidence fields can support report review labels without
    hard suppression or final benign/artifact claims.
+
+## Follow-up Refinement
+
+A follow-up sex-route refinement has now been materialized and documented in:
+
+```text
+docs/reports/branch_b_v2_sex_route_refinement_2026-06-21.md
+```
+
+That refinement routes `chrX`/`chrY` candidates to
+`V2_SEX_CHROMOSOME_REVIEW` / `V2_ROUTE_BRANCH_S_REVIEW` while preserving the
+original evidence tier and `none_shadow_only` final-report impact. Locked
+Y1-Y8/H1-H6 truth preservation remains 10/10 with FN=0 and hard-suppressed
+truth=0.

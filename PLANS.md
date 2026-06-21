@@ -33,12 +33,17 @@ Immediate execution order:
 4. Branch B V2-only benchmark has been materialized on the explicit gap2m
    overlay. It preserves Y1-Y8 and H1-H6 truth-overlap candidates without hard
    suppression, while still remaining `none_shadow_only`.
-5. Next Branch B work should refine evidence/disposition for FP and review
-   burden without reintroducing legacy/current-code Branch B decision fields.
-6. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+5. The first Branch B V2 burden refinement has been materialized: `chrX`/`chrY`
+   candidates now route to `V2_SEX_CHROMOSOME_REVIEW` /
+   `V2_ROUTE_BRANCH_S_REVIEW`, preserving evidence tiers and no-final-impact
+   status while separating them from autosomal Branch B positive-support
+   burden.
+6. Next Branch B work should refine remaining autosomal FP/review burden without
+   reintroducing legacy/current-code Branch B decision fields.
+7. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-7. Generate the next P6/report package from workflow outputs after fixed Branch
+8. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 
@@ -81,6 +86,9 @@ Minimum next implementation plan:
 - Treat the materialized V2-only benchmark as a preservation gate, not a final
   performance gate: Y1-Y8 and H1-H6 truth are preserved 10/10 with FN=0 and no
   hard-suppressed truth, but FP/review burden is not yet solved.
+- Treat the sex-route refinement as a routing/burden clarification gate, not a
+  final SCA gate: sex-chromosome candidates now route to Branch S review, while
+  autosomal Branch B positive-support burden remains the next refinement target.
 - Continue excluding `final_disposition`, `branch_b_keep_event`, legacy artifact
   status, and legacy kept counts from V2 decision and metric computation.
 - Refine Branch B V2 evidence/disposition so it can reduce FP/review burden

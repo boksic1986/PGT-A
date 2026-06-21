@@ -296,3 +296,31 @@ def test_shadow_background_context_does_not_become_final_filter():
     assert row["v2_evidence_tier"] == "SHADOW_BACKGROUND_OUTLIER_POSITIVE_SUPPORT"
     assert row["v2_evidence_gate"] == "SHADOW_BACKGROUND_CONTEXT"
     assert row["v2_final_report_impact"] == "none_shadow_only"
+
+
+def test_sex_chromosome_candidate_routes_to_branch_s_review_not_autosomal_positive_support():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "H5",
+                "candidate_id": "H5_chrX_loss",
+                "chrom": "chrX",
+                "start": 1,
+                "end": 155_000_000,
+                "state": "loss",
+                "a_abs_zscore": 62.0,
+                "same_direction_fraction": 0.80,
+                "corrected_amplitude": -2.1,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "matched_negative_action": "REVIEW_NO_CALL",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "V2_SEX_CHROMOSOME_REVIEW"
+    assert row["v2_classifier_action"] == "V2_ROUTE_BRANCH_S_REVIEW"
+    assert row["v2_classifier_reason"] == "sex_chromosome_branch_s_review:unknown_background_positive_support"
+    assert row["v2_evidence_tier"] == "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT"
+    assert row["v2_final_report_impact"] == "none_shadow_only"

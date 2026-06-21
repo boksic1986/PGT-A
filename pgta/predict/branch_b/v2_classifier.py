@@ -78,6 +78,11 @@ def state_direction(state):
     return 0.0
 
 
+def is_sex_chromosome_candidate(row):
+    chrom = clean_text(row.get("chrom", "")).lower().removeprefix("chr")
+    return chrom in {"x", "y"}
+
+
 def signed_signal_support(row):
     direction = state_direction(row.get("state", ""))
     if direction == 0.0:
@@ -187,6 +192,15 @@ def classify_evidence_tier(row):
 def classify_candidate_row(row):
     tier, gate, priority = classify_evidence_tier(row)
 
+    if is_sex_chromosome_candidate(row):
+        return {
+            "v2_candidate_class": "V2_SEX_CHROMOSOME_REVIEW",
+            "v2_classifier_action": "V2_ROUTE_BRANCH_S_REVIEW",
+            "v2_classifier_reason": f"sex_chromosome_branch_s_review:{tier.lower()}",
+            "v2_evidence_tier": tier,
+            "v2_evidence_gate": gate,
+            "v2_review_priority": priority,
+        }
     if tier.endswith("REF_CONTRACT_RISK") or tier.endswith("DIRECTION_CONFLICT"):
         return {
             "v2_candidate_class": "V2_NO_CALL_CONTRACT_RISK",

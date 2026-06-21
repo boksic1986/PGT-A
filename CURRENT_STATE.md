@@ -144,6 +144,49 @@ Important interpretation:
   SCA calls. Branch S remains a separate review-reportable-with-limitations
   gate.
 
+## 2026-06-21 Branch B V2 Sex-Route Refinement
+
+Current report:
+`docs/reports/branch_b_v2_sex_route_refinement_2026-06-21.md`.
+
+This refinement separates sex-chromosome candidates from autosomal Branch B V2
+positive-support review:
+
+- `chrX`/`chrY` candidates now route to `V2_SEX_CHROMOSOME_REVIEW` with action
+  `V2_ROUTE_BRANCH_S_REVIEW`.
+- The original evidence tier, evidence gate, review priority, and
+  `none_shadow_only` final-report impact are preserved.
+- This does not change WisecondorX predict, Branch A candidate generation,
+  mosaic logic, sex calling, final SCA promotion, or report release status.
+
+Remote materialization under the explicit gap2m overlay produced:
+
+- Y1-Y8: 97 candidates; class counts are 78 autosomal
+  `V2_POSITIVE_SUPPORT_REVIEW`, 13 `V2_SEX_CHROMOSOME_REVIEW`, and 6
+  `V2_NO_CALL_CONTRACT_RISK`; truth preserved 10/10, FN=0,
+  hard-suppressed truth=0.
+- H1-H16: 105 candidates; class counts are 57 autosomal
+  `V2_POSITIVE_SUPPORT_REVIEW`, 42 `V2_SEX_CHROMOSOME_REVIEW`, and 6
+  `V2_NO_CALL_CONTRACT_RISK`; truth preserved 10/10, FN=0,
+  hard-suppressed truth=0.
+- H7-H16 context subset: 57 candidate rows, including 31 sex-chromosome review
+  rows and 24 autosomal positive-support review rows; no locked truth, so this
+  is burden/context only.
+- 2026-06-15: 165 candidate rows, including 14 sex-chromosome review rows and
+  127 autosomal positive-support review rows; no locked truth, so this remains
+  burden/context only.
+
+Important interpretation:
+
+- Y3/H5/H6 chrX truth events are preserved but now route to Branch S review
+  instead of autosomal Branch B positive-support review.
+- H6 chr21 gain remains autosomal `V2_POSITIVE_SUPPORT_REVIEW` with
+  `top_a_abs_zscore=7.1135`.
+- Existing benchmark summary field `v2_positive_support_candidate_count` is
+  evidence-tier based and may include sex-chromosome positive-support evidence;
+  class-level autosomal burden should be read from
+  `v2_classifier/*.candidate_classification.tsv` or the sex-route report table.
+
 ## 2026-06-21 P1-P6 Credibility Audit Override
 
 Current audit report:

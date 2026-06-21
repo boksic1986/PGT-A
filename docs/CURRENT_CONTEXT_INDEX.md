@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_0318_branch_a_gap2m_materialization_handoff.md`
+2. `docs/handoff/2026-06-21_1006_branch_b_v2_sex_route_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,12 +23,12 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_0318_branch_a_gap2m_materialization_handoff.md
+active_handoff: docs/handoff/2026-06-21_1006_branch_b_v2_sex_route_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_gap2m_benchmark_materialized_truth_preserved
+branch_b_status: v2_gap2m_sex_route_materialized_truth_preserved
 branch_s_status: review_reportable_with_limitations
 report_status: final_delivery_target_after_a_b_strengthening
 
@@ -39,6 +39,7 @@ report_status: final_delivery_target_after_a_b_strengthening
 - `docs/reports/branch_a_validation_h_r0_shadow_2026-06-20.md`
 - `docs/reports/branch_a_burden_optimization_phase1_2026-06-21.md`
 - `docs/reports/branch_b_v2_gap2m_benchmark_2026-06-21.md`
+- `docs/reports/branch_b_v2_sex_route_refinement_2026-06-21.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
 - `docs/reports/p6_report_package_contract_2026-06-20.md`
@@ -112,6 +113,30 @@ This proves truth-overlap preservation and no hard suppression under the current
 V2 shadow contract. It does not prove FP/review burden is solved and does not
 promote Branch B V2 to final-report logic.
 
+The first Branch B V2 burden refinement after the benchmark is also
+materialized: `chrX`/`chrY` candidates now route to
+`V2_SEX_CHROMOSOME_REVIEW` / `V2_ROUTE_BRANCH_S_REVIEW`, preserving evidence
+tier and `none_shadow_only` final-report impact. This separates sex-chromosome
+review burden from autosomal Branch B positive-support review without changing
+sex calling or final SCA status.
+
+Current class-level burden after sex routing:
+
+- Y1-Y8: 97 candidates; 78 autosomal `V2_POSITIVE_SUPPORT_REVIEW`, 13
+  `V2_SEX_CHROMOSOME_REVIEW`, 6 `V2_NO_CALL_CONTRACT_RISK`; truth preserved
+  10/10, FN=0.
+- H1-H16: 105 candidates; 57 autosomal `V2_POSITIVE_SUPPORT_REVIEW`, 42
+  `V2_SEX_CHROMOSOME_REVIEW`, 6 `V2_NO_CALL_CONTRACT_RISK`; truth preserved
+  10/10, FN=0.
+- H7-H16 context subset: 57 candidate rows; 31 sex-chromosome review rows, 24
+  autosomal positive-support review rows, and 2 no-call contract-risk rows.
+- 2026-06-15: 165 candidate rows; 14 sex-chromosome review rows, 127 autosomal
+  positive-support review rows, and 24 no-call contract-risk rows.
+
+Y3/H5/H6 chrX truth events are now routed to Branch S review and remain
+preserved. H6 chr21 remains autosomal positive-support review with
+`top_a_abs_zscore=7.1135`.
+
 ### Branch S
 
 Branch S is not final SCA, but it must not be omitted from report development.
@@ -156,8 +181,9 @@ A, Branch B, Branch S, background source, and limitations explicitly.
 3. Use the materialized explicit `merge_gap_bp=2_000_000` overlay for the next
    Branch B V2-only benchmark unless a blocking regression appears; keep
    default `merge_gap_bp=0` as rollback/control.
-4. Refine Branch B V2 evidence/disposition for FP and review burden while
-   preserving the materialized no-FN/no-hard-suppression benchmark.
+4. Continue refining Branch B V2 evidence/disposition for remaining autosomal
+   FP and review burden while preserving the materialized
+   no-FN/no-hard-suppression benchmark.
 5. Upgrade Branch S toward review-reportable output with controlled negative/ref
    FP burden; final SCA promotion remains a separate truth gate.
 6. Generate the next P6/report package only after the fixed A/B/S contracts are
