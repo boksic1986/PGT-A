@@ -161,6 +161,32 @@ Current Branch B V2 report-layer filtering:
   because 2026-06-15 has no truth labels, Branch S is not final, and the active
   reference remains shadow.
 
+G1-G8 current-scheme validation has also been materialized under the same
+active reference and explicit gap2m Branch A overlay:
+
+- Current report:
+  `docs/reports/branch_b_v2_g1_g8_validation_2026-06-21.md`.
+- Existing BAMs from
+  `/data/project/CNV/PGT-A/g_reseq_qc_20260504/mapping/G*.sorted.bam` were
+  reused; no BWA remapping was performed.
+- WisecondorX convert/predict, Branch A, Branch B V2, Branch S, benchmark, and
+  report were rerun in the remote mirror.
+- Materialized result:
+  - candidates=75;
+  - locked truth events=10;
+  - truth preserved 10/10;
+  - FN=0;
+  - report-layer filtered truth=0;
+  - report=15;
+  - internal_review=40;
+  - filtered audit-only=7;
+  - Branch S=13.
+- G1-G8 supports the current sensitivity/preservation gate. It does not promote
+  the shadow reference, Branch B V2, or Branch S to production-final status.
+- G2 remains the main G-batch burden outlier with 28 candidates, 6 report
+  events, 16 internal-review events, 3 filtered audit-only events, and 3
+  Branch S events.
+
 ## 2026-06-21 Branch A Burden Optimization Phase 1
 
 Current report:

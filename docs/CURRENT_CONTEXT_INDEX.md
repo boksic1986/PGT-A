@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md`
+2. `docs/handoff/2026-06-21_1810_g1_g8_current_scheme_validation_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,8 +23,8 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md
-previous_handoff: docs/handoff/2026-06-21_1614_branch_b_v2_report_contract_handoff.md
+active_handoff: docs/handoff/2026-06-21_1810_g1_g8_current_scheme_validation_handoff.md
+previous_handoff: docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
@@ -49,6 +49,8 @@ report_status: branch_b_v2_report_layer_filter_integrated_development_only
 - `docs/reports/branch_b_v2_burden_stratification_2026-06-21.md`
 - `docs/reports/branch_b_v2_report_contract_2026-06-21.md`
 - `docs/reports/branch_b_v2_report_layer_filter_2026-06-21.md`
+- `docs/reports/branch_b_v2_g1_g8_validation_2026-06-21.md`
+- `docs/handoff/2026-06-21_1810_g1_g8_current_scheme_validation_handoff.md`
 - `docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
@@ -322,6 +324,26 @@ consume the V2 benchmark summary and sample-summary table and expose:
 These fields are report-display context only. They do not modify Branch A,
 do not add hard filters, and do not promote Branch B V2 or Branch S to final
 report logic.
+
+The earlier G1-G8 positive cohort has also been evaluated under the same active
+reference and explicit gap2m Branch A overlay. Existing G-batch BAM files were
+reused; WisecondorX convert/predict, Branch A, Branch B V2, Branch S,
+benchmark, and report were rerun in the remote mirror. Current G1-G8 result:
+
+- candidates=75;
+- locked truth events=10;
+- truth preserved=10/10;
+- FN=0;
+- truth report-layer filtered=0;
+- report events=15;
+- internal review events=40;
+- filtered audit-only events=7;
+- Branch S events=13.
+
+This supports the current sensitivity/preservation gate but does not promote
+the shadow reference, Branch B V2, or Branch S to production-final status. G2
+remains the main G-batch review-burden outlier and should be reviewed before
+designing a second demotion pass.
 
 ### Branch S
 
