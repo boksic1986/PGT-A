@@ -187,6 +187,51 @@ Important interpretation:
   class-level autosomal burden should be read from
   `v2_classifier/*.candidate_classification.tsv` or the sex-route report table.
 
+## 2026-06-21 Branch B V2 Autosomal Burden Audit
+
+Current report:
+`docs/reports/branch_b_v2_autosomal_burden_audit_2026-06-21.md`.
+
+This audit reviewed the remaining autosomal `V2_POSITIVE_SUPPORT_REVIEW` rows
+after sex-route refinement.
+
+Remaining autosomal positive-support rows:
+
+- Y1-Y8 truth cohort: 78.
+- H1-H6 truth subset: 33.
+- H7-H16 context subset: 24.
+- 2026-06-15 context: 127.
+
+The dominant unresolved condition is:
+
+```text
+UNKNOWN_BACKGROUND + NO_NULL_SUPPORT
+```
+
+All audited autosomal positive rows currently have:
+
+- `matched_negative_background_status=UNKNOWN_BACKGROUND`;
+- `calibration_null_status=NO_NULL_SUPPORT`;
+- `refmap_status=OK`;
+- `sample_noise_status=OK`;
+- `cnvpro_like_evidence_status=SHADOW_EVIDENCE_ONLY`.
+
+A direction-support split was audited but not implemented as classifier logic.
+It is not safe as a hard filter or universal positive-support downgrade because
+several locked autosomal truth top candidates would be labeled as A-only /
+weak Branch B direction support:
+
+- Y2 chr14 gain;
+- Y4 chr13 gain;
+- H2 chr6 gain;
+- H3 chr13 gain;
+- H4 chr15 gain.
+
+H6 chr21 remains Branch B-direction-supported, but that is not enough to make
+the direction-support rule generally safe. Direction support can be exposed as
+review evidence in a later loop, but it must not hard-suppress or final-demote
+autosomal candidates without additional validation.
+
 ## 2026-06-21 P1-P6 Credibility Audit Override
 
 Current audit report:

@@ -40,10 +40,14 @@ Immediate execution order:
    burden.
 6. Next Branch B work should refine remaining autosomal FP/review burden without
    reintroducing legacy/current-code Branch B decision fields.
-7. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+7. The remaining autosomal burden audit shows that Branch B-side direction
+   support is useful as review evidence but unsafe as a hard filter or universal
+   positive-support downgrade, because it would hit multiple locked truth top
+   candidates.
+8. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-8. Generate the next P6/report package from workflow outputs after fixed Branch
+9. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 
@@ -89,6 +93,9 @@ Minimum next implementation plan:
 - Treat the sex-route refinement as a routing/burden clarification gate, not a
   final SCA gate: sex-chromosome candidates now route to Branch S review, while
   autosomal Branch B positive-support burden remains the next refinement target.
+- Do not implement a Branch B direction-support hard filter. If direction
+  support is added to workflow outputs, it should be a review label only and
+  must preserve truth-overlap candidates and H6 chr21.
 - Continue excluding `final_disposition`, `branch_b_keep_event`, legacy artifact
   status, and legacy kept counts from V2 decision and metric computation.
 - Refine Branch B V2 evidence/disposition so it can reduce FP/review burden

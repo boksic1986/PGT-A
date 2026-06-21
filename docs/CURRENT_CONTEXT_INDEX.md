@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_1006_branch_b_v2_sex_route_handoff.md`
+2. `docs/handoff/2026-06-21_1021_branch_b_v2_autosomal_burden_audit_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,7 +23,7 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_1006_branch_b_v2_sex_route_handoff.md
+active_handoff: docs/handoff/2026-06-21_1021_branch_b_v2_autosomal_burden_audit_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
@@ -40,6 +40,7 @@ report_status: final_delivery_target_after_a_b_strengthening
 - `docs/reports/branch_a_burden_optimization_phase1_2026-06-21.md`
 - `docs/reports/branch_b_v2_gap2m_benchmark_2026-06-21.md`
 - `docs/reports/branch_b_v2_sex_route_refinement_2026-06-21.md`
+- `docs/reports/branch_b_v2_autosomal_burden_audit_2026-06-21.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
 - `docs/reports/p6_report_package_contract_2026-06-20.md`
@@ -137,6 +138,16 @@ Y3/H5/H6 chrX truth events are now routed to Branch S review and remain
 preserved. H6 chr21 remains autosomal positive-support review with
 `top_a_abs_zscore=7.1135`.
 
+The remaining autosomal Branch B V2 burden has been audited in
+`docs/reports/branch_b_v2_autosomal_burden_audit_2026-06-21.md`.
+The key result is that a tempting direction-support split is not safe as a hard
+filter or universal downgrade: multiple locked autosomal truth top candidates
+would be labeled `A_ONLY_NO_B_DIRECTION_SUPPORT` by that audit, including
+Y2 chr14 gain, Y4 chr13 gain, H2 chr6 gain, H3 chr13 gain, and H4 chr15 gain.
+H6 chr21 remains direction-supported. Therefore Branch B V2 can expose
+direction-support as review evidence, but it must not hard-suppress or
+final-demote candidates solely for weak Branch B-side direction support.
+
 ### Branch S
 
 Branch S is not final SCA, but it must not be omitted from report development.
@@ -184,7 +195,9 @@ A, Branch B, Branch S, background source, and limitations explicitly.
 4. Continue refining Branch B V2 evidence/disposition for remaining autosomal
    FP and review burden while preserving the materialized
    no-FN/no-hard-suppression benchmark.
-5. Upgrade Branch S toward review-reportable output with controlled negative/ref
+5. Treat Branch B-side direction support as a review label only unless a
+   stronger truth-safe rule is validated; do not turn it into a hard filter.
+6. Upgrade Branch S toward review-reportable output with controlled negative/ref
    FP burden; final SCA promotion remains a separate truth gate.
-6. Generate the next P6/report package only after the fixed A/B/S contracts are
+7. Generate the next P6/report package only after the fixed A/B/S contracts are
    represented in workflow outputs.
