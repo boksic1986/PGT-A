@@ -450,7 +450,19 @@ def sca_report_layer_reason(sca_state, confidence_tier, scores, evidence):
         if has_uncorroborated_branch_a_support(scores):
             return "branch_a_only_uncorroborated_by_nonpar_median"
         return "insufficient_sca_evidence"
+    score_reason = dominant_state_score_reason(scores, sca_state)
+    if "sex_call_compatible_uncorroborated_review" in score_reason:
+        return f"{str(confidence_tier).lower()}_with_sex_call_compatible_branch_a_support"
     return f"{str(confidence_tier).lower()}_with_nonpar_corroboration"
+
+
+def dominant_state_score_reason(scores, sca_state):
+    if scores is None or scores.empty or "sca_state" not in scores.columns:
+        return ""
+    matches = scores[scores["sca_state"].fillna("").astype(str).eq(str(sca_state))]
+    if matches.empty or "state_score_reason" not in matches.columns:
+        return ""
+    return str(matches.iloc[0].get("state_score_reason", "") or "")
 
 
 def has_uncorroborated_branch_a_support(scores):

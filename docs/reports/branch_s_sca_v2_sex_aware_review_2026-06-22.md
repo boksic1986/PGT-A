@@ -179,7 +179,7 @@ PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
 Result:
 
 ```text
-38 passed in 1.10s
+38 passed in 0.92s
 ```
 
 Remote dry-run target for all active gap2m configs:
@@ -202,6 +202,22 @@ Result:
 
 ```text
 RC=0 for all four configs; all requested files were present and up to date.
+```
+
+After the report-layer reason review fix, Branch S and report outputs were
+forced and rematerialized for all four active gap2m configs using:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile <config> --cores 16 \
+  --forcerun cnv_branch_s_shadow cnv_report_summary \
+  branch_s_review cnv_report
+```
+
+Result:
+
+```text
+RC=0 for all four configs; cnv_report completed for Y=8, H=16, G=8, and 0615=5 samples.
 ```
 
 ## Interpretation

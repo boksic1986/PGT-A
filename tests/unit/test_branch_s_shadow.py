@@ -343,6 +343,7 @@ def test_branch_s_preserves_xx_x_loss_review_when_branch_a_is_strong_but_bin_med
     assert x_loss["state_score_reason"] == "branch_a_candidate_zscore_sex_call_compatible_uncorroborated_review"
     assert summary["sca_candidate_state"] == "X_LOSS"
     assert summary["sca_report_layer_class"] == "sca_report_review_event"
+    assert summary["sca_report_layer_reason"] == "sca_review_strong_with_sex_call_compatible_branch_a_support"
 
 
 def test_branch_s_summary_contains_p5_report_boundary_contract():

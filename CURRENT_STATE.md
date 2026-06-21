@@ -60,9 +60,12 @@ Remote validation:
 - `tests/unit/test_branch_s_shadow.py`,
   `tests/unit/test_cnv_report.py`,
   `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
-  `tests/unit/test_current_context_index.py`: `38 passed in 1.25s`.
+  `tests/unit/test_current_context_index.py`: `38 passed in 0.92s`.
 - `branch_s_review cnv_report` dry-run returned `RC=0` for all four active
   gap2m configs: Y, H, G, and 2026-06-15.
+- Branch S/report outputs were forced and rematerialized for all four active
+  gap2m configs after the report-layer reason review fix; `cnv_report`
+  completed for Y=8, H=16, G=8, and 2026-06-15=5 samples.
 
 Remaining limitation:
 
