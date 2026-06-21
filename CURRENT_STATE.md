@@ -1,5 +1,59 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Branch S / SCA V2 Sex-Aware Review
+
+Current handoff:
+`docs/handoff/2026-06-22_0101_branch_s_sca_v2_handoff.md`.
+
+Current report:
+`docs/reports/branch_s_sca_v2_sex_aware_review_2026-06-22.md`.
+
+This loop only updates Branch S/SCA report-layer review behavior. It does not
+modify Branch A, the active reference, autosomal Branch B V2 report-layer
+filtering, or the default `merge_gap_bp=0` behavior. It also does not use the
+2Mb/3Mb low-resolution evidence outputs.
+
+Current Branch S behavior:
+
+- Branch A chrX/chrY candidates are anchors only.
+- Strong Branch A sex-chromosome support must be corroborated by X/Y non-PAR
+  median or robust bin evidence before it becomes strong SCA review.
+- Normal XY samples with chrX Branch A support but neutral X non-PAR evidence
+  are routed to `sca_filtered_or_sex_consistent_event`, not `X_GAIN` /
+  `SCA_REVIEW_STRONG`.
+- `XX + X_LOSS` with very strong Branch A support remains visible as review to
+  preserve current locked X-loss truth evidence.
+- Branch S still uses `review_development_only` / `review_reportable_with_limitations`
+  and is not final SCA.
+
+Remote materialized active gap2m Branch S results:
+
+- Y1-Y8: 1 strong SCA review, 7 no-call; Y3 remains visible as `X_LOSS`,
+  `SCA_REVIEW_STRONG`, `sca_report_review_event`.
+- H1-H16: 2 strong SCA review, 1 weak SCA review, 13 no-call; H5 and H6 remain
+  visible as `X_LOSS`, `SCA_REVIEW_STRONG`, `sca_report_review_event`.
+- H7-H16: all normal XY context samples are `SCA_NO_CALL` and no longer produce
+  false `X_GAIN` / `SCA_REVIEW_STRONG`.
+- G1-G8: 2 weak SCA internal-review events and 6 no-call; context only for SCA
+  because no locked SCA truth is currently assigned here.
+- 2026-06-15: 2 weak SCA internal-review events and 3 no-call; burden/context
+  only, no TP/FN/FP conclusion.
+
+Remote validation:
+
+- `tests/unit/test_branch_s_shadow.py`,
+  `tests/unit/test_cnv_report.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
+  `tests/unit/test_current_context_index.py`: `38 passed in 1.25s`.
+- `branch_s_review cnv_report` dry-run returned `RC=0` for all four active
+  gap2m configs: Y, H, G, and 2026-06-15.
+
+Remaining limitation:
+
+- SCA final promotion still needs a broader locked truth panel covering X gain,
+  XXY, XYY, Y loss, mosaic SCA fraction series, and cross-batch clean XX/XY
+  negatives.
+
 ## 2026-06-21 Current Context Index Override
 
 Current context entrypoint:

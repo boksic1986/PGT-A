@@ -143,9 +143,206 @@ def test_branch_s_state_scores_use_branch_a_direction_when_region_z_is_opposite(
     x_loss = scores.loc[scores["sca_state"] == "X_LOSS", "state_score"].iat[0]
     loss_reason = scores.loc[scores["sca_state"] == "X_LOSS", "state_score_reason"].iat[0]
 
-    assert x_loss > 0
-    assert x_gain < 0
-    assert loss_reason == "branch_a_candidate_zscore"
+    assert x_loss < 0
+    assert x_gain > 0
+    assert loss_reason == "branch_a_only_uncorroborated_by_nonpar_median"
+
+
+def test_branch_s_does_not_call_strong_x_gain_from_uncorroborated_xy_branch_a_candidate():
+    bins = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 58_000_000,
+                "calibrated_z": -0.2,
+                "robust_z": -0.1,
+                "is_PAR": False,
+            },
+            {
+                "chrom": "chrX",
+                "start": 61_000_000,
+                "end": 154_500_000,
+                "calibrated_z": 0.1,
+                "robust_z": 0.2,
+                "is_PAR": False,
+            },
+            {
+                "chrom": "chrY",
+                "start": 3_000_000,
+                "end": 20_000_000,
+                "calibrated_z": 0.2,
+                "robust_z": 0.1,
+                "is_PAR": False,
+            },
+        ]
+    )
+    a_candidates = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 154_500_000,
+                "state": "gain",
+                "a_zscore": 131.8,
+                "a_abs_zscore": 131.8,
+            }
+        ]
+    )
+    gender = pd.DataFrame(
+        [
+            {
+                "sample_id": "XY_NORMAL",
+                "sex_call": "XY",
+                "predict_gender": "M",
+                "sex_call_source": "wisecondorx_bam_consensus",
+            }
+        ]
+    )
+
+    evidence, scores = build_branch_s_shadow(
+        sample_id="XY_NORMAL",
+        bins=bins,
+        a_candidates=a_candidates,
+        gender=gender,
+    )
+    summary = summarize_branch_s_shadow("XY_NORMAL", evidence, scores, gender)
+    x_gain = scores.loc[scores["sca_state"] == "X_GAIN"].iloc[0]
+
+    assert x_gain["state_score"] < 5.0
+    assert x_gain["state_score_reason"] == "branch_a_only_uncorroborated_by_nonpar_median"
+    assert summary["branch_a_x_support"] == "present"
+    assert summary["sca_candidate_state"] == "none_detected"
+    assert summary["sca_confidence_tier"] == "SCA_NO_CALL"
+    assert summary["sca_report_layer_class"] == "sca_filtered_or_sex_consistent_event"
+    assert "branch_a_only_uncorroborated" in summary["sca_report_layer_reason"]
+
+
+def test_branch_s_preserves_x_loss_when_branch_a_is_nonpar_corroborated():
+    bins = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 58_000_000,
+                "calibrated_z": -4.5,
+                "robust_z": -22.0,
+                "is_PAR": False,
+            },
+            {
+                "chrom": "chrX",
+                "start": 61_000_000,
+                "end": 154_500_000,
+                "calibrated_z": -4.0,
+                "robust_z": -18.0,
+                "is_PAR": False,
+            },
+        ]
+    )
+    a_candidates = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 154_500_000,
+                "state": "loss",
+                "a_zscore": -77.1,
+                "a_abs_zscore": 77.1,
+            }
+        ]
+    )
+    gender = pd.DataFrame(
+        [
+            {
+                "sample_id": "XO_REVIEW",
+                "sex_call": "XX",
+                "predict_gender": "F",
+                "sex_call_source": "bam_depth_override",
+            }
+        ]
+    )
+
+    evidence, scores = build_branch_s_shadow(
+        sample_id="XO_REVIEW",
+        bins=bins,
+        a_candidates=a_candidates,
+        gender=gender,
+    )
+    summary = summarize_branch_s_shadow("XO_REVIEW", evidence, scores, gender)
+    x_loss = scores.loc[scores["sca_state"] == "X_LOSS"].iloc[0]
+
+    assert x_loss["state_score"] >= 30.0
+    assert x_loss["state_score_reason"] == "branch_a_candidate_zscore_nonpar_corroborated"
+    assert summary["sca_candidate_state"] == "X_LOSS"
+    assert summary["sca_confidence_tier"] == "SCA_REVIEW_STRONG"
+    assert summary["sca_report_layer_class"] == "sca_report_review_event"
+
+
+def test_branch_s_preserves_xx_x_loss_review_when_branch_a_is_strong_but_bin_median_is_neutral():
+    bins = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 58_000_000,
+                "calibrated_z": -0.1,
+                "robust_z": -0.1,
+                "is_PAR": False,
+            },
+            {
+                "chrom": "chrX",
+                "start": 61_000_000,
+                "end": 154_500_000,
+                "calibrated_z": 0.1,
+                "robust_z": 0.1,
+                "is_PAR": False,
+            },
+        ]
+    )
+    a_candidates = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 58_000_000,
+                "state": "loss",
+                "a_zscore": -62.0,
+                "a_abs_zscore": 62.0,
+            },
+            {
+                "chrom": "chrX",
+                "start": 61_000_000,
+                "end": 154_500_000,
+                "state": "loss",
+                "a_zscore": -58.0,
+                "a_abs_zscore": 58.0,
+            },
+        ]
+    )
+    gender = pd.DataFrame(
+        [
+            {
+                "sample_id": "XX_XLOSS",
+                "sex_call": "XX",
+                "predict_gender": "F",
+                "sex_call_source": "bam_depth_override",
+            }
+        ]
+    )
+
+    evidence, scores = build_branch_s_shadow(
+        sample_id="XX_XLOSS",
+        bins=bins,
+        a_candidates=a_candidates,
+        gender=gender,
+    )
+    summary = summarize_branch_s_shadow("XX_XLOSS", evidence, scores, gender)
+    x_loss = scores.loc[scores["sca_state"] == "X_LOSS"].iloc[0]
+
+    assert x_loss["state_score"] >= 30.0
+    assert x_loss["state_score_reason"] == "branch_a_candidate_zscore_sex_call_compatible_uncorroborated_review"
+    assert summary["sca_candidate_state"] == "X_LOSS"
+    assert summary["sca_report_layer_class"] == "sca_report_review_event"
 
 
 def test_branch_s_summary_contains_p5_report_boundary_contract():

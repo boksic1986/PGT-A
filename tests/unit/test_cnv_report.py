@@ -258,6 +258,8 @@ class CnvReportRankingTest(unittest.TestCase):
                   "sample_id": "S1",
                   "sca_candidate_state": "X_LOSS",
                   "sca_confidence_tier": "SCA_REVIEW_WEAK",
+                  "sca_report_layer_class": "sca_internal_review_event",
+                  "sca_report_layer_reason": "sca_review_weak_with_nonpar_corroboration",
                   "sca_output_mode": "review_development_only",
                   "report_text_status": "development_only_not_final_reportable",
                   "sca_uncertainty_reason": "locked_sca_truth_incomplete"
@@ -275,6 +277,11 @@ class CnvReportRankingTest(unittest.TestCase):
         self.assertEqual(branch_b_df.iloc[0]["branch_b_evidence_final_report_impact"], "none_shadow_only")
         self.assertEqual(branch_s_df.iloc[0]["sca_candidate_state"], "X_LOSS")
         self.assertEqual(branch_s_df.iloc[0]["sca_output_mode"], "review_development_only")
+        self.assertEqual(branch_s_df.iloc[0]["sca_report_layer_class"], "sca_internal_review_event")
+        self.assertEqual(
+            branch_s_df.iloc[0]["sca_report_layer_reason"],
+            "sca_review_weak_with_nonpar_corroboration",
+        )
 
     def test_report_loads_branch_b_v2_burden_summary_for_development_display(self):
         self.assertTrue(hasattr(report_module, "load_branch_b_v2_burden_summaries"))
@@ -435,6 +442,8 @@ class CnvReportRankingTest(unittest.TestCase):
                 "branch_b_evidence_final_report_impact": "none_shadow_only",
                 "sca_candidate_state": "X_LOSS",
                 "sca_confidence_tier": "SCA_REVIEW_WEAK",
+                "sca_report_layer_class": "sca_internal_review_event",
+                "sca_report_layer_reason": "sca_review_weak_with_nonpar_corroboration",
                 "sca_output_mode": "review_development_only",
                 "report_text_status": "development_only_not_final_reportable",
                 "qc_status": "PASS",
@@ -449,6 +458,7 @@ class CnvReportRankingTest(unittest.TestCase):
         self.assertIn("P3_background=UNKNOWN_BACKGROUND=2", conclusion)
         self.assertIn("P3_report_impact=none_shadow_only", conclusion)
         self.assertIn("SCA_mode=review_development_only", conclusion)
+        self.assertIn("SCA_report_layer=sca_internal_review_event", conclusion)
         self.assertIn("SCA_status=development_only_not_final_reportable", conclusion)
 
     def test_report_summarizes_branch_a_no_fn_gate_for_same_reference(self):

@@ -429,6 +429,8 @@ def load_branch_s_summaries(paths):
                 "sample_id": str(summary.get("sample_id") or summary.get("sample") or _sample_from_summary_path(path)),
                 "sca_candidate_state": str(summary.get("sca_candidate_state", "not_available")),
                 "sca_confidence_tier": str(summary.get("sca_confidence_tier", "not_available")),
+                "sca_report_layer_class": str(summary.get("sca_report_layer_class", "not_available")),
+                "sca_report_layer_reason": str(summary.get("sca_report_layer_reason", "")),
                 "sca_output_mode": str(summary.get("sca_output_mode", "not_available")),
                 "sca_uncertainty_reason": str(summary.get("sca_uncertainty_reason", "")),
                 "report_text_status": str(summary.get("report_text_status", "not_available")),
@@ -527,8 +529,9 @@ def format_sca_report_status(row):
         return "not_available"
     state = text_or_empty(row.get("sca_candidate_state", "")) or "not_available"
     tier = text_or_empty(row.get("sca_confidence_tier", "")) or "not_available"
+    layer_class = text_or_empty(row.get("sca_report_layer_class", "")) or "not_available"
     text_status = text_or_empty(row.get("report_text_status", "")) or "not_available"
-    return f"mode={mode}; state={state}; tier={tier}; status={text_status}"
+    return f"mode={mode}; state={state}; tier={tier}; report_layer={layer_class}; status={text_status}"
 
 
 def summarize_branch_b_events(events_df):
@@ -747,6 +750,7 @@ def format_technical_conclusion(row):
                 f"SCA_mode={sca_mode}",
                 f"SCA_state={text_or_empty(row.get('sca_candidate_state', 'not_available')) or 'not_available'}",
                 f"SCA_tier={text_or_empty(row.get('sca_confidence_tier', 'not_available')) or 'not_available'}",
+                f"SCA_report_layer={text_or_empty(row.get('sca_report_layer_class', 'not_available')) or 'not_available'}",
                 f"SCA_status={text_or_empty(row.get('report_text_status', 'not_available')) or 'not_available'}",
             ]
         )
