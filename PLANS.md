@@ -1,5 +1,38 @@
 # PLANS.md
 
+## 2026-06-22 Lowres Branch B/S Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_0930_lowres_branch_bs_integration_handoff.md`.
+
+Current report:
+`docs/reports/branch_b_s_lowres_integration_2026-06-22.md`.
+
+The 2Mb/3Mb shadow references are built, lowres predict is materialized, and the
+Branch B/S workflow now has a lowres auxiliary evidence contract. The next gate
+is interpretation of lowres/ref-MAD evidence, not new threshold design.
+
+Immediate next steps:
+
+1. Inspect lowres support labels for each locked truth event in Y/H/G.
+2. Inspect lowres/ref-MAD labels for remaining `report_event` and
+   `internal_review_event` rows.
+3. Identify which events gain explanation from 2Mb/3Mb same-direction support.
+4. Separately list events with no lowres support but stable ref-MAD; treat them
+   as candidates for review, not automatic filtering.
+5. Keep H6 chr21 and short/mosaic-sensitive events protected from lowres
+   absence-based demotion.
+6. Keep 2026-06-15 as burden/context only until locked truth labels exist.
+
+Design constraints:
+
+- Lowres same-direction support can improve confidence/explanation.
+- Lowres absence cannot independently demote or filter.
+- High ref-MAD weakens negative lowres interpretation.
+- Branch S global non-PAR median is for whole-SCA trends; local segment
+  non-PAR evidence protects small X/Y CNV review.
+- PAR is secondary context only and cannot independently create SCA calls.
+
 ## 2026-06-22 Branch S / SCA Next Gate
 
 Current handoff:

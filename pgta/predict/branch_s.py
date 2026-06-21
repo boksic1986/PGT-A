@@ -14,6 +14,9 @@ from pgta.predict.branch_b.common import read_table, write_json, write_table
 BRANCH_S_VERSION = "branch_s_shadow_v1"
 NONPAR_MEDIAN_CALIBRATED_MIN_ABS_Z = 2.0
 NONPAR_MEDIAN_ROBUST_MIN_ABS_Z = 5.0
+SEX_CHROM_LOWRES_2MB_INFORMATIVE_MIN_BP = 3_000_000
+SEX_CHROM_LOWRES_3MB_INFORMATIVE_MIN_BP = 4_000_000
+SEX_CHROM_LOWRES_MIN_OVERLAP_FRACTION = 0.50
 EVIDENCE_COLUMNS = [
     "branch_s_version",
     "sample_id",
@@ -58,6 +61,8 @@ def parse_args():
     parser.add_argument("--input-bins", required=True)
     parser.add_argument("--a-candidates", required=True)
     parser.add_argument("--gender-tsv", default="")
+    parser.add_argument("--lowres-2mb-events", default="")
+    parser.add_argument("--lowres-3mb-events", default="")
     parser.add_argument("--output-evidence", required=True)
     parser.add_argument("--output-scores", required=True)
     parser.add_argument("--output-summary", required=True)
@@ -151,6 +156,8 @@ def prepare_candidates(candidates):
         frame["state"] = frame["cnv_type"]
     if "state" in frame.columns:
         frame["state"] = frame["state"].map(normalize_candidate_state)
+    else:
+        frame["state"] = ""
     for column in ["a_zscore", "a_abs_zscore"]:
         if column in frame.columns:
             frame[column] = pd.to_numeric(frame[column], errors="coerce")
@@ -253,7 +260,7 @@ def state_direction(state):
     return 0.0
 
 
-def nonpar_directional_support(region_bins, state):
+def _directional_support(region_bins, state, *, include_mean=False):
     if region_bins is None or region_bins.empty:
         return "missing"
     direction = state_direction(state)
@@ -261,25 +268,52 @@ def nonpar_directional_support(region_bins, state):
         return "neutral"
     calibrated_median = finite_median(region_bins.get("calibrated_z", pd.Series(dtype=float)))
     robust_median = finite_median(region_bins.get("robust_z", pd.Series(dtype=float)))
-    calibrated_signed = direction * calibrated_median if np.isfinite(calibrated_median) else np.nan
-    robust_signed = direction * robust_median if np.isfinite(robust_median) else np.nan
-    if (
-        np.isfinite(calibrated_signed)
-        and calibrated_signed >= NONPAR_MEDIAN_CALIBRATED_MIN_ABS_Z
-    ) or (
-        np.isfinite(robust_signed)
-        and robust_signed >= NONPAR_MEDIAN_ROBUST_MIN_ABS_Z
-    ):
+    signed_values = [
+        direction * calibrated_median if np.isfinite(calibrated_median) else np.nan,
+        direction * robust_median if np.isfinite(robust_median) else np.nan,
+    ]
+    thresholds = [NONPAR_MEDIAN_CALIBRATED_MIN_ABS_Z, NONPAR_MEDIAN_ROBUST_MIN_ABS_Z]
+    if include_mean:
+        calibrated_mean = finite_mean(region_bins.get("calibrated_z", pd.Series(dtype=float)))
+        robust_mean = finite_mean(region_bins.get("robust_z", pd.Series(dtype=float)))
+        signed_values.extend(
+            [
+                direction * calibrated_mean if np.isfinite(calibrated_mean) else np.nan,
+                direction * robust_mean if np.isfinite(robust_mean) else np.nan,
+            ]
+        )
+        thresholds.extend([NONPAR_MEDIAN_CALIBRATED_MIN_ABS_Z, NONPAR_MEDIAN_ROBUST_MIN_ABS_Z])
+    if any(np.isfinite(value) and value >= threshold for value, threshold in zip(signed_values, thresholds)):
         return "supported"
-    if (
-        np.isfinite(calibrated_signed)
-        and calibrated_signed <= -NONPAR_MEDIAN_CALIBRATED_MIN_ABS_Z
-    ) or (
-        np.isfinite(robust_signed)
-        and robust_signed <= -NONPAR_MEDIAN_ROBUST_MIN_ABS_Z
-    ):
+    if any(np.isfinite(value) and value <= -threshold for value, threshold in zip(signed_values, thresholds)):
         return "opposite"
     return "neutral"
+
+
+def nonpar_directional_support(region_bins, state):
+    return _directional_support(region_bins, state, include_mean=False)
+
+
+def bins_overlapping_candidate_rows(region_bins, candidates):
+    if region_bins is None or region_bins.empty or candidates is None or candidates.empty:
+        return pd.DataFrame()
+    candidate_starts = pd.to_numeric(candidates.get("start"), errors="coerce").to_numpy(dtype=np.float64)
+    candidate_ends = pd.to_numeric(candidates.get("end"), errors="coerce").to_numpy(dtype=np.float64)
+    starts = pd.to_numeric(region_bins.get("start"), errors="coerce").to_numpy(dtype=np.float64)
+    ends = pd.to_numeric(region_bins.get("end"), errors="coerce").to_numpy(dtype=np.float64)
+    matched = np.zeros(len(region_bins), dtype=bool)
+    for candidate_start, candidate_end in zip(candidate_starts, candidate_ends):
+        if not (np.isfinite(candidate_start) and np.isfinite(candidate_end)):
+            continue
+        matched |= (starts < candidate_end) & (ends > candidate_start)
+    return region_bins.loc[matched].copy()
+
+
+def segment_nonpar_directional_support(region_bins, candidate_rows, state):
+    segment_bins = bins_overlapping_candidate_rows(region_bins, candidate_rows)
+    if segment_bins.empty:
+        return "missing"
+    return _directional_support(segment_bins, state, include_mean=True)
 
 
 def candidate_abs_zscore(rows):
@@ -293,6 +327,97 @@ def candidate_abs_zscore(rows):
         values = np.array([], dtype=np.float64)
     values = values[np.isfinite(values)]
     return float(np.max(values)) if values.size else np.nan
+
+
+def interval_overlap_fraction(left_start, left_end, right_start, right_end):
+    start = max(float(left_start), float(right_start))
+    end = min(float(left_end), float(right_end))
+    overlap = max(end - start, 0.0)
+    span = max(float(left_end) - float(left_start), 0.0)
+    return float(overlap / span) if span > 0 else 0.0
+
+
+def count_lowres_same_direction_support(candidates, lowres_events, min_event_bp):
+    if candidates is None or candidates.empty:
+        return 0, 0
+    sex_candidates = candidates[candidates["chrom"].astype(str).isin({"chrX", "chrY"})].copy()
+    if sex_candidates.empty:
+        return 0, 0
+    sex_candidates["start"] = pd.to_numeric(sex_candidates["start"], errors="coerce")
+    sex_candidates["end"] = pd.to_numeric(sex_candidates["end"], errors="coerce")
+    sex_candidates["span_bp"] = sex_candidates["end"] - sex_candidates["start"]
+    eligible = sex_candidates[sex_candidates["span_bp"] >= int(min_event_bp)].copy()
+    if eligible.empty:
+        return 0, 0
+    events = prepare_candidates(lowres_events) if lowres_events is not None else pd.DataFrame()
+    if events.empty:
+        return int(len(eligible)), 0
+    support_count = 0
+    for _, candidate in eligible.iterrows():
+        matched = events[
+            events["chrom"].astype(str).eq(str(candidate["chrom"]))
+            & events["state"].astype(str).eq(str(candidate.get("state", "")))
+        ].copy()
+        for _, event in matched.iterrows():
+            fraction = interval_overlap_fraction(
+                candidate["start"],
+                candidate["end"],
+                event["start"],
+                event["end"],
+            )
+            if fraction >= SEX_CHROM_LOWRES_MIN_OVERLAP_FRACTION:
+                support_count += 1
+                break
+    return int(len(eligible)), int(support_count)
+
+
+def lowres_context_label(eligible_count, support_count, events):
+    if eligible_count == 0:
+        return "not_informative_short_or_boundary_event"
+    if support_count > 0:
+        return "same_direction_support_context"
+    if events is None or events.empty:
+        return "not_available"
+    return "no_same_direction_support_context_not_filter"
+
+
+def summarize_sex_chrom_lowres_context(candidates, lowres_2mb_events=None, lowres_3mb_events=None):
+    prepared = prepare_candidates(candidates)
+    if prepared.empty:
+        return {
+            "sex_chrom_lowres_2mb_context": "no_sex_chrom_branch_a_candidate",
+            "sex_chrom_lowres_2mb_same_direction_count": 0,
+            "sex_chrom_lowres_3mb_context": "no_sex_chrom_branch_a_candidate",
+            "sex_chrom_lowres_3mb_same_direction_count": 0,
+            "sex_chrom_lowres_final_impact": "context_only_not_filter",
+        }
+    eligible_2mb, support_2mb = count_lowres_same_direction_support(
+        prepared,
+        lowres_2mb_events,
+        SEX_CHROM_LOWRES_2MB_INFORMATIVE_MIN_BP,
+    )
+    eligible_3mb, support_3mb = count_lowres_same_direction_support(
+        prepared,
+        lowres_3mb_events,
+        SEX_CHROM_LOWRES_3MB_INFORMATIVE_MIN_BP,
+    )
+    return {
+        "sex_chrom_lowres_2mb_context": lowres_context_label(eligible_2mb, support_2mb, lowres_2mb_events),
+        "sex_chrom_lowres_2mb_same_direction_count": support_2mb,
+        "sex_chrom_lowres_3mb_context": lowres_context_label(eligible_3mb, support_3mb, lowres_3mb_events),
+        "sex_chrom_lowres_3mb_same_direction_count": support_3mb,
+        "sex_chrom_lowres_final_impact": "context_only_not_filter",
+    }
+
+
+def default_lowres_context_not_configured():
+    return {
+        "sex_chrom_lowres_2mb_context": "not_configured",
+        "sex_chrom_lowres_2mb_same_direction_count": 0,
+        "sex_chrom_lowres_3mb_context": "not_configured",
+        "sex_chrom_lowres_3mb_same_direction_count": 0,
+        "sex_chrom_lowres_final_impact": "context_only_not_filter",
+    }
 
 
 def sex_call_compatible_uncorroborated_review(context, state):
@@ -316,11 +441,14 @@ def candidate_state_score(region_bins, candidates, state, context=None):
         opposite_value = opposite_z if np.isfinite(opposite_z) else 0.0
         if same_value >= opposite_value:
             support = nonpar_directional_support(region_bins, state)
+            segment_support = segment_nonpar_directional_support(region_bins, same, state)
             if support == "supported":
                 return float(same_value), "branch_a_candidate_zscore_nonpar_corroborated"
+            if segment_support == "supported":
+                return float(same_value), "branch_a_candidate_zscore_segment_nonpar_corroborated"
             if support == "neutral" and sex_call_compatible_uncorroborated_review(context, state):
                 return float(same_value), "branch_a_candidate_zscore_sex_call_compatible_uncorroborated_review"
-            if support == "opposite":
+            if support == "opposite" or segment_support == "opposite":
                 return float(-same_value), "branch_a_only_uncorroborated_by_nonpar_median"
             return 0.0, "branch_a_only_uncorroborated_by_nonpar_median"
         if nonpar_directional_support(region_bins, state) == "supported":
@@ -328,8 +456,11 @@ def candidate_state_score(region_bins, candidates, state, context=None):
         return float(-opposite_value), "branch_a_candidate_zscore_opposite_direction"
     if not same.empty or not opposite.empty:
         support = nonpar_directional_support(region_bins, state)
+        segment_support = segment_nonpar_directional_support(region_bins, same, state)
         if len(same) >= len(opposite) and support == "supported":
             return 1.0, "branch_a_candidate_overlap_nonpar_corroborated"
+        if len(same) >= len(opposite) and segment_support == "supported":
+            return 1.0, "branch_a_candidate_overlap_segment_nonpar_corroborated"
         if len(same) >= len(opposite):
             return 0.0, "branch_a_only_uncorroborated_by_nonpar_median"
         if support == "supported":
@@ -566,7 +697,7 @@ def build_branch_s_shadow(sample_id, bins, a_candidates, gender=None, version=BR
     return evidence, scores
 
 
-def summarize_branch_s_shadow(sample_id, evidence, scores, gender=None, version=BRANCH_S_VERSION):
+def summarize_branch_s_shadow(sample_id, evidence, scores, gender=None, version=BRANCH_S_VERSION, lowres_context=None):
     context = gender_context(gender)
     expected_x_ploidy, expected_y_ploidy = expected_sex_ploidy(context["sex_call"])
     sca_state, sca_score = dominant_sca_state(scores)
@@ -576,7 +707,7 @@ def summarize_branch_s_shadow(sample_id, evidence, scores, gender=None, version=
         if scores is not None and "state_score_status" in scores.columns
         else 0
     )
-    return {
+    summary = {
         "sample_id": str(sample_id),
         "branch_s_version": str(version),
         "sex_call": context["sex_call"],
@@ -605,6 +736,8 @@ def summarize_branch_s_shadow(sample_id, evidence, scores, gender=None, version=
         "sca_uncertainty_reason": sca_uncertainty_reason(sca_state, context),
         "report_text_status": "development_only_not_final_reportable",
     }
+    summary.update(lowres_context or default_lowres_context_not_configured())
+    return summary
 
 
 def main():
@@ -613,6 +746,8 @@ def main():
     bins = read_table(args.input_bins, required_columns=["chrom", "start", "end"], empty_ok=False)
     candidates = read_optional_table(args.a_candidates)
     gender = read_optional_table(args.gender_tsv)
+    lowres_2mb = read_optional_table(args.lowres_2mb_events)
+    lowres_3mb = read_optional_table(args.lowres_3mb_events)
     evidence, scores = build_branch_s_shadow(
         sample_id=args.sample_id,
         bins=bins,
@@ -620,9 +755,24 @@ def main():
         gender=gender,
         version=args.version,
     )
+    lowres_context = summarize_sex_chrom_lowres_context(
+        prepare_candidates(candidates),
+        lowres_2mb_events=lowres_2mb,
+        lowres_3mb_events=lowres_3mb,
+    )
     write_table(args.output_evidence, evidence)
     write_table(args.output_scores, scores)
-    write_json(args.output_summary, summarize_branch_s_shadow(args.sample_id, evidence, scores, gender, args.version))
+    write_json(
+        args.output_summary,
+        summarize_branch_s_shadow(
+            args.sample_id,
+            evidence,
+            scores,
+            gender,
+            args.version,
+            lowres_context=lowres_context,
+        ),
+    )
     logger.info(
         "wrote Branch S shadow evidence rows=%d score_rows=%d to %s",
         len(evidence),

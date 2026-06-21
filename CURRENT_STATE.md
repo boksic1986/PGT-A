@@ -1,5 +1,78 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Lowres Branch B/S Integration
+
+Current handoff:
+`docs/handoff/2026-06-22_0930_lowres_branch_bs_integration_handoff.md`.
+
+Current report:
+`docs/reports/branch_b_s_lowres_integration_2026-06-22.md`.
+
+This loop connects the completed 2Mb/3Mb shadow references to Branch B and
+Branch S as auxiliary evidence only. It does not modify Branch A, does not
+rebuild the active 1Mb reference, does not promote `merge_gap_bp=2_000_000` to
+default, and does not promote Branch B V2 or Branch S to production-final.
+
+Implemented contract changes:
+
+- `lowres_evidence.reference_npz_glob` is now accepted and expanded for the
+  Branch B ref-MAD input contract, avoiding repeated static NPZ lists in cohort
+  configs.
+- Branch S now receives optional 2Mb/3Mb lowres event inputs when lowres
+  evidence is enabled.
+- Branch S now separates whole-chromosome X/Y non-PAR median evidence from
+  local segment-level X/Y non-PAR evidence:
+  - global non-PAR median remains the whole-SCA trend evidence;
+  - local segment non-PAR median/mean can preserve small sex-chromosome CNV
+    review even when global non-PAR median is neutral;
+  - PAR evidence remains secondary context only.
+- Branch S lowres context fields are emitted with
+  `sex_chrom_lowres_final_impact=context_only_not_filter`.
+
+Remote validation:
+
+- `tests/unit/test_branch_s_shadow.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`,
+  `tests/unit/test_lowres_evidence.py`,
+  `tests/unit/test_ref_stability.py`, and
+  `tests/unit/test_branch_b_v2_classifier.py`: `68 passed in 1.53s`.
+- 2Mb/3Mb predict configs dry-run parsed for Y/H/G/2026-06-15 and planned
+  existing-BAM WisecondorX convert/predict jobs, not BWA/mapping.
+
+Lowres predict materialization completed in the remote mirror:
+
+- PID: `4690`.
+- log:
+  `/data/project/CNV/PGT-A/refactor_validation_20260419/logs/driver/lowres_predict_2mb_3mb_20260622.log`.
+- command:
+  `/data/project/CNV/PGT-A/refactor_validation_20260419/logs/driver/lowres_predict_2mb_3mb_20260622.command.sh`.
+- `monitor/runtime.db` is absent, so no historical duration estimate is
+  available.
+- Final output counts:
+  - Y: 8/8 at 2Mb and 3Mb.
+  - H: 16/16 at 2Mb and 3Mb.
+  - G: 8/8 at 2Mb and 3Mb.
+  - 2026-06-15: 5/5 at 2Mb and 3Mb.
+- Lowres-enabled main-chain dry-runs and materialization passed for Y/H/G/0615.
+- Materialized acceptance:
+  - Y1-Y8: truth 10/10, filtered truth=0, report=21, internal_review=50,
+    filtered audit-only=13, Branch S=13.
+  - H1-H16: truth 10/10, filtered truth=0, H6 chr21 visible,
+    report=6, internal_review=49, filtered audit-only=8, Branch S=42.
+  - G1-G8: truth 10/10, filtered truth=0, report=15,
+    internal_review=40, filtered audit-only=7, Branch S=13.
+  - 2026-06-15: status `skipped_no_truth`, report=52,
+    internal_review=76, filtered audit-only=23, Branch S=14.
+- H6 chr21 remains `internal_review_event` with
+  `LOWRES_2MB_3MB_SAME_DIRECTION_SUPPORT` and `REF_STABILITY_STABLE`.
+
+Pending gate:
+
+- Inspect lowres/ref-MAD evidence by truth event and by remaining report event.
+- Use same-direction lowres support to improve confidence/explanation only.
+- Do not use lowres absence as standalone demotion/filtering evidence.
+- Continue Branch S/SCA validation with a broader locked truth panel.
+
 ## 2026-06-22 Branch S / SCA V2 Sex-Aware Review
 
 Current handoff:

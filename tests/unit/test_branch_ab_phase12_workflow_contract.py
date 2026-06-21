@@ -327,7 +327,8 @@ def test_lowres_evidence_is_optional_v2_ledger_context_not_report_promotion():
     assert "CNV_LOWRES_EVIDENCE_CFG" in layout
     assert "CNV_B_REF_STABILITY_BINS" in layout
     assert "CNV_B_LOWRES_EVIDENCE" in layout
-    assert "lowres_evidence.enable=true requires lowres_evidence.reference_npz" in layout
+    assert "reference_npz_glob" in layout
+    assert "lowres_evidence.enable=true requires lowres_evidence.reference_npz or reference_npz_glob" in layout
     assert "reference_sample_ids must match lowres_evidence.reference_npz length" in layout
     assert "SCRIPT_BRANCH_B_LOWRES_EVIDENCE_ACTION" in workflow
     assert "SCRIPT_BRANCH_B_REF_STABILITY_ACTION" in workflow
@@ -345,6 +346,11 @@ def test_lowres_evidence_is_optional_v2_ledger_context_not_report_promotion():
 
     classifier_rule = workflow.split("rule cnv_branch_b_v2_classifier:", 1)[1].split("if \"branch_b_v2_benchmark\" in AVAILABLE_TARGETS:", 1)[0]
     assert "CNV_B_LOWRES_EVIDENCE" in classifier_rule
+
+    branch_s_rule = workflow.split("rule cnv_branch_s_shadow:", 1)[1].split("if CNV_MOSAIC_FRACTION_TRUTH_TSV", 1)[0]
+    assert "CNV_LOWRES_EVIDENCE_ENABLE" in branch_s_rule
+    assert "--lowres-2mb-events" in branch_s_rule
+    assert "--lowres-3mb-events" in branch_s_rule
 
     branch_b_target = target_assembly.split('if "branch_b_v2_benchmark" in REQUESTED_TARGETS', 1)[1].split('if "reference_audit" in REQUESTED_TARGETS', 1)[0]
     assert "CNV_B_LOWRES_EVIDENCE" in branch_b_target

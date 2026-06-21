@@ -1,0 +1,22 @@
+base_config: "/data/project/CNV/PGT-A/refactor_validation_20260419/config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_benchmark_20260621.yaml"
+
+pipeline:
+  mode: "predict"
+  targets:
+    - "metadata"
+    - "cnv_qc"
+    - "branch_b_v2_benchmark"
+    - "branch_s_review"
+    - "cnv_report"
+
+core:
+  wisecondorx:
+    cnv:
+      lowres_evidence:
+        enable: true
+        events_2mb_dir: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_h_r0_shadow_ref_20260619_2mb/wisecondorx/cnv/a_branch_gap2m"
+        events_3mb_dir: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_h_r0_shadow_ref_20260619_3mb/wisecondorx/cnv/a_branch_gap2m"
+        reference_npz_glob:
+          - "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619/wisecondorx/tuning/pass_warn_h_r0/bin_750000/mask_only_for_newref/*.npz"
+        moderate_mad_z: 2.0
+        high_mad_z: 4.0
