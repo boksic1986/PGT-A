@@ -11,14 +11,14 @@ def test_current_context_index_exists_and_pins_active_context():
 
     required_tokens = [
         "status: active_current_index",
-        "active_handoff: docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md",
-        "previous_handoff: docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md",
+        "active_handoff: docs/handoff/2026-06-21_2339_branch_b_v2_lowres_materialization_handoff.md",
+        "previous_handoff: docs/handoff/2026-06-21_2253_branch_b_v2_lowres_ref_evidence_handoff.md",
         "active_reference_id: h_r0_shadow_ref_20260619",
         "reference_status: fixed_shadow_baseline_not_production",
         "branch_a_status: burden_phase1_gap2m_materialized_default_unchanged",
-        "branch_b_status: v2_pass2_sample_report_burden_retracted_materialized_development_only",
+        "branch_b_status: v2_lowres_materialization_reference_build_started",
         "branch_s_status: review_reportable_with_limitations",
-        "report_status: branch_b_v2_pass2_correction_integrated_development_only",
+        "report_status: branch_b_v2_lowres_context_not_report_promotion",
     ]
     for token in required_tokens:
         assert token in text
@@ -38,7 +38,11 @@ def test_current_context_index_points_to_existing_evidence_docs():
         "docs/reports/branch_b_v2_report_layer_filter_2026-06-21.md",
         "docs/reports/branch_b_v2_g1_g8_validation_2026-06-21.md",
         "docs/reports/branch_b_v2_pass2_correction_2026-06-21.md",
+        "docs/reports/branch_b_v2_lowres_ref_evidence_2026-06-21.md",
+        "docs/reports/branch_b_v2_lowres_materialization_2026-06-22.md",
         "docs/reports/branch_b_v2_report_event_audit_2026-06-21.md",
+        "docs/handoff/2026-06-21_2339_branch_b_v2_lowres_materialization_handoff.md",
+        "docs/handoff/2026-06-21_2253_branch_b_v2_lowres_ref_evidence_handoff.md",
         "docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md",
         "docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md",
         "docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md",

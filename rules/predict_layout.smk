@@ -133,13 +133,22 @@ CNV_LOWRES_REF_NPZ_PATHS = [
     for item in CNV_LOWRES_EVIDENCE_CFG.get("reference_npz", [])
     if str(item).strip()
 ]
+for glob_pattern in CNV_LOWRES_EVIDENCE_CFG.get("reference_npz_glob", []):
+    if str(glob_pattern).strip():
+        CNV_LOWRES_REF_NPZ_PATHS.extend(
+            sorted(resolve_path(path) for path in __import__("glob").glob(resolve_path(glob_pattern)))
+        )
+CNV_LOWRES_REF_NPZ_PATHS = list(dict.fromkeys(CNV_LOWRES_REF_NPZ_PATHS))
 CNV_LOWRES_REF_SAMPLE_IDS = [
     str(item)
     for item in CNV_LOWRES_EVIDENCE_CFG.get("reference_sample_ids", [])
     if str(item).strip()
 ]
 if CNV_LOWRES_EVIDENCE_ENABLE and not CNV_LOWRES_REF_NPZ_PATHS:
-    raise ValueError("core.wisecondorx.cnv.lowres_evidence.enable=true requires lowres_evidence.reference_npz")
+    raise ValueError(
+        "core.wisecondorx.cnv.lowres_evidence.enable=true requires "
+        "lowres_evidence.reference_npz or lowres_evidence.reference_npz_glob"
+    )
 if (
     CNV_LOWRES_EVIDENCE_ENABLE
     and CNV_LOWRES_REF_SAMPLE_IDS

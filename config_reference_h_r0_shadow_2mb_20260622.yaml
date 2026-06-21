@@ -1,0 +1,21 @@
+base_config: "/data/project/CNV/PGT-A/refactor_validation_20260419/config_reference_h_r0_shadow_20260619.yaml"
+
+pipeline:
+  mode: "build_ref"
+  targets:
+    - "metadata"
+    - "baseline_qc"
+    - "reference_qc"
+    - "reference"
+
+core:
+  project_path: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619_2mb"
+  wisecondorx:
+    tuning:
+      bin_sizes:
+        - 2000000
+
+baseline_qc:
+  bin_size: 2000000
+  bin_sizes:
+    - 2000000

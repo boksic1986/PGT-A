@@ -252,6 +252,32 @@ Current Branch B V2 low-resolution/ref-MAD evidence interface:
   events for Y/H/G/2026-06-15. Those are the next long-task gate, not a
   completed result.
 
+Current Branch B V2 low-resolution materialization:
+
+- Current report:
+  `docs/reports/branch_b_v2_lowres_materialization_2026-06-22.md`.
+- The materialization gate has started but is not complete.
+- Added 2Mb/3Mb shadow reference configs and 2Mb/3Mb low-res predict configs
+  for Y1-Y8, H1-H16, G1-G8, and 2026-06-15.
+- Added lowres-enabled primary benchmark/report configs that consume 2Mb/3Mb
+  Branch A event directories and the current primary ref inlier NPZ set.
+- `rules/predict_layout.smk` now accepts
+  `lowres_evidence.reference_npz_glob` as an alternative to an explicit
+  `reference_npz` list. The active primary ref glob resolves to 38 inlier
+  mask-only NPZ files on the remote mirror.
+- Remote validation on `ssh fengxian`:
+  - Lowres workflow-contract/unit tests: `59 passed in 1.25s`.
+  - 2Mb and 3Mb reference dry-runs both exited 0 and scheduled reference/QC
+    jobs only, not BWA/mapping.
+  - Low-res predict dry-run is expectedly blocked until low-res reference
+    targets exist.
+- A sequential long-running driver has started 2Mb then 3Mb reference build:
+  PID `71117`, log
+  `/data/project/CNV/PGT-A/refactor_validation_20260419/logs/driver/lowres_ref_2mb_3mb_20260622.log`.
+- No historical `monitor/runtime.db` was available for runtime estimation.
+- Pending after ref completion: low-res predict materialization, lowres-enabled
+  benchmark/report materialization, and Y/H/G truth preservation checks.
+
 ## 2026-06-21 Branch A Burden Optimization Phase 1
 
 Current report:

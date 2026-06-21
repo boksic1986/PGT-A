@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_2253_branch_b_v2_lowres_ref_evidence_handoff.md`
+2. `docs/handoff/2026-06-21_2339_branch_b_v2_lowres_materialization_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,13 +23,13 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_2253_branch_b_v2_lowres_ref_evidence_handoff.md
-previous_handoff: docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md
+active_handoff: docs/handoff/2026-06-21_2339_branch_b_v2_lowres_materialization_handoff.md
+previous_handoff: docs/handoff/2026-06-21_2253_branch_b_v2_lowres_ref_evidence_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_lowres_ref_mad_interface_validated_not_materialized
+branch_b_status: v2_lowres_materialization_reference_build_started
 branch_s_status: review_reportable_with_limitations
 report_status: branch_b_v2_lowres_context_not_report_promotion
 
@@ -52,7 +52,9 @@ report_status: branch_b_v2_lowres_context_not_report_promotion
 - `docs/reports/branch_b_v2_g1_g8_validation_2026-06-21.md`
 - `docs/reports/branch_b_v2_pass2_correction_2026-06-21.md`
 - `docs/reports/branch_b_v2_lowres_ref_evidence_2026-06-21.md`
+- `docs/reports/branch_b_v2_lowres_materialization_2026-06-22.md`
 - `docs/reports/branch_b_v2_report_event_audit_2026-06-21.md`
+- `docs/handoff/2026-06-21_2339_branch_b_v2_lowres_materialization_handoff.md`
 - `docs/handoff/2026-06-21_2253_branch_b_v2_lowres_ref_evidence_handoff.md`
 - `docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md`
 - `docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md`

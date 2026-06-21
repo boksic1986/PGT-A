@@ -199,6 +199,14 @@ def test_branch_b_v2_benchmark_is_v2_only_and_report_safe():
     assert "CNV_B_FINAL_EVENTS" not in v2_report_input_block
 
 
+def test_lowres_reference_npz_glob_is_config_supported():
+    layout = read_text("rules/predict_layout.smk")
+
+    assert "reference_npz_glob" in layout
+    assert '__import__("glob").glob' in layout
+    assert "lowres_evidence.reference_npz or lowres_evidence.reference_npz_glob" in layout
+
+
 def test_negative_bank_rule_is_config_gated_and_not_automatic_n0():
     layout = read_text("rules/predict_layout.smk")
     workflow = read_text("rules/predict_workflow.smk")
@@ -327,7 +335,8 @@ def test_lowres_evidence_is_optional_v2_ledger_context_not_report_promotion():
     assert "CNV_LOWRES_EVIDENCE_CFG" in layout
     assert "CNV_B_REF_STABILITY_BINS" in layout
     assert "CNV_B_LOWRES_EVIDENCE" in layout
-    assert "lowres_evidence.enable=true requires lowres_evidence.reference_npz" in layout
+    assert "lowres_evidence.enable=true requires" in layout
+    assert "lowres_evidence.reference_npz or lowres_evidence.reference_npz_glob" in layout
     assert "reference_sample_ids must match lowres_evidence.reference_npz length" in layout
     assert "SCRIPT_BRANCH_B_LOWRES_EVIDENCE_ACTION" in workflow
     assert "SCRIPT_BRANCH_B_REF_STABILITY_ACTION" in workflow

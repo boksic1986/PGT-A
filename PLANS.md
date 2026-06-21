@@ -120,6 +120,12 @@ Immediate execution order:
 25. Generate the next P6/report package from workflow outputs after fixed Branch
     A/B/S contracts are represented. The report should expose evidence levels and
     limitations rather than silently treating unknown evidence as benign.
+26. The low-resolution materialization gate is now in progress. 2Mb/3Mb shadow
+    reference configs, low-res predict configs, and lowres-enabled benchmark/report
+    configs have been added. Remote unit tests and reference dry-runs passed.
+    A sequential 2Mb then 3Mb reference build is running under PID `71117`.
+    Do not attempt low-res predict/benchmark/report materialization until the
+    2Mb/3Mb reference targets exist.
 
 ## 2026-06-21 Current Gate Override
 
