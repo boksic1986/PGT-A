@@ -39,6 +39,10 @@ TRUTH_METRIC_COLUMNS = [
     "top_v2_clean_support_label",
     "top_v2_gc_rc_context_label",
     "top_v2_b_signal_context_label",
+    "top_v2_burden_reduction_tier",
+    "top_v2_burden_reduction_action",
+    "top_v2_burden_reduction_reason",
+    "top_v2_burden_evidence_tags",
     "top_attenuation_ratio",
 ]
 
@@ -55,6 +59,11 @@ SAMPLE_SUMMARY_COLUMNS = [
     "v2_contract_risk_count",
     "v2_hard_suppressed_count",
     "v2_filter_suppressed_count",
+    "v2_report_candidate_burden_count",
+    "v2_review_candidate_burden_count",
+    "v2_background_unknown_review_burden_count",
+    "v2_technical_risk_burden_count",
+    "v2_branch_s_review_burden_count",
 ]
 
 
@@ -200,6 +209,19 @@ def _count_contains(frame: pd.DataFrame, column: str, token: str) -> int:
     return int(frame[column].fillna("").astype(str).str.upper().str.contains(token, regex=False).sum())
 
 
+def _count_equals(frame: pd.DataFrame, column: str, value: str) -> int:
+    if frame.empty or column not in frame.columns:
+        return 0
+    return int(frame[column].fillna("").astype(str).str.lower().eq(value.lower()).sum())
+
+
+def _value_counts(frame: pd.DataFrame, column: str) -> dict[str, int]:
+    if frame.empty or column not in frame.columns:
+        return {}
+    counts = frame[column].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+    return {str(key): int(value) for key, value in counts.items()}
+
+
 def build_v2_benchmark(
     classification_paths: list[str],
     truth_tsv: str,
@@ -243,6 +265,10 @@ def build_v2_benchmark(
                 "top_v2_clean_support_label": "" if top is None else str(top.get("v2_clean_support_label", "")),
                 "top_v2_gc_rc_context_label": "" if top is None else str(top.get("v2_gc_rc_context_label", "")),
                 "top_v2_b_signal_context_label": "" if top is None else str(top.get("v2_b_signal_context_label", "")),
+                "top_v2_burden_reduction_tier": "" if top is None else str(top.get("v2_burden_reduction_tier", "")),
+                "top_v2_burden_reduction_action": "" if top is None else str(top.get("v2_burden_reduction_action", "")),
+                "top_v2_burden_reduction_reason": "" if top is None else str(top.get("v2_burden_reduction_reason", "")),
+                "top_v2_burden_evidence_tags": "" if top is None else str(top.get("v2_burden_evidence_tags", "")),
                 "top_attenuation_ratio": math.nan if top is None else top.get("attenuation_ratio", math.nan),
             }
         )
@@ -267,6 +293,22 @@ def build_v2_benchmark(
                 "v2_contract_risk_count": _count_contains(sample_class, "v2_candidate_class", "CONTRACT_RISK"),
                 "v2_hard_suppressed_count": int(hard_suppression_mask(sample_class).sum()) if not sample_class.empty else 0,
                 "v2_filter_suppressed_count": _count_contains(sample_class, "v2_filter_action", "suppress_"),
+                "v2_report_candidate_burden_count": _count_equals(
+                    sample_class, "v2_burden_reduction_tier", "report_candidate"
+                ),
+                "v2_review_candidate_burden_count": (
+                    _count_equals(sample_class, "v2_burden_reduction_tier", "review_candidate")
+                    + _count_equals(sample_class, "v2_burden_reduction_tier", "background_unknown_review")
+                ),
+                "v2_background_unknown_review_burden_count": _count_equals(
+                    sample_class, "v2_burden_reduction_tier", "background_unknown_review"
+                ),
+                "v2_technical_risk_burden_count": _count_equals(
+                    sample_class, "v2_burden_reduction_tier", "technical_risk_review"
+                ),
+                "v2_branch_s_review_burden_count": _count_equals(
+                    sample_class, "v2_burden_reduction_tier", "branch_s_review"
+                ),
             }
         )
     sample_summary = pd.DataFrame(sample_rows, columns=SAMPLE_SUMMARY_COLUMNS)
@@ -284,6 +326,31 @@ def build_v2_benchmark(
         "truth_hard_suppressed_count": int(truth_metrics["v2_hard_suppressed_count"].sum()) if not truth_metrics.empty else 0,
         "v2_positive_support_candidate_count": int(sample_summary["v2_positive_support_count"].sum()) if not sample_summary.empty else 0,
         "v2_filter_suppressed_candidate_count": int(sample_summary["v2_filter_suppressed_count"].sum()) if not sample_summary.empty else 0,
+        "v2_report_candidate_burden_count": int(sample_summary["v2_report_candidate_burden_count"].sum()) if not sample_summary.empty else 0,
+        "v2_review_candidate_burden_count": int(sample_summary["v2_review_candidate_burden_count"].sum()) if not sample_summary.empty else 0,
+        "v2_background_unknown_review_burden_count": int(sample_summary["v2_background_unknown_review_burden_count"].sum()) if not sample_summary.empty else 0,
+        "v2_technical_risk_burden_count": int(sample_summary["v2_technical_risk_burden_count"].sum()) if not sample_summary.empty else 0,
+        "v2_branch_s_review_burden_count": int(sample_summary["v2_branch_s_review_burden_count"].sum()) if not sample_summary.empty else 0,
+        "burden_stratification_fields": [
+            "v2_filter_action",
+            "v2_disposition",
+            "v2_length_tier",
+            "v2_clean_support_label",
+            "v2_b_signal_context_label",
+            "v2_gc_rc_context_label",
+            "v2_burden_reduction_tier",
+            "v2_burden_reduction_action",
+        ],
+        "burden_stratification_counts": {
+            "v2_filter_action": _value_counts(classifications, "v2_filter_action"),
+            "v2_disposition": _value_counts(classifications, "v2_disposition"),
+            "v2_length_tier": _value_counts(classifications, "v2_length_tier"),
+            "v2_clean_support_label": _value_counts(classifications, "v2_clean_support_label"),
+            "v2_b_signal_context_label": _value_counts(classifications, "v2_b_signal_context_label"),
+            "v2_gc_rc_context_label": _value_counts(classifications, "v2_gc_rc_context_label"),
+            "v2_burden_reduction_tier": _value_counts(classifications, "v2_burden_reduction_tier"),
+            "v2_burden_reduction_action": _value_counts(classifications, "v2_burden_reduction_action"),
+        },
         "legacy_branch_b_decision_fields_used": False,
         "ignored_legacy_decision_fields": [
             "final_disposition",

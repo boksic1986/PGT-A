@@ -679,3 +679,113 @@ def test_v2_summary_reports_filter_action_counts():
         "suppress_workflow_contract_risk": 1,
     }
     assert summary["filter_hard_suppression_allowed_count"] == 1
+
+
+def test_burden_stratification_keeps_h6_chr21_review_and_marks_cnvpro_sources():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "H6",
+                "candidate_id": "H6_chr21_gain",
+                "chrom": "chr21",
+                "start": 20_700_000,
+                "end": 22_300_000,
+                "state": "gain",
+                "a_abs_zscore": 7.11,
+                "clean_bin_fraction": 0.85,
+                "high_risk_bin_fraction": 0.05,
+                "attenuation_ratio": 0.42,
+                "same_direction_fraction": 0.92,
+                "corrected_amplitude": 0.40,
+                "raw_amplitude": 0.95,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_burden_reduction_tier"] == "background_unknown_review"
+    assert row["v2_burden_reduction_action"] == "stratify_background_unknown_review"
+    assert row["v2_filter_hard_suppression_allowed"] == 0
+    tags = row["v2_burden_evidence_tags"]
+    assert "[CNVpro-inspired] length_tier=review_only_ge1mb" in tags
+    assert "[CNVpro-confirmed] acrocentric_qter_context_review_only" in tags
+    assert "[CNVpro-like] gc_rc_context=GC_RC_ATTENUATED_SEVERE" in tags
+    assert "[Not used] CNVcalling_R_cghFLasso_not_primary_caller" in tags
+
+
+def test_burden_stratification_routes_sex_chromosome_to_branch_s_with_cnvseq_asset_tag():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "H5",
+                "candidate_id": "H5_chrX_loss",
+                "chrom": "chrX",
+                "start": 1,
+                "end": 155_000_000,
+                "state": "loss",
+                "a_abs_zscore": 62.0,
+                "same_direction_fraction": 0.80,
+                "corrected_amplitude": -2.1,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "V2_SEX_CHROMOSOME_REVIEW"
+    assert row["v2_burden_reduction_tier"] == "branch_s_review"
+    assert row["v2_burden_reduction_action"] == "route_to_branch_s_review"
+    assert "[CNVseq-asset] sex_homology_PAR_annotation_branch_s_context" in row["v2_burden_evidence_tags"]
+
+
+def test_v2_summary_reports_burden_reduction_counts_and_tag_counts():
+    classified = classify_branch_b_v2_candidates(
+        pd.DataFrame(
+            [
+                {
+                    "sample_id": "H6",
+                    "candidate_id": "H6_chr21_gain",
+                    "chrom": "chr21",
+                    "start": 20_700_000,
+                    "end": 22_300_000,
+                    "state": "gain",
+                    "a_abs_zscore": 7.11,
+                    "same_direction_fraction": 0.92,
+                    "attenuation_ratio": 0.42,
+                    "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                    "calibration_null_status": "NO_NULL_SUPPORT",
+                },
+                {
+                    "sample_id": "H5",
+                    "candidate_id": "H5_chrX_loss",
+                    "chrom": "chrX",
+                    "start": 1,
+                    "end": 155_000_000,
+                    "state": "loss",
+                    "a_abs_zscore": 62.0,
+                    "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                },
+            ]
+        )
+    )
+
+    summary = summarize_v2_classification("mixed", classified)
+
+    assert summary["burden_reduction_tier_counts"] == {
+        "background_unknown_review": 1,
+        "branch_s_review": 1,
+    }
+    assert summary["burden_reduction_action_counts"] == {
+        "route_to_branch_s_review": 1,
+        "stratify_background_unknown_review": 1,
+    }
+    assert summary["length_tier_counts"]["review_only_ge1mb"] == 1
+    assert summary["gc_rc_context_label_counts"]["GC_RC_ATTENUATED_SEVERE"] == 1
+    assert summary["burden_evidence_tag_counts"]["[CNVpro-inspired] length_tier=review_only_ge1mb"] == 1
+    assert summary["burden_evidence_tag_counts"]["[CNVseq-asset] sex_homology_PAR_annotation_branch_s_context"] == 1

@@ -11,11 +11,11 @@ def test_current_context_index_exists_and_pins_active_context():
 
     required_tokens = [
         "status: active_current_index",
-        "active_handoff: docs/handoff/2026-06-21_1454_branch_b_v2_truth_safe_filter_handoff.md",
+        "active_handoff: docs/handoff/2026-06-21_1527_branch_b_v2_burden_stratification_handoff.md",
         "active_reference_id: h_r0_shadow_ref_20260619",
         "reference_status: fixed_shadow_baseline_not_production",
         "branch_a_status: burden_phase1_gap2m_materialized_default_unchanged",
-        "branch_b_status: v2_truth_safe_filter_materialized_truth_preserved",
+        "branch_b_status: v2_burden_stratification_materialized_truth_preserved",
         "branch_s_status: review_reportable_with_limitations",
         "report_status: final_delivery_target_after_a_b_strengthening",
     ]
@@ -32,6 +32,7 @@ def test_current_context_index_points_to_existing_evidence_docs():
         "docs/reports/branch_a_validation_h_r0_shadow_2026-06-20.md",
         "docs/reports/branch_a_burden_optimization_phase1_2026-06-21.md",
         "docs/reports/branch_b_v2_truth_safe_filter_2026-06-21.md",
+        "docs/reports/branch_b_v2_burden_stratification_2026-06-21.md",
         "docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md",
         "docs/reports/branch_s_p5_report_boundary_2026-06-20.md",
         "docs/reports/p6_report_package_contract_2026-06-20.md",

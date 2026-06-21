@@ -35,6 +35,10 @@ def test_v2_benchmark_preserves_truth_overlap_without_legacy_fields(tmp_path: Pa
                 "v2_filter_action": "keep_background_unknown_review",
                 "v2_length_tier": "reportable_candidate_ge2mb",
                 "v2_clean_support_label": "CLEAN_SUPPORT_AVAILABLE",
+                "v2_burden_reduction_tier": "background_unknown_review",
+                "v2_burden_reduction_action": "stratify_background_unknown_review",
+                "v2_burden_reduction_reason": "background_unknown_review_preserved_for_truth_safety",
+                "v2_burden_evidence_tags": "[CNVpro-inspired] length_tier=reportable_candidate_ge2mb;[CNVpro-like] gc_rc_context=GC_RC_ATTENUATED_SEVERE",
                 "attenuation_ratio": 0.42,
             }
         ]
@@ -72,6 +76,8 @@ def test_v2_benchmark_preserves_truth_overlap_without_legacy_fields(tmp_path: Pa
     assert truth_row["top_v2_filter_action"] == "keep_background_unknown_review"
     assert truth_row["top_v2_length_tier"] == "reportable_candidate_ge2mb"
     assert truth_row["top_v2_clean_support_label"] == "CLEAN_SUPPORT_AVAILABLE"
+    assert truth_row["top_v2_burden_reduction_tier"] == "background_unknown_review"
+    assert truth_row["top_v2_burden_reduction_action"] == "stratify_background_unknown_review"
     assert truth_row["top_attenuation_ratio"] == 0.42
 
     written = json.loads(summary.read_text(encoding="utf-8"))
@@ -81,6 +87,9 @@ def test_v2_benchmark_preserves_truth_overlap_without_legacy_fields(tmp_path: Pa
         "branch_b_report_class",
         "branch_b_artifact_status",
     ]
+    assert written["burden_stratification_counts"]["v2_burden_reduction_tier"] == {
+        "background_unknown_review": 1,
+    }
 
 
 def test_v2_benchmark_counts_hard_suppression_as_fn(tmp_path: Path):
@@ -226,3 +235,82 @@ def test_v2_filter_contract_suppression_counts_as_fn(tmp_path: Path):
     assert payload["truth_preserved_count"] == 0
     assert payload["FN_count"] == 1
     assert payload["truth_hard_suppressed_count"] == 1
+
+
+def test_v2_benchmark_outputs_sample_burden_reduction_counts(tmp_path: Path):
+    classification = tmp_path / "S1.candidate_classification.tsv"
+    sample_summary = tmp_path / "sample_summary.tsv"
+    summary = tmp_path / "summary.json"
+
+    pd.DataFrame(
+        [
+            {
+                "sample_id": "S1",
+                "candidate_id": "S1.A0001",
+                "chrom": "chr21",
+                "start": 20_000_000,
+                "end": 23_000_000,
+                "state": "gain",
+                "a_abs_zscore": 7.11,
+                "v2_candidate_class": "V2_POSITIVE_SUPPORT_REVIEW",
+                "v2_classifier_action": "V2_REVIEW_POSITIVE_SUPPORT",
+                "v2_evidence_tier": "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT",
+                "v2_filter_action": "keep_background_unknown_review",
+                "v2_disposition": "background_unknown_review",
+                "v2_length_tier": "reportable_candidate_ge2mb",
+                "v2_clean_support_label": "CLEAN_SUPPORT_AVAILABLE",
+                "v2_b_signal_context_label": "B_SIGNAL_SUPPORTED_A_DIRECTION",
+                "v2_gc_rc_context_label": "GC_RC_STABLE",
+                "v2_burden_reduction_tier": "background_unknown_review",
+                "v2_burden_reduction_action": "stratify_background_unknown_review",
+            },
+            {
+                "sample_id": "S1",
+                "candidate_id": "S1.A0002",
+                "chrom": "chrX",
+                "start": 1,
+                "end": 155_000_000,
+                "state": "loss",
+                "v2_candidate_class": "V2_SEX_CHROMOSOME_REVIEW",
+                "v2_filter_action": "route_to_branch_s_review",
+                "v2_disposition": "sca_branch_s_review",
+                "v2_burden_reduction_tier": "branch_s_review",
+                "v2_burden_reduction_action": "route_to_branch_s_review",
+            },
+            {
+                "sample_id": "S1",
+                "candidate_id": "S1.A0003",
+                "chrom": "chr16",
+                "start": 500_000,
+                "end": 4_500_000,
+                "state": "loss",
+                "v2_candidate_class": "V2_POSITIVE_SUPPORT_REVIEW",
+                "v2_filter_action": "downgrade_to_technical_risk_review",
+                "v2_disposition": "technical_risk_review",
+                "v2_burden_reduction_tier": "technical_risk_review",
+                "v2_burden_reduction_action": "downgrade_to_technical_risk_review",
+            },
+        ]
+    ).to_csv(classification, sep="\t", index=False)
+
+    _, written_sample_summary, payload = build_v2_benchmark(
+        classification_paths=[str(classification)],
+        truth_tsv="",
+        sample_ids=["S1"],
+        reference_id="h_r0_shadow_ref_20260619",
+        output_truth_metrics=str(tmp_path / "truth_metrics.tsv"),
+        output_sample_summary=str(sample_summary),
+        output_summary=str(summary),
+    )
+
+    row = written_sample_summary.iloc[0]
+    assert row["v2_report_candidate_burden_count"] == 0
+    assert row["v2_review_candidate_burden_count"] == 1
+    assert row["v2_background_unknown_review_burden_count"] == 1
+    assert row["v2_technical_risk_burden_count"] == 1
+    assert row["v2_branch_s_review_burden_count"] == 1
+    assert payload["burden_stratification_counts"]["v2_burden_reduction_action"] == {
+        "downgrade_to_technical_risk_review": 1,
+        "route_to_branch_s_review": 1,
+        "stratify_background_unknown_review": 1,
+    }

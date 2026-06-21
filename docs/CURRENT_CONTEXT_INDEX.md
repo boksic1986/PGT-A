@@ -23,12 +23,12 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_1454_branch_b_v2_truth_safe_filter_handoff.md
+active_handoff: docs/handoff/2026-06-21_1527_branch_b_v2_burden_stratification_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_truth_safe_filter_materialized_truth_preserved
+branch_b_status: v2_burden_stratification_materialized_truth_preserved
 branch_s_status: review_reportable_with_limitations
 report_status: final_delivery_target_after_a_b_strengthening
 
@@ -45,6 +45,7 @@ report_status: final_delivery_target_after_a_b_strengthening
 - `docs/reports/branch_b_v2_background_context_label_2026-06-21.md`
 - `docs/reports/branch_b_v2_method_reset_threshold_inventory_2026-06-21.md`
 - `docs/reports/branch_b_v2_truth_safe_filter_2026-06-21.md`
+- `docs/reports/branch_b_v2_burden_stratification_2026-06-21.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
 - `docs/reports/p6_report_package_contract_2026-06-20.md`
@@ -275,6 +276,33 @@ Materialized result after the filter-action contract:
 Remote output files include `v2_filter_action`, `top_v2_filter_action`, and
 `v2_filter_suppressed_count`.
 
+The next Branch B V2 burden stratification loop is now materialized in
+`docs/reports/branch_b_v2_burden_stratification_2026-06-21.md`. It adds
+`v2_burden_reduction_tier`, `v2_burden_reduction_action`,
+`v2_burden_reduction_reason`, and `v2_burden_evidence_tags`.
+
+CNVseq/CNVpro-derived concepts are explicitly marked as evidence tags only:
+
+- `[CNVpro-inspired]` length tiers for report/review routing;
+- `[CNVpro-confirmed]` acrocentric qter context for chr13/14/15/21/22 review;
+- `[CNVseq-asset]` mask/mappability/PAR/sex-homology annotation context;
+- `[CNVpro-like]` GC/RC context;
+- `[Not used]` CNVcalling.R/cghFLasso as primary caller replacements.
+
+Materialized burden-stratification result:
+
+- Y1-Y8: candidates 97; truth preserved 10/10; FN=0; hard-suppressed truth=0;
+  84 `background_unknown_review`; 13 `branch_s_review`.
+- H1-H16: candidates 105; truth preserved 10/10; FN=0; hard-suppressed
+  truth=0; H6 chr21 retained; 63 `background_unknown_review`; 42
+  `branch_s_review`.
+- 2026-06-15: candidates 165; no locked truth; context only; 151
+  `background_unknown_review`; 14 `branch_s_review`.
+
+This improves auditability and future report/review routing, but it still does
+not prove FP/review burden reduction. It must not be treated as Branch B V2
+final-report promotion.
+
 ### Branch S
 
 Branch S is not final SCA, but it must not be omitted from report development.
@@ -332,7 +360,13 @@ A, Branch B, Branch S, background source, and limitations explicitly.
    locked Y/H truth. Do not treat this as FP/review-burden reduction yet. Only
    `suppress_workflow_contract_risk` can count as a hard suppression action in
    the current contract.
-9. Upgrade Branch S toward review-reportable output with controlled negative/ref
+9. The V2 burden-stratification fields are now materialized and truth-preserving
+   under locked Y/H truth, with explicit CNVpro/CNVseq evidence tags. Treat this
+   as audit/report routing context, not as proof that FP/review burden has been
+   reduced. Do not promote length, clean support, GC/RC, acrocentric, sex
+   homology, or B-side signal tags into hard filters without locked-truth
+   ablation and explicit H6 chr21 preservation.
+10. Upgrade Branch S toward review-reportable output with controlled negative/ref
    FP burden; final SCA promotion remains a separate truth gate.
-10. Generate the next P6/report package only after the fixed A/B/S contracts are
+11. Generate the next P6/report package only after the fixed A/B/S contracts are
    represented in workflow outputs.

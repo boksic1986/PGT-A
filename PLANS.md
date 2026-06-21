@@ -72,10 +72,21 @@ Immediate execution order:
    context, B-side signal context, length tier, GC/RC attenuation, or low clean
    support into a hard filter without locked-truth ablation. Current hard
    suppression is limited to workflow/reference contract risk.
-14. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+14. Branch B V2 burden stratification is now materialized. It adds
+   `v2_burden_reduction_*` fields and explicit CNVpro/CNVseq evidence tags, but
+   it does not yet reduce total review burden: current outputs remain
+   `background_unknown_review` and `branch_s_review`. Treat it as a reporting
+   and auditability improvement, not FP-reduction proof.
+15. The next Branch B V2 gate is burden-display and report-contract
+   integration: decide how to show background-unknown, Branch S, length-tier,
+   clean-support, GC/RC, and B-side signal context without hard-suppressing
+   locked truth. Any future demotion/suppression rule must be ablated against
+   Y1-Y8/H1-H6, explicitly retain H6 chr21, and keep H7-H16/0615 as context
+   unless locked truth labels are added.
+16. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-15. Generate the next P6/report package from workflow outputs after fixed Branch
+17. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 

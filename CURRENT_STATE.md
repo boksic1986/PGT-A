@@ -61,6 +61,33 @@ Current P6/report state:
   by workflow once the fixed A/B/S contracts are represented and limitations are
   explicit.
 
+Current Branch B V2 burden stratification:
+
+- Current report:
+  `docs/reports/branch_b_v2_burden_stratification_2026-06-21.md`.
+- This loop did not modify Branch A and did not promote `merge_gap_bp=2_000_000`
+  to default. It stratified burden on top of the already materialized explicit
+  gap2m Branch A candidates.
+- New V2 burden fields include `v2_burden_reduction_tier`,
+  `v2_burden_reduction_action`, `v2_burden_reduction_reason`, and
+  `v2_burden_evidence_tags`.
+- CNVpro/CNVseq borrowed concepts are explicitly tagged:
+  `[CNVpro-inspired]` length tiers, `[CNVpro-confirmed]` acrocentric context,
+  `[CNVseq-asset]` mask/mappability/sex-homology context, `[CNVpro-like]`
+  GC/RC context, and `[Not used]` CNVcalling.R/cghFLasso.
+- Materialized truth preservation remains:
+  - Y1-Y8: 97 candidates; truth preserved 10/10; FN=0; hard-suppressed truth=0.
+  - H1-H16: 105 candidates; truth preserved 10/10; FN=0; hard-suppressed
+    truth=0; H6 chr21 retained.
+  - 2026-06-15: 165 candidates; no locked truth; burden/context only.
+- Current burden stratification does not yet reduce total review burden:
+  - Y1-Y8: 84 background-unknown review, 13 Branch S review.
+  - H1-H16: 63 background-unknown review, 42 Branch S review.
+  - 2026-06-15: 151 background-unknown review, 14 Branch S review.
+- Therefore this loop improves auditability and report/review routing context,
+  but it is not a final Branch B V2 FP-reduction proof and not report-promotion
+  evidence.
+
 ## 2026-06-21 Branch A Burden Optimization Phase 1
 
 Current report:

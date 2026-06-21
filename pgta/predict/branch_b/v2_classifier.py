@@ -34,10 +34,16 @@ V2_CLASSIFIER_COLUMNS = [
     "v2_filter_reason",
     "v2_filter_scope",
     "v2_filter_hard_suppression_allowed",
+    "v2_burden_reduction_version",
+    "v2_burden_reduction_tier",
+    "v2_burden_reduction_action",
+    "v2_burden_reduction_reason",
+    "v2_burden_evidence_tags",
     "v2_final_report_impact",
 ]
 
 V2_FILTER_VERSION = "branch_b_v2_truth_safe_filter_v1"
+V2_BURDEN_REDUCTION_VERSION = "branch_b_v2_burden_stratification_v1"
 
 
 def parse_args():
@@ -103,6 +109,11 @@ def state_direction(state):
 def is_sex_chromosome_candidate(row):
     chrom = clean_text(row.get("chrom", "")).lower().removeprefix("chr")
     return chrom in {"x", "y"}
+
+
+def is_acrocentric_chromosome_candidate(row):
+    chrom = clean_text(row.get("chrom", "")).lower().removeprefix("chr")
+    return chrom in {"13", "14", "15", "21", "22"}
 
 
 def signed_signal_support(row):
@@ -417,6 +428,64 @@ def candidate_filter_payload(candidate_class, tier, background_label, clean_labe
     }
 
 
+def burden_evidence_tags(row, length_label, clean_label, gc_label):
+    tags = [f"[CNVpro-inspired] length_tier={length_label}"]
+    if is_acrocentric_chromosome_candidate(row):
+        tags.append("[CNVpro-confirmed] acrocentric_qter_context_review_only")
+    if is_sex_chromosome_candidate(row):
+        tags.append("[CNVseq-asset] sex_homology_PAR_annotation_branch_s_context")
+    if clean_label != "CLEAN_SUPPORT_UNKNOWN":
+        tags.append(f"[CNVseq-asset] mask_mappability_annotation_only={clean_label}")
+    if gc_label != "GC_RC_CONTEXT_UNKNOWN":
+        tags.append(f"[CNVpro-like] gc_rc_context={gc_label}")
+    tags.append("[Not used] CNVcalling_R_cghFLasso_not_primary_caller")
+    return ";".join(tags)
+
+
+def burden_reduction_payload(candidate_class, background_label, clean_label, disposition):
+    if candidate_class == "V2_NO_CALL_CONTRACT_RISK":
+        return {
+            "v2_burden_reduction_version": V2_BURDEN_REDUCTION_VERSION,
+            "v2_burden_reduction_tier": "technical_risk_review",
+            "v2_burden_reduction_action": "suppress_workflow_contract_risk",
+            "v2_burden_reduction_reason": "workflow_reference_contract_risk_only_hard_suppressible",
+        }
+    if candidate_class == "V2_SEX_CHROMOSOME_REVIEW":
+        return {
+            "v2_burden_reduction_version": V2_BURDEN_REDUCTION_VERSION,
+            "v2_burden_reduction_tier": "branch_s_review",
+            "v2_burden_reduction_action": "route_to_branch_s_review",
+            "v2_burden_reduction_reason": "sex_chromosome_candidate_requires_branch_s_review",
+        }
+    if clean_label == "LOW_CLEAN_SUPPORT_HIGH_RISK" or disposition == "technical_risk_review":
+        return {
+            "v2_burden_reduction_version": V2_BURDEN_REDUCTION_VERSION,
+            "v2_burden_reduction_tier": "technical_risk_review",
+            "v2_burden_reduction_action": "downgrade_to_technical_risk_review",
+            "v2_burden_reduction_reason": "low_clean_support_or_technical_risk_review_only",
+        }
+    if disposition == "report_candidate":
+        return {
+            "v2_burden_reduction_version": V2_BURDEN_REDUCTION_VERSION,
+            "v2_burden_reduction_tier": "report_candidate",
+            "v2_burden_reduction_action": "keep_report_candidate",
+            "v2_burden_reduction_reason": "positive_support_with_reportable_review_tier",
+        }
+    if disposition == "background_unknown_review" or background_label.startswith(("UNKNOWN_BACKGROUND", "NO_")):
+        return {
+            "v2_burden_reduction_version": V2_BURDEN_REDUCTION_VERSION,
+            "v2_burden_reduction_tier": "background_unknown_review",
+            "v2_burden_reduction_action": "stratify_background_unknown_review",
+            "v2_burden_reduction_reason": "background_unknown_review_preserved_for_truth_safety",
+        }
+    return {
+        "v2_burden_reduction_version": V2_BURDEN_REDUCTION_VERSION,
+        "v2_burden_reduction_tier": "review_candidate",
+        "v2_burden_reduction_action": "stratify_review_candidate",
+        "v2_burden_reduction_reason": "truth_safe_review_candidate",
+    }
+
+
 def candidate_context_payload(row, tier, gate, priority, candidate_class, action, reason):
     signal_label, signal_reason = branch_b_direction_support_label(row)
     background_label, background_reason = background_context_label(row)
@@ -426,6 +495,8 @@ def candidate_context_payload(row, tier, gate, priority, candidate_class, action
     gc_label = gc_rc_context_label(row)
     disposition = candidate_disposition(candidate_class, tier, background_label, length_label, clean_label)
     filter_payload = candidate_filter_payload(candidate_class, tier, background_label, clean_label, disposition)
+    burden_payload = burden_reduction_payload(candidate_class, background_label, clean_label, disposition)
+    evidence_tags = burden_evidence_tags(row, length_label, clean_label, gc_label)
     return {
         "v2_candidate_class": candidate_class,
         "v2_classifier_action": action,
@@ -445,6 +516,8 @@ def candidate_context_payload(row, tier, gate, priority, candidate_class, action
         "v2_b_signal_context_reason": signal_reason,
         "v2_disposition": disposition,
         **filter_payload,
+        **burden_payload,
+        "v2_burden_evidence_tags": evidence_tags,
     }
 
 
@@ -576,6 +649,37 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         if "v2_filter_action" in classified_df.columns
         else {}
     )
+    burden_reduction_tier_counts = (
+        classified_df["v2_burden_reduction_tier"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_burden_reduction_tier" in classified_df.columns
+        else {}
+    )
+    burden_reduction_action_counts = (
+        classified_df["v2_burden_reduction_action"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_burden_reduction_action" in classified_df.columns
+        else {}
+    )
+    length_tier_counts = (
+        classified_df["v2_length_tier"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_length_tier" in classified_df.columns
+        else {}
+    )
+    clean_support_label_counts = (
+        classified_df["v2_clean_support_label"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_clean_support_label" in classified_df.columns
+        else {}
+    )
+    gc_rc_context_label_counts = (
+        classified_df["v2_gc_rc_context_label"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_gc_rc_context_label" in classified_df.columns
+        else {}
+    )
+    burden_evidence_tag_counts = {}
+    if "v2_burden_evidence_tags" in classified_df.columns:
+        for tag_text in classified_df["v2_burden_evidence_tags"].fillna("").astype(str):
+            for tag in [part.strip() for part in tag_text.split(";") if part.strip()]:
+                burden_evidence_tag_counts[tag] = burden_evidence_tag_counts.get(tag, 0) + 1
+        burden_evidence_tag_counts = dict(sorted(burden_evidence_tag_counts.items()))
     filter_hard_suppression_allowed_count = (
         int(pd.to_numeric(classified_df["v2_filter_hard_suppression_allowed"], errors="coerce").fillna(0).sum())
         if "v2_filter_hard_suppression_allowed" in classified_df.columns
@@ -600,6 +704,24 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         },
         "filter_action_counts": {
             str(key): int(value) for key, value in filter_action_counts.items()
+        },
+        "burden_reduction_tier_counts": {
+            str(key): int(value) for key, value in burden_reduction_tier_counts.items()
+        },
+        "burden_reduction_action_counts": {
+            str(key): int(value) for key, value in burden_reduction_action_counts.items()
+        },
+        "length_tier_counts": {
+            str(key): int(value) for key, value in length_tier_counts.items()
+        },
+        "clean_support_label_counts": {
+            str(key): int(value) for key, value in clean_support_label_counts.items()
+        },
+        "gc_rc_context_label_counts": {
+            str(key): int(value) for key, value in gc_rc_context_label_counts.items()
+        },
+        "burden_evidence_tag_counts": {
+            str(key): int(value) for key, value in burden_evidence_tag_counts.items()
         },
         "filter_hard_suppression_allowed_count": filter_hard_suppression_allowed_count,
         "direction_support_label_counts": {
