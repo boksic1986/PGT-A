@@ -18,6 +18,8 @@ V2_CLASSIFIER_COLUMNS = [
     "v2_evidence_tier",
     "v2_evidence_gate",
     "v2_review_priority",
+    "v2_direction_support_label",
+    "v2_direction_support_reason",
     "v2_final_report_impact",
 ]
 
@@ -92,6 +94,27 @@ def signed_signal_support(row):
         if math.isfinite(value) and abs(value) >= 2.0:
             return value * direction > 0.0
     return False
+
+
+def branch_b_direction_support_label(row):
+    if has_direction_conflict(row):
+        return "B_DIRECTION_CONFLICT", "amplitude_opposite_direction_abs_ge_2"
+
+    same_direction = safe_float(row.get("same_direction_fraction", math.nan), default=math.nan)
+    if math.isfinite(same_direction) and same_direction >= 0.50:
+        return "B_DIRECTION_SUPPORTED", "same_direction_fraction_ge_0.50"
+
+    direction = state_direction(row.get("state", ""))
+    if direction != 0.0:
+        for column in ["corrected_amplitude", "raw_amplitude"]:
+            value = safe_float(row.get(column, math.nan), default=math.nan)
+            if math.isfinite(value) and abs(value) >= 2.0 and value * direction > 0.0:
+                return "B_DIRECTION_SUPPORTED", f"{column}_same_direction_abs_ge_2"
+
+    if has_positive_branch_a_support(row):
+        return "A_ONLY_WEAK_B_DIRECTION", "positive_support_without_branch_b_direction_support"
+
+    return "NO_POSITIVE_SUPPORT", "no_positive_support_to_compare_direction"
 
 
 def has_direction_conflict(row):
@@ -191,6 +214,7 @@ def classify_evidence_tier(row):
 
 def classify_candidate_row(row):
     tier, gate, priority = classify_evidence_tier(row)
+    direction_label, direction_reason = branch_b_direction_support_label(row)
 
     if is_sex_chromosome_candidate(row):
         return {
@@ -200,6 +224,8 @@ def classify_candidate_row(row):
             "v2_evidence_tier": tier,
             "v2_evidence_gate": gate,
             "v2_review_priority": priority,
+            "v2_direction_support_label": direction_label,
+            "v2_direction_support_reason": direction_reason,
         }
     if tier.endswith("REF_CONTRACT_RISK") or tier.endswith("DIRECTION_CONFLICT"):
         return {
@@ -209,6 +235,8 @@ def classify_candidate_row(row):
             "v2_evidence_tier": tier,
             "v2_evidence_gate": gate,
             "v2_review_priority": priority,
+            "v2_direction_support_label": direction_label,
+            "v2_direction_support_reason": direction_reason,
         }
     if "POSITIVE_SUPPORT" in tier:
         return {
@@ -218,6 +246,8 @@ def classify_candidate_row(row):
             "v2_evidence_tier": tier,
             "v2_evidence_gate": gate,
             "v2_review_priority": priority,
+            "v2_direction_support_label": direction_label,
+            "v2_direction_support_reason": direction_reason,
         }
     if "BACKGROUND_COMPATIBLE" in tier or tier == "SHADOW_BACKGROUND_COMPATIBLE":
         return {
@@ -227,6 +257,8 @@ def classify_candidate_row(row):
             "v2_evidence_tier": tier,
             "v2_evidence_gate": gate,
             "v2_review_priority": priority,
+            "v2_direction_support_label": direction_label,
+            "v2_direction_support_reason": direction_reason,
         }
     if "TECHNICAL_REVIEW" in tier:
         return {
@@ -236,6 +268,8 @@ def classify_candidate_row(row):
             "v2_evidence_tier": tier,
             "v2_evidence_gate": gate,
             "v2_review_priority": priority,
+            "v2_direction_support_label": direction_label,
+            "v2_direction_support_reason": direction_reason,
         }
     return {
         "v2_candidate_class": "V2_REVIEW_REQUIRED",
@@ -244,6 +278,8 @@ def classify_candidate_row(row):
         "v2_evidence_tier": tier,
         "v2_evidence_gate": gate,
         "v2_review_priority": priority,
+        "v2_direction_support_label": direction_label,
+        "v2_direction_support_reason": direction_reason,
     }
 
 
@@ -286,6 +322,11 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         if "v2_review_priority" in classified_df.columns
         else {}
     )
+    direction_support_label_counts = (
+        classified_df["v2_direction_support_label"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_direction_support_label" in classified_df.columns
+        else {}
+    )
     return {
         "sample_id": str(sample_id),
         "version": str(version),
@@ -294,6 +335,9 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         "action_counts": {str(key): int(value) for key, value in action_counts.items()},
         "evidence_tier_counts": {str(key): int(value) for key, value in evidence_tier_counts.items()},
         "review_priority_counts": {str(key): int(value) for key, value in review_priority_counts.items()},
+        "direction_support_label_counts": {
+            str(key): int(value) for key, value in direction_support_label_counts.items()
+        },
         "final_report_impact": "none_shadow_only",
         "classified_only_branch_a_candidates": True,
         "legacy_decision_fields_ignored": True,

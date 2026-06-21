@@ -232,6 +232,76 @@ the direction-support rule generally safe. Direction support can be exposed as
 review evidence in a later loop, but it must not hard-suppress or final-demote
 autosomal candidates without additional validation.
 
+## 2026-06-21 Branch B V2 Direction-Support Review Label
+
+Current report:
+`docs/reports/branch_b_v2_direction_support_label_2026-06-21.md`.
+
+This loop implemented the next safe step from the autosomal burden audit:
+Branch B-side direction support is now emitted as review evidence only.
+
+New Branch B V2 classifier output fields:
+
+- `v2_direction_support_label`;
+- `v2_direction_support_reason`.
+
+The label contract is explicitly non-final:
+
+- it does not change WisecondorX predict;
+- it does not change Branch A candidate discovery;
+- it does not change `v2_candidate_class`;
+- it does not change `v2_classifier_action`;
+- it does not change `v2_final_report_impact`;
+- it must not hard-suppress or final-demote a candidate.
+
+Remote materialization under the explicit gap2m overlay produced:
+
+- Y1-Y8: 97 rows; `B_DIRECTION_SUPPORTED=74`,
+- Y1-Y8: 97 rows; `B_DIRECTION_SUPPORTED=66`,
+  `A_ONLY_WEAK_B_DIRECTION=20`, `B_DIRECTION_CONFLICT=11`.
+- H1-H16: 105 rows; `B_DIRECTION_SUPPORTED=68`,
+  `A_ONLY_WEAK_B_DIRECTION=26`, `B_DIRECTION_CONFLICT=11`.
+- 2026-06-15: 165 rows; `B_DIRECTION_SUPPORTED=97`,
+  `A_ONLY_WEAK_B_DIRECTION=40`, `B_DIRECTION_CONFLICT=28`.
+
+Autosomal `V2_POSITIVE_SUPPORT_REVIEW` subset:
+
+- Y1-Y8: 78 rows; `B_DIRECTION_SUPPORTED=58`,
+  `A_ONLY_WEAK_B_DIRECTION=20`.
+- H1-H16: 57 rows; `B_DIRECTION_SUPPORTED=35`,
+  `A_ONLY_WEAK_B_DIRECTION=22`.
+- 2026-06-15: 127 rows; `B_DIRECTION_SUPPORTED=89`,
+  `A_ONLY_WEAK_B_DIRECTION=38`.
+
+Truth preservation after this implementation remains:
+
+- Y1-Y8: truth preserved 10/10, FN=0, hard-suppressed truth=0.
+- H1-H16: truth preserved 10/10, FN=0, hard-suppressed truth=0.
+- H6 chr21 remains `V2_POSITIVE_SUPPORT_REVIEW` with
+  `v2_direction_support_label=B_DIRECTION_SUPPORTED`,
+  `v2_final_report_impact=none_shadow_only`, and
+  `top_a_abs_zscore=7.113507302991461`.
+
+Remote unit tests:
+
+- `tests/unit/test_branch_b_v2_classifier.py`
+- `tests/unit/test_branch_b_v2_benchmark.py`
+- `tests/unit/test_branch_ab_phase12_workflow_contract.py`
+
+Result:
+
+```text
+32 passed in 0.71s
+```
+
+Important interpretation:
+
+- This is an evidence-label improvement, not a final classifier promotion.
+- The main unresolved Branch B V2 condition remains
+  `UNKNOWN_BACKGROUND + NO_NULL_SUPPORT`.
+- The 2026-06-15 cohort remains burden/context only because it has no locked
+  truth table.
+
 ## 2026-06-21 P1-P6 Credibility Audit Override
 
 Current audit report:

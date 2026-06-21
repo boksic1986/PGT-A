@@ -44,10 +44,17 @@ Immediate execution order:
    support is useful as review evidence but unsafe as a hard filter or universal
    positive-support downgrade, because it would hit multiple locked truth top
    candidates.
-8. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+8. The review-label-only direction-support contract has now been implemented
+   and materialized. `v2_direction_support_label` and
+   `v2_direction_support_reason` are review evidence only; they do not change
+   candidate class, action, hard-suppression behavior, or final report impact.
+9. The next Branch B V2 refinement should target the unresolved
+   `UNKNOWN_BACKGROUND + NO_NULL_SUPPORT` burden with truth-safe background or
+   evidence contracts. Do not convert direction support into a hard filter.
+10. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-9. Generate the next P6/report package from workflow outputs after fixed Branch
+11. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 
@@ -93,9 +100,9 @@ Minimum next implementation plan:
 - Treat the sex-route refinement as a routing/burden clarification gate, not a
   final SCA gate: sex-chromosome candidates now route to Branch S review, while
   autosomal Branch B positive-support burden remains the next refinement target.
-- Do not implement a Branch B direction-support hard filter. If direction
-  support is added to workflow outputs, it should be a review label only and
-  must preserve truth-overlap candidates and H6 chr21.
+- Do not implement a Branch B direction-support hard filter. Direction support
+  is now present in workflow outputs as a review label only and preserves
+  truth-overlap candidates and H6 chr21 under the materialized gap2m benchmark.
 - Continue excluding `final_disposition`, `branch_b_keep_event`, legacy artifact
   status, and legacy kept counts from V2 decision and metric computation.
 - Refine Branch B V2 evidence/disposition so it can reduce FP/review burden

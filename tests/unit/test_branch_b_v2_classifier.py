@@ -324,3 +324,117 @@ def test_sex_chromosome_candidate_routes_to_branch_s_review_not_autosomal_positi
     assert row["v2_classifier_reason"] == "sex_chromosome_branch_s_review:unknown_background_positive_support"
     assert row["v2_evidence_tier"] == "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT"
     assert row["v2_final_report_impact"] == "none_shadow_only"
+
+
+def test_direction_support_is_review_label_only_for_a_only_truth_like_positive():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "Y2",
+                "candidate_id": "Y2_chr14_gain",
+                "chrom": "chr14",
+                "start": 1,
+                "end": 107_000_000,
+                "state": "gain",
+                "a_abs_zscore": 94.8,
+                "same_direction_fraction": 0.15,
+                "corrected_amplitude": -0.29,
+                "raw_amplitude": 0.12,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_classifier_action"] == "V2_REVIEW_POSITIVE_SUPPORT"
+    assert row["v2_final_report_impact"] == "none_shadow_only"
+    assert row["v2_direction_support_label"] == "A_ONLY_WEAK_B_DIRECTION"
+    assert row["v2_direction_support_reason"] == "positive_support_without_branch_b_direction_support"
+
+
+def test_direction_support_label_marks_branch_b_supported_without_report_promotion():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "H6",
+                "candidate_id": "H6_chr21_gain",
+                "chrom": "chr21",
+                "start": 20_700_000,
+                "end": 22_300_000,
+                "state": "gain",
+                "a_abs_zscore": 7.11,
+                "same_direction_fraction": 0.92,
+                "corrected_amplitude": 0.40,
+                "raw_amplitude": 0.35,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_final_report_impact"] == "none_shadow_only"
+    assert row["v2_direction_support_label"] == "B_DIRECTION_SUPPORTED"
+    assert row["v2_direction_support_reason"] == "same_direction_fraction_ge_0.50"
+
+
+def test_v2_summary_reports_direction_support_label_counts():
+    classified = classify_branch_b_v2_candidates(
+        pd.DataFrame(
+            [
+                {
+                    "sample_id": "Y2",
+                    "candidate_id": "Y2_chr14_gain",
+                    "chrom": "chr14",
+                    "state": "gain",
+                    "a_abs_zscore": 94.8,
+                    "same_direction_fraction": 0.15,
+                    "corrected_amplitude": -0.29,
+                    "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                },
+                {
+                    "sample_id": "H6",
+                    "candidate_id": "H6_chr21_gain",
+                    "chrom": "chr21",
+                    "state": "gain",
+                    "a_abs_zscore": 7.11,
+                    "same_direction_fraction": 0.92,
+                    "corrected_amplitude": 0.40,
+                    "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                },
+            ]
+        )
+    )
+
+    summary = summarize_v2_classification("mixed", classified)
+
+    assert summary["direction_support_label_counts"] == {
+        "A_ONLY_WEAK_B_DIRECTION": 1,
+        "B_DIRECTION_SUPPORTED": 1,
+    }
+
+
+def test_direction_conflict_label_takes_priority_over_fraction_support():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "Y1",
+                "candidate_id": "Y1_chr16_loss",
+                "chrom": "chr16",
+                "state": "loss",
+                "a_abs_zscore": 29.0,
+                "same_direction_fraction": 0.80,
+                "corrected_amplitude": 2.5,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "V2_NO_CALL_CONTRACT_RISK"
+    assert row["v2_direction_support_label"] == "B_DIRECTION_CONFLICT"
+    assert row["v2_final_report_impact"] == "none_shadow_only"
