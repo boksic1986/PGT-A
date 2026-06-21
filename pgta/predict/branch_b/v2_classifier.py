@@ -28,6 +28,9 @@ V2_CLASSIFIER_COLUMNS = [
     "v2_direction_support_reason",
     "v2_b_signal_context_label",
     "v2_b_signal_context_reason",
+    "v2_lowres_context_label",
+    "v2_lowres_context_reason",
+    "v2_ref_stability_context",
     "v2_disposition",
     "v2_filter_version",
     "v2_filter_action",
@@ -256,6 +259,28 @@ def background_context_label(row):
     if null_status == "OK":
         return "CALIBRATION_NULL_ONLY", "calibration_null_available_without_matched_negative"
     return "NO_BACKGROUND_CONTEXT", "no_background_or_calibration_context"
+
+
+def lowres_context_label(row):
+    label = clean_text(row.get("lowres_consensus_label", ""), default="LOWRES_NOT_CONFIGURED")
+    if label == "LOWRES_NOT_CONFIGURED":
+        return label, "no_2mb_3mb_lowres_evidence_configured"
+    if label in {
+        "LOWRES_2MB_3MB_SAME_DIRECTION_SUPPORT",
+        "LOWRES_2MB_SUPPORT_FOR_3_4MB_EVENT",
+        "LOWRES_2MB_SAME_DIRECTION_SUPPORT",
+        "LOWRES_3MB_SAME_DIRECTION_SUPPORT",
+    }:
+        return label, "low_resolution_same_direction_support_context"
+    if label == "LOWRES_NO_SUPPORT_INFORMATIVE_BUT_NOT_FILTER":
+        return label, "low_resolution_no_support_is_context_not_single_filter"
+    if label.startswith("LOWRES_CONTEXT_ONLY") or label.startswith("LOWRES_NOT_APPLICABLE"):
+        return label, "low_resolution_context_only"
+    return label, "low_resolution_review_context"
+
+
+def ref_stability_context(row):
+    return clean_text(row.get("ref_stability_context", ""), default="REF_STABILITY_NOT_AVAILABLE")
 
 
 def has_direction_conflict(row):
@@ -548,7 +573,7 @@ def report_layer_payload(row, candidate_class, disposition, length_label, clean_
     }
 
 
-def burden_evidence_tags(row, length_label, clean_label, gc_label):
+def burden_evidence_tags(row, length_label, clean_label, gc_label, lowres_label, stability_context):
     tags = [f"[CNVpro-inspired] length_tier={length_label}"]
     if is_acrocentric_chromosome_candidate(row):
         tags.append("[CNVpro-confirmed] acrocentric_qter_context_review_only")
@@ -558,6 +583,10 @@ def burden_evidence_tags(row, length_label, clean_label, gc_label):
         tags.append(f"[CNVseq-asset] mask_mappability_annotation_only={clean_label}")
     if gc_label != "GC_RC_CONTEXT_UNKNOWN":
         tags.append(f"[CNVpro-like] gc_rc_context={gc_label}")
+    if lowres_label != "LOWRES_NOT_CONFIGURED":
+        tags.append(f"[lowres-shadow] consensus={lowres_label}")
+    if stability_context != "REF_STABILITY_NOT_AVAILABLE":
+        tags.append(f"[ref-mad-shadow] context={stability_context}")
     tags.append("[Not used] CNVcalling_R_cghFLasso_not_primary_caller")
     return ";".join(tags)
 
@@ -613,10 +642,12 @@ def candidate_context_payload(row, tier, gate, priority, candidate_class, action
     length_label = length_tier(row)
     clean_label = clean_support_label(row)
     gc_label = gc_rc_context_label(row)
+    lowres_label, lowres_reason = lowres_context_label(row)
+    stability_context = ref_stability_context(row)
     disposition = candidate_disposition(candidate_class, tier, background_label, length_label, clean_label)
     filter_payload = candidate_filter_payload(candidate_class, tier, background_label, clean_label, disposition)
     burden_payload = burden_reduction_payload(candidate_class, background_label, clean_label, disposition)
-    evidence_tags = burden_evidence_tags(row, length_label, clean_label, gc_label)
+    evidence_tags = burden_evidence_tags(row, length_label, clean_label, gc_label, lowres_label, stability_context)
     report_payload = report_layer_payload(
         row,
         candidate_class,
@@ -661,6 +692,9 @@ def candidate_context_payload(row, tier, gate, priority, candidate_class, action
         "v2_direction_support_reason": signal_reason,
         "v2_b_signal_context_label": signal_label,
         "v2_b_signal_context_reason": signal_reason,
+        "v2_lowres_context_label": lowres_label,
+        "v2_lowres_context_reason": lowres_reason,
+        "v2_ref_stability_context": stability_context,
         "v2_disposition": disposition,
         **filter_payload,
         **burden_payload,
@@ -822,6 +856,16 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         if "v2_gc_rc_context_label" in classified_df.columns
         else {}
     )
+    lowres_context_label_counts = (
+        classified_df["v2_lowres_context_label"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_lowres_context_label" in classified_df.columns
+        else {}
+    )
+    ref_stability_context_counts = (
+        classified_df["v2_ref_stability_context"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_ref_stability_context" in classified_df.columns
+        else {}
+    )
     burden_evidence_tag_counts = {}
     if "v2_burden_evidence_tags" in classified_df.columns:
         for tag_text in classified_df["v2_burden_evidence_tags"].fillna("").astype(str):
@@ -867,6 +911,12 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         },
         "gc_rc_context_label_counts": {
             str(key): int(value) for key, value in gc_rc_context_label_counts.items()
+        },
+        "lowres_context_label_counts": {
+            str(key): int(value) for key, value in lowres_context_label_counts.items()
+        },
+        "ref_stability_context_counts": {
+            str(key): int(value) for key, value in ref_stability_context_counts.items()
         },
         "burden_evidence_tag_counts": {
             str(key): int(value) for key, value in burden_evidence_tag_counts.items()

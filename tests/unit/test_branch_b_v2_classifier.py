@@ -1213,3 +1213,35 @@ def test_report_layer_pass2_missing_a_zscore_uses_candidate_level_contract_risk_
     assert classified.loc["S1.missing_z", "v2_report_visibility"] == "internal_review"
     assert "multi_report_sample" not in classified.loc["S1.missing_z", "v2_report_filter_rule_tags"]
     assert classified.loc["S1.missing_z", "v2_filter_hard_suppression_allowed"] == 0
+
+
+def test_lowres_no_support_is_context_not_single_candidate_filter():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "S1",
+                "candidate_id": "S1_chr3_gain",
+                "chrom": "chr3",
+                "start": 1_000_000,
+                "end": 9_000_000,
+                "state": "gain",
+                "a_abs_zscore": 18.0,
+                "same_direction_fraction": 0.95,
+                "attenuation_ratio": 1.0,
+                "clean_bin_fraction": 0.85,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+                "lowres_consensus_label": "LOWRES_NO_SUPPORT_INFORMATIVE_BUT_NOT_FILTER",
+                "ref_stability_context": "REF_STABILITY_STABLE",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_lowres_context_label"] == "LOWRES_NO_SUPPORT_INFORMATIVE_BUT_NOT_FILTER"
+    assert row["v2_ref_stability_context"] == "REF_STABILITY_STABLE"
+    assert row["v2_report_layer_class"] == "report_event"
+    assert row["v2_report_visibility"] == "final_report"
+    assert row["v2_filter_action"] == "keep_report_layer_event"

@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md`
+2. `docs/handoff/2026-06-21_2253_branch_b_v2_lowres_ref_evidence_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,15 +23,15 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md
-previous_handoff: docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md
+active_handoff: docs/handoff/2026-06-21_2253_branch_b_v2_lowres_ref_evidence_handoff.md
+previous_handoff: docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_pass2_sample_report_burden_retracted_materialized_development_only
+branch_b_status: v2_lowres_ref_mad_interface_validated_not_materialized
 branch_s_status: review_reportable_with_limitations
-report_status: branch_b_v2_pass2_correction_integrated_development_only
+report_status: branch_b_v2_lowres_context_not_report_promotion
 
 ## Current Evidence Files
 
@@ -51,7 +51,9 @@ report_status: branch_b_v2_pass2_correction_integrated_development_only
 - `docs/reports/branch_b_v2_report_layer_filter_2026-06-21.md`
 - `docs/reports/branch_b_v2_g1_g8_validation_2026-06-21.md`
 - `docs/reports/branch_b_v2_pass2_correction_2026-06-21.md`
+- `docs/reports/branch_b_v2_lowres_ref_evidence_2026-06-21.md`
 - `docs/reports/branch_b_v2_report_event_audit_2026-06-21.md`
+- `docs/handoff/2026-06-21_2253_branch_b_v2_lowres_ref_evidence_handoff.md`
 - `docs/handoff/2026-06-21_2123_branch_b_v2_pass2_correction_handoff.md`
 - `docs/handoff/2026-06-21_2049_branch_b_v2_report_burden_pass2_handoff.md`
 - `docs/handoff/2026-06-21_1810_g1_g8_current_scheme_validation_handoff.md`
@@ -384,6 +386,23 @@ Y, H, G, and 2026-06-15. Corrected materialized counts:
   sample burden flags=5.
 
 Further rules must inspect candidate-level evidence, not sample report count.
+
+The 2Mb/3Mb low-resolution and ref-MAD evidence interface is now implemented
+as an optional Branch B V2 auxiliary context layer. It is disabled by default.
+When enabled, it computes:
+
+- per-candidate 2Mb/3Mb same-direction support labels;
+- per-bin reference median/MAD/CV/MAD-z stability context from configured
+  reference NPZs;
+- per-event ref-MAD summaries;
+- V2 classifier context fields `v2_lowres_context_label`,
+  `v2_lowres_context_reason`, and `v2_ref_stability_context`.
+
+This interface does not change Branch A, does not replace WisecondorX/CBS, does
+not create B-only events, and does not let low-resolution absence change
+report/filter class by itself. It has not yet built or materialized
+`h_r0_shadow_ref_20260619_2mb` or `h_r0_shadow_ref_20260619_3mb`; those remain
+the next long-task gate.
 
 ### Branch S
 

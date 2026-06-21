@@ -99,17 +99,27 @@ Immediate execution order:
    remains preserved with FN=0; H6 chr21 and G2 truth remain visible; sample
    report burden is now audit-only in summary/report outputs.
 20. The next burden-reduction design must begin with candidate-level evidence
-   audit. Do not use truth labels, sample report counts, or 2026-06-15 burden
-   counts to reverse-engineer demotion/filtering rules.
+    audit. Do not use truth labels, sample report counts, or 2026-06-15 burden
+    counts to reverse-engineer demotion/filtering rules.
 21. Any future demotion/suppression rule must be ablated against Y1-Y8/H1-H6
-   and G1-G8, explicitly retain H6 chr21 and G1-G8 locked truth, and keep
-   H7-H16/0615 as context unless locked truth labels are added.
-22. Upgrade Branch S toward `review_reportable_with_limitations`: visible
-   SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
-   explicit uncertainty, and no final SCA promotion without locked truth.
-23. Generate the next P6/report package from workflow outputs after fixed Branch
-   A/B/S contracts are represented. The report should expose evidence levels and
-   limitations rather than silently treating unknown evidence as benign.
+    and G1-G8, explicitly retain H6 chr21 and G1-G8 locked truth, and keep
+    H7-H16/0615 as context unless locked truth labels are added.
+22. The next candidate-level evidence audit can use the newly implemented
+    low-resolution/ref-MAD interface as auxiliary context only. First build
+    named 2Mb/3Mb shadow refs and rerun low-res WisecondorX predict for
+    Y1-Y8, H1-H16, G1-G8, and 2026-06-15 as a separate long-task gate. Do not
+    use low-resolution absence as a standalone filter; H6 chr21-like short weak
+    positives must remain at least internal review.
+23. Use ref-MAD stability to interpret whether a candidate region is unstable
+    in the reference itself before treating low-res absence as meaningful.
+    High-MAD regions should weaken negative low-res evidence, not strengthen
+    filtering.
+24. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
+    explicit uncertainty, and no final SCA promotion without locked truth.
+25. Generate the next P6/report package from workflow outputs after fixed Branch
+    A/B/S contracts are represented. The report should expose evidence levels and
+    limitations rather than silently treating unknown evidence as benign.
 
 ## 2026-06-21 Current Gate Override
 
