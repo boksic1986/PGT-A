@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_1454_branch_b_v2_truth_safe_filter_handoff.md`
+2. `docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,15 +23,15 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_1614_branch_b_v2_report_contract_handoff.md
-previous_handoff: docs/handoff/2026-06-21_1527_branch_b_v2_burden_stratification_handoff.md
+active_handoff: docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md
+previous_handoff: docs/handoff/2026-06-21_1614_branch_b_v2_report_contract_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_burden_display_report_contract_integrated
+branch_b_status: v2_report_layer_filter_materialized_development_only
 branch_s_status: review_reportable_with_limitations
-report_status: branch_b_v2_burden_display_contract_integrated_development_only
+report_status: branch_b_v2_report_layer_filter_integrated_development_only
 
 ## Current Evidence Files
 
@@ -48,7 +48,8 @@ report_status: branch_b_v2_burden_display_contract_integrated_development_only
 - `docs/reports/branch_b_v2_truth_safe_filter_2026-06-21.md`
 - `docs/reports/branch_b_v2_burden_stratification_2026-06-21.md`
 - `docs/reports/branch_b_v2_report_contract_2026-06-21.md`
-- `docs/handoff/2026-06-21_1614_branch_b_v2_report_contract_handoff.md`
+- `docs/reports/branch_b_v2_report_layer_filter_2026-06-21.md`
+- `docs/handoff/2026-06-21_1730_branch_b_v2_report_layer_filter_handoff.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
 - `docs/reports/p6_report_package_contract_2026-06-20.md`

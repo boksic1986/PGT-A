@@ -260,6 +260,10 @@ def load_branch_b_v2_burden_summaries(sample_summary_path="", benchmark_summary_
             "branch_b_v2_branch_s_review_count": 0,
             "branch_b_v2_technical_risk_review_count": 0,
             "branch_b_v2_report_candidate_count": 0,
+            "branch_b_v2_report_event_count": 0,
+            "branch_b_v2_internal_review_event_count": 0,
+            "branch_b_v2_filtered_event_count": 0,
+            "branch_b_v2_branch_s_event_count": 0,
             "branch_b_v2_legacy_fields_used": False,
             "branch_b_v2_final_impact": "development_review_only",
             "branch_b_v2_same_reference_config_status": "not_configured",
@@ -280,6 +284,10 @@ def load_branch_b_v2_burden_summaries(sample_summary_path="", benchmark_summary_
         "branch_b_v2_branch_s_review_count": int(summary.get("v2_branch_s_review_burden_count", 0) or 0),
         "branch_b_v2_technical_risk_review_count": int(summary.get("v2_technical_risk_burden_count", 0) or 0),
         "branch_b_v2_report_candidate_count": int(summary.get("v2_report_candidate_burden_count", 0) or 0),
+        "branch_b_v2_report_event_count": int(summary.get("v2_report_event_count", 0) or 0),
+        "branch_b_v2_internal_review_event_count": int(summary.get("v2_internal_review_event_count", 0) or 0),
+        "branch_b_v2_filtered_event_count": int(summary.get("v2_filtered_event_count", 0) or 0),
+        "branch_b_v2_branch_s_event_count": int(summary.get("v2_branch_s_event_count", 0) or 0),
         "branch_b_v2_legacy_fields_used": legacy_used,
         "branch_b_v2_final_impact": "development_review_only",
         "branch_b_v2_same_reference_config_status": same_reference_status,
@@ -311,6 +319,10 @@ def load_branch_b_v2_burden_summaries(sample_summary_path="", benchmark_summary_
                 "branch_b_v2_technical_risk_review_count": int(row.get("v2_technical_risk_burden_count", 0) or 0),
                 "branch_b_v2_report_candidate_count": int(row.get("v2_report_candidate_burden_count", 0) or 0),
                 "branch_b_v2_review_candidate_count": int(row.get("v2_review_candidate_burden_count", 0) or 0),
+                "branch_b_v2_report_event_count": int(row.get("v2_report_event_count", 0) or 0),
+                "branch_b_v2_internal_review_event_count": int(row.get("v2_internal_review_event_count", 0) or 0),
+                "branch_b_v2_filtered_event_count": int(row.get("v2_filtered_event_count", 0) or 0),
+                "branch_b_v2_branch_s_event_count": int(row.get("v2_branch_s_event_count", 0) or 0),
                 "branch_b_v2_legacy_fields_used": legacy_used,
                 "branch_b_v2_final_impact": "development_review_only",
                 "branch_b_v2_same_reference_config_status": same_reference_status,
@@ -488,6 +500,10 @@ def format_branch_b_v2_burden_status(row):
         f"branch_s_review={int(row.get('branch_b_v2_branch_s_review_count', 0) or 0)}; "
         f"technical_risk_review={int(row.get('branch_b_v2_technical_risk_review_count', 0) or 0)}; "
         f"report_candidate={int(row.get('branch_b_v2_report_candidate_count', 0) or 0)}; "
+        f"report_event={int(row.get('branch_b_v2_report_event_count', 0) or 0)}; "
+        f"internal_review_event={int(row.get('branch_b_v2_internal_review_event_count', 0) or 0)}; "
+        f"filtered_event={int(row.get('branch_b_v2_filtered_event_count', 0) or 0)}; "
+        f"branch_s_event={int(row.get('branch_b_v2_branch_s_event_count', 0) or 0)}; "
         f"impact={text_or_empty(row.get('branch_b_v2_final_impact', 'development_review_only')) or 'development_review_only'}"
     )
 
@@ -671,8 +687,8 @@ def format_technical_conclusion(row):
     a_branch_strong_count = int(row.get("a_branch_strong_signal_count", 0) or 0)
     a_branch_shortlist = text_or_empty(row.get("a_branch_review_shortlist", "")) or "none"
     parts = [
-        f"Branch B kept {int(row['branch_b_kept_events'])} events",
-        f"top event: {top_event}",
+        f"Legacy/current-code Branch B kept {int(row['branch_b_kept_events'])} events",
+        f"legacy top event: {top_event}",
         f"fraction={top_fraction}",
         f"flags={top_flags}",
         f"downgrade={top_downgrade}",
@@ -702,6 +718,10 @@ def format_technical_conclusion(row):
                 f"Bv2_branch_s_review={int(row.get('branch_b_v2_branch_s_review_count', 0) or 0)}",
                 f"Bv2_technical_risk_review={int(row.get('branch_b_v2_technical_risk_review_count', 0) or 0)}",
                 f"Bv2_report_candidate={int(row.get('branch_b_v2_report_candidate_count', 0) or 0)}",
+                f"Bv2_report_event={int(row.get('branch_b_v2_report_event_count', 0) or 0)}",
+                f"Bv2_internal_review_event={int(row.get('branch_b_v2_internal_review_event_count', 0) or 0)}",
+                f"Bv2_filtered_event={int(row.get('branch_b_v2_filtered_event_count', 0) or 0)}",
+                f"Bv2_branch_s_event={int(row.get('branch_b_v2_branch_s_event_count', 0) or 0)}",
                 f"Bv2_final_impact={text_or_empty(row.get('branch_b_v2_final_impact', 'development_review_only')) or 'development_review_only'}",
                 f"Bv2_legacy_fields_used={bool(row.get('branch_b_v2_legacy_fields_used', False))}",
             ]
@@ -722,6 +742,31 @@ def format_technical_conclusion(row):
 
 
 def format_biological_candidate_conclusion(row):
+    v2_status = text_or_empty(row.get("branch_b_v2_burden_status", ""))
+    if v2_status and v2_status != "not_configured":
+        report_count = int(row.get("branch_b_v2_report_event_count", 0) or 0)
+        internal_count = int(row.get("branch_b_v2_internal_review_event_count", 0) or 0)
+        filtered_count = int(row.get("branch_b_v2_filtered_event_count", 0) or 0)
+        branch_s_count = int(row.get("branch_b_v2_branch_s_event_count", 0) or 0)
+        impact = text_or_empty(row.get("branch_b_v2_final_impact", "development_review_only")) or "development_review_only"
+        if report_count > 0:
+            return (
+                "Branch B V2 report-layer: "
+                f"report_events={report_count}; "
+                f"internal_review_events={internal_count}; "
+                f"filtered_events={filtered_count}; "
+                f"branch_s_events={branch_s_count}; "
+                f"impact={impact}"
+            )
+        if internal_count > 0 or filtered_count > 0 or branch_s_count > 0:
+            return (
+                "No Branch B V2 report-layer autosomal CNV event; "
+                f"internal_review_events={internal_count}; "
+                f"filtered_events={filtered_count}; "
+                f"branch_s_events={branch_s_count}; "
+                f"impact={impact}"
+            )
+
     branch_b_top_event = text_or_empty(row.get("branch_b_top_event", ""))
     if branch_b_top_event:
         return branch_b_top_event
@@ -860,11 +905,15 @@ def main():
         f"- Branch B V2 Branch S review burden: `{report_contract['branch_b_v2_branch_s_review_count']}`",
         f"- Branch B V2 technical-risk review burden: `{report_contract['branch_b_v2_technical_risk_review_count']}`",
         f"- Branch B V2 report-candidate burden: `{report_contract['branch_b_v2_report_candidate_count']}`",
+        f"- Branch B V2 final report events: `{report_contract['branch_b_v2_report_event_count']}`",
+        f"- Branch B V2 internal review events: `{report_contract['branch_b_v2_internal_review_event_count']}`",
+        f"- Branch B V2 filtered events: `{report_contract['branch_b_v2_filtered_event_count']}`",
+        f"- Branch B V2 Branch S events: `{report_contract['branch_b_v2_branch_s_event_count']}`",
         "- Branch B V2 limitation: `development_review_only display; not FP-reduction proof; not final promotion`",
         "",
         "## Sample Table",
         "",
-        "| Sample | QC | Sex | Plot | Branch B Top Event | P3 Evidence | Branch B V2 Burden | SCA Status | Technical Conclusion | Biological Candidate Conclusion |",
+        "| Sample | QC | Sex | Plot | Legacy Branch B Top Event | P3 Evidence | Branch B V2 Burden | SCA Status | Technical Conclusion | Biological Candidate Conclusion |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     if fraction_benchmark:
@@ -930,8 +979,12 @@ def main():
         "</head><body><h1>CNV Report</h1>"
         f"<p>Samples: {sample_df['sample_id'].nunique()} | Branch B kept events: {int(sample_df['branch_b_kept_events'].sum())} | "
         f"Report release status: {html_lib.escape(report_contract['status'])}</p>"
+        f"<p>Branch B V2 report-layer events: report={int(report_contract['branch_b_v2_report_event_count'])}; "
+        f"internal_review={int(report_contract['branch_b_v2_internal_review_event_count'])}; "
+        f"filtered={int(report_contract['branch_b_v2_filtered_event_count'])}; "
+        f"branch_s={int(report_contract['branch_b_v2_branch_s_event_count'])}</p>"
         "<p>Branch B V2 burden display is development_review_only evidence; it is not FP-reduction proof and is not final promotion.</p>"
-        "<table><thead><tr><th>Sample</th><th>QC</th><th>Sex</th><th>Plot</th><th>Branch B Top Event</th>"
+        "<table><thead><tr><th>Sample</th><th>QC</th><th>Sex</th><th>Plot</th><th>Legacy Branch B Top Event</th>"
         "<th>P3 Evidence</th><th>Branch B V2 Burden</th><th>SCA Status</th><th>Technical Conclusion</th><th>Biological Candidate Conclusion</th></tr></thead><tbody>"
         + "".join(html_rows)
         + "</tbody></table></body></html>"

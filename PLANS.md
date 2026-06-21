@@ -82,16 +82,20 @@ Immediate execution order:
    `development_review_only` evidence without changing Branch A, adding hard
    filters, using legacy/current-code Branch B decision fields, or promoting
    Branch B V2 / Branch S.
-16. The next gate is review of the materialized report contract and then
-   cautious burden-display refinement only if it preserves Y1-Y8/H1-H6 truth,
-   H6 chr21 visibility, and 0615 context-only handling.
-17. Any future demotion/suppression rule must be ablated against Y1-Y8/H1-H6,
+16. Branch B V2 report-layer filtering is now materialized. It splits Branch A
+   gap2m candidates into `report_event`, `internal_review_event`,
+   `filtered_event`, and `branch_s_event`; `filtered_event` rows are audit-only.
+   Current locked truth remains preserved with FN=0 and H6 chr21 retained.
+17. The next gate is review of the V2 `report_event` rows and a second
+   truth-safe demotion pass that can reduce high report-event burden without
+   using 2026-06-15 as truth or reintroducing legacy/current-code Branch B.
+18. Any future demotion/suppression rule must be ablated against Y1-Y8/H1-H6,
    explicitly retain H6 chr21, and keep H7-H16/0615 as context unless locked
    truth labels are added.
-18. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+19. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-19. Generate the next P6/report package from workflow outputs after fixed Branch
+20. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 

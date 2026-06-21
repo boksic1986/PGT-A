@@ -43,6 +43,10 @@ TRUTH_METRIC_COLUMNS = [
     "top_v2_burden_reduction_action",
     "top_v2_burden_reduction_reason",
     "top_v2_burden_evidence_tags",
+    "top_v2_report_layer_class",
+    "top_v2_report_visibility",
+    "top_v2_report_filter_reason",
+    "top_v2_report_filter_rule_tags",
     "top_attenuation_ratio",
 ]
 
@@ -64,6 +68,10 @@ SAMPLE_SUMMARY_COLUMNS = [
     "v2_background_unknown_review_burden_count",
     "v2_technical_risk_burden_count",
     "v2_branch_s_review_burden_count",
+    "v2_report_event_count",
+    "v2_internal_review_event_count",
+    "v2_filtered_event_count",
+    "v2_branch_s_event_count",
 ]
 
 
@@ -77,6 +85,8 @@ def parse_args():
     parser.add_argument("--reference-id", default="UNKNOWN_REFERENCE")
     parser.add_argument("--output-truth-metrics", required=True)
     parser.add_argument("--output-sample-summary", required=True)
+    parser.add_argument("--output-filtered-events", default="")
+    parser.add_argument("--output-filtered-events-json", default="")
     parser.add_argument("--output-summary", required=True)
     return parser.parse_args()
 
@@ -171,6 +181,14 @@ def hard_suppression_mask(frame: pd.DataFrame) -> pd.Series:
     )
 
 
+def report_layer_filtered_mask(frame: pd.DataFrame) -> pd.Series:
+    if frame.empty:
+        return pd.Series(False, index=frame.index, dtype=bool)
+    report_class = frame.get("v2_report_layer_class", pd.Series("", index=frame.index)).fillna("").astype(str)
+    visibility = frame.get("v2_report_visibility", pd.Series("", index=frame.index)).fillna("").astype(str)
+    return report_class.eq("filtered_event") | visibility.eq("audit_only")
+
+
 def positive_support_mask(frame: pd.DataFrame) -> pd.Series:
     if frame.empty:
         return pd.Series(False, index=frame.index, dtype=bool)
@@ -222,6 +240,16 @@ def _value_counts(frame: pd.DataFrame, column: str) -> dict[str, int]:
     return {str(key): int(value) for key, value in counts.items()}
 
 
+def _rule_tag_counts(frame: pd.DataFrame, column: str) -> dict[str, int]:
+    if frame.empty or column not in frame.columns:
+        return {}
+    counts: dict[str, int] = {}
+    for tag_text in frame[column].fillna("").astype(str):
+        for tag in [part.strip() for part in tag_text.split(";") if part.strip()]:
+            counts[tag] = counts.get(tag, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def build_v2_benchmark(
     classification_paths: list[str],
     truth_tsv: str,
@@ -230,6 +258,8 @@ def build_v2_benchmark(
     output_truth_metrics: str,
     output_sample_summary: str,
     output_summary: str,
+    output_filtered_events: str = "",
+    output_filtered_events_json: str = "",
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]:
     inferred_samples = [_sample_from_classification_path(path) for path in classification_paths]
     ordered_samples = list(dict.fromkeys([str(sample) for sample in sample_ids if str(sample)] + inferred_samples))
@@ -239,7 +269,9 @@ def build_v2_benchmark(
     truth_rows = []
     for truth_index, row in truth.iterrows():
         matches = _candidate_matches_truth(classifications, row)
-        preserved = matches.loc[~hard_suppression_mask(matches)].copy()
+        hard_suppressed = hard_suppression_mask(matches)
+        report_layer_filtered = report_layer_filtered_mask(matches)
+        preserved = matches.loc[~hard_suppressed & ~report_layer_filtered].copy()
         top = preserved.sort_values("a_abs_zscore", ascending=False).iloc[0] if not preserved.empty else None
         truth_rows.append(
             {
@@ -253,7 +285,7 @@ def build_v2_benchmark(
                 "v2_preserved_count": int(len(preserved)),
                 "v2_positive_support_count": int(positive_support_mask(matches).sum()) if not matches.empty else 0,
                 "v2_background_informative_count": int(background_informative_mask(matches).sum()) if not matches.empty else 0,
-                "v2_hard_suppressed_count": int(hard_suppression_mask(matches).sum()) if not matches.empty else 0,
+                "v2_hard_suppressed_count": int(hard_suppressed.sum()) if not matches.empty else 0,
                 "top_candidate_id": "" if top is None else str(top.get("candidate_id", "")),
                 "top_a_abs_zscore": math.nan if top is None else top.get("a_abs_zscore", math.nan),
                 "top_v2_candidate_class": "" if top is None else str(top.get("v2_candidate_class", "")),
@@ -269,6 +301,10 @@ def build_v2_benchmark(
                 "top_v2_burden_reduction_action": "" if top is None else str(top.get("v2_burden_reduction_action", "")),
                 "top_v2_burden_reduction_reason": "" if top is None else str(top.get("v2_burden_reduction_reason", "")),
                 "top_v2_burden_evidence_tags": "" if top is None else str(top.get("v2_burden_evidence_tags", "")),
+                "top_v2_report_layer_class": "" if top is None else str(top.get("v2_report_layer_class", "")),
+                "top_v2_report_visibility": "" if top is None else str(top.get("v2_report_visibility", "")),
+                "top_v2_report_filter_reason": "" if top is None else str(top.get("v2_report_filter_reason", "")),
+                "top_v2_report_filter_rule_tags": "" if top is None else str(top.get("v2_report_filter_rule_tags", "")),
                 "top_attenuation_ratio": math.nan if top is None else top.get("attenuation_ratio", math.nan),
             }
         )
@@ -309,6 +345,12 @@ def build_v2_benchmark(
                 "v2_branch_s_review_burden_count": _count_equals(
                     sample_class, "v2_burden_reduction_tier", "branch_s_review"
                 ),
+                "v2_report_event_count": _count_equals(sample_class, "v2_report_layer_class", "report_event"),
+                "v2_internal_review_event_count": _count_equals(
+                    sample_class, "v2_report_layer_class", "internal_review_event"
+                ),
+                "v2_filtered_event_count": _count_equals(sample_class, "v2_report_layer_class", "filtered_event"),
+                "v2_branch_s_event_count": _count_equals(sample_class, "v2_report_layer_class", "branch_s_event"),
             }
         )
     sample_summary = pd.DataFrame(sample_rows, columns=SAMPLE_SUMMARY_COLUMNS)
@@ -324,6 +366,7 @@ def build_v2_benchmark(
         "FN_count": max(truth_event_count - truth_preserved_count, 0),
         "truth_recall_by_v2_preservation": (truth_preserved_count / truth_event_count if truth_event_count else None),
         "truth_hard_suppressed_count": int(truth_metrics["v2_hard_suppressed_count"].sum()) if not truth_metrics.empty else 0,
+        "truth_report_layer_filtered_count": 0,
         "v2_positive_support_candidate_count": int(sample_summary["v2_positive_support_count"].sum()) if not sample_summary.empty else 0,
         "v2_filter_suppressed_candidate_count": int(sample_summary["v2_filter_suppressed_count"].sum()) if not sample_summary.empty else 0,
         "v2_report_candidate_burden_count": int(sample_summary["v2_report_candidate_burden_count"].sum()) if not sample_summary.empty else 0,
@@ -331,6 +374,10 @@ def build_v2_benchmark(
         "v2_background_unknown_review_burden_count": int(sample_summary["v2_background_unknown_review_burden_count"].sum()) if not sample_summary.empty else 0,
         "v2_technical_risk_burden_count": int(sample_summary["v2_technical_risk_burden_count"].sum()) if not sample_summary.empty else 0,
         "v2_branch_s_review_burden_count": int(sample_summary["v2_branch_s_review_burden_count"].sum()) if not sample_summary.empty else 0,
+        "v2_report_event_count": int(sample_summary["v2_report_event_count"].sum()) if not sample_summary.empty else 0,
+        "v2_internal_review_event_count": int(sample_summary["v2_internal_review_event_count"].sum()) if not sample_summary.empty else 0,
+        "v2_filtered_event_count": int(sample_summary["v2_filtered_event_count"].sum()) if not sample_summary.empty else 0,
+        "v2_branch_s_event_count": int(sample_summary["v2_branch_s_event_count"].sum()) if not sample_summary.empty else 0,
         "burden_stratification_fields": [
             "v2_filter_action",
             "v2_disposition",
@@ -340,6 +387,8 @@ def build_v2_benchmark(
             "v2_gc_rc_context_label",
             "v2_burden_reduction_tier",
             "v2_burden_reduction_action",
+            "v2_report_layer_class",
+            "v2_report_visibility",
         ],
         "burden_stratification_counts": {
             "v2_filter_action": _value_counts(classifications, "v2_filter_action"),
@@ -350,6 +399,8 @@ def build_v2_benchmark(
             "v2_gc_rc_context_label": _value_counts(classifications, "v2_gc_rc_context_label"),
             "v2_burden_reduction_tier": _value_counts(classifications, "v2_burden_reduction_tier"),
             "v2_burden_reduction_action": _value_counts(classifications, "v2_burden_reduction_action"),
+            "v2_report_layer_class": _value_counts(classifications, "v2_report_layer_class"),
+            "v2_report_visibility": _value_counts(classifications, "v2_report_visibility"),
         },
         "legacy_branch_b_decision_fields_used": False,
         "ignored_legacy_decision_fields": [
@@ -361,14 +412,40 @@ def build_v2_benchmark(
         "final_report_impact": "none_shadow_only",
         "benchmark_scope": "v2_classifier_rows_only",
     }
+    if not truth_metrics.empty:
+        filtered_truth = 0
+        for _, row in truth.iterrows():
+            matches = _candidate_matches_truth(classifications, row)
+            filtered_truth += int(report_layer_filtered_mask(matches).sum()) if not matches.empty else 0
+        summary["truth_report_layer_filtered_count"] = int(filtered_truth)
+    else:
+        summary["truth_report_layer_filtered_count"] = 0
+
+    filtered_classifications = classifications.loc[report_layer_filtered_mask(classifications)].copy()
+    filtered_payload = {
+        "filtered_event_count": int(len(filtered_classifications)),
+        "filtered_event_rule_counts": _rule_tag_counts(filtered_classifications, "v2_report_filter_rule_tags"),
+        "filtered_event_ids": (
+            filtered_classifications.get("candidate_id", pd.Series([], dtype=object)).fillna("").astype(str).tolist()
+            if not filtered_classifications.empty
+            else []
+        ),
+    }
 
     for path_value, frame in [
         (output_truth_metrics, truth_metrics),
         (output_sample_summary, sample_summary),
+        (output_filtered_events, filtered_classifications),
     ]:
+        if not path_value:
+            continue
         path = Path(path_value)
         path.parent.mkdir(parents=True, exist_ok=True)
         frame.to_csv(path, sep="\t", index=False)
+    if output_filtered_events_json:
+        path = Path(output_filtered_events_json)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(filtered_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     summary_path = Path(output_summary)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -385,6 +462,8 @@ def main():
         output_truth_metrics=args.output_truth_metrics,
         output_sample_summary=args.output_sample_summary,
         output_summary=args.output_summary,
+        output_filtered_events=args.output_filtered_events,
+        output_filtered_events_json=args.output_filtered_events_json,
     )
     return 0
 
