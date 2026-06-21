@@ -33,6 +33,12 @@ TRUTH_METRIC_COLUMNS = [
     "top_v2_candidate_class",
     "top_v2_evidence_tier",
     "top_v2_classifier_action",
+    "top_v2_disposition",
+    "top_v2_length_tier",
+    "top_v2_clean_support_label",
+    "top_v2_gc_rc_context_label",
+    "top_v2_b_signal_context_label",
+    "top_attenuation_ratio",
 ]
 
 
@@ -227,6 +233,12 @@ def build_v2_benchmark(
                 "top_v2_candidate_class": "" if top is None else str(top.get("v2_candidate_class", "")),
                 "top_v2_evidence_tier": "" if top is None else str(top.get("v2_evidence_tier", "")),
                 "top_v2_classifier_action": "" if top is None else str(top.get("v2_classifier_action", "")),
+                "top_v2_disposition": "" if top is None else str(top.get("v2_disposition", "")),
+                "top_v2_length_tier": "" if top is None else str(top.get("v2_length_tier", "")),
+                "top_v2_clean_support_label": "" if top is None else str(top.get("v2_clean_support_label", "")),
+                "top_v2_gc_rc_context_label": "" if top is None else str(top.get("v2_gc_rc_context_label", "")),
+                "top_v2_b_signal_context_label": "" if top is None else str(top.get("v2_b_signal_context_label", "")),
+                "top_attenuation_ratio": math.nan if top is None else top.get("attenuation_ratio", math.nan),
             }
         )
     truth_metrics = pd.DataFrame(truth_rows, columns=TRUTH_METRIC_COLUMNS)

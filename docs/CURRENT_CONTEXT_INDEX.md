@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_1103_branch_b_v2_background_context_label_handoff.md`
+2. `docs/handoff/2026-06-21_1415_branch_b_v2_method_reset_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,12 +23,12 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_1103_branch_b_v2_background_context_label_handoff.md
+active_handoff: docs/handoff/2026-06-21_1415_branch_b_v2_method_reset_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_gap2m_background_context_review_label_materialized_truth_preserved
+branch_b_status: v2_gap2m_method_reset_disposition_materialized_truth_preserved
 branch_s_status: review_reportable_with_limitations
 report_status: final_delivery_target_after_a_b_strengthening
 
@@ -43,6 +43,7 @@ report_status: final_delivery_target_after_a_b_strengthening
 - `docs/reports/branch_b_v2_autosomal_burden_audit_2026-06-21.md`
 - `docs/reports/branch_b_v2_direction_support_label_2026-06-21.md`
 - `docs/reports/branch_b_v2_background_context_label_2026-06-21.md`
+- `docs/reports/branch_b_v2_method_reset_threshold_inventory_2026-06-21.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
 - `docs/reports/p6_report_package_contract_2026-06-20.md`
@@ -190,6 +191,40 @@ H6 chr21 remains `V2_POSITIVE_SUPPORT_REVIEW`,
 `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT`, `B_DIRECTION_SUPPORTED`,
 `none_shadow_only`.
 
+The Branch B V2 method reset loop has now materialized a safer interpretation
+of those labels. Branch B V2 is Branch-A-anchored evidence stratification, not
+legacy/current-code Branch B filtering. The classifier now emits:
+
+- `v2_signal_strength_tier`;
+- `v2_length_tier`;
+- `v2_clean_support_label`;
+- `v2_gc_rc_context_label`;
+- `v2_b_signal_context_label`;
+- `v2_b_signal_context_reason`;
+- `v2_disposition`.
+
+The old direction-conflict wording is replaced by B-side signal-context
+wording. `B_SIGNAL_DISCORDANT_WITH_A_DIRECTION` means auxiliary B-side signal is
+discordant with Branch A direction; it does not mean Branch B called an
+opposite CNV event. GC/RC context remains auxiliary and cannot hard-suppress a
+Branch A positive.
+
+Materialized method-reset preservation result:
+
+- Y1-Y8: candidates 97; truth preserved 10/10; FN=0; hard-suppressed truth=0.
+- H1-H16: candidates 105; truth preserved 10/10; FN=0; hard-suppressed
+  truth=0; H6 chr21 retained.
+- 2026-06-15: candidates 165; no locked truth; status `skipped_no_truth`.
+
+Materialized disposition counts:
+
+- Y1-Y8: `background_unknown_review=84`, `sca_branch_s_review=13`.
+- H1-H16: `background_unknown_review=63`, `sca_branch_s_review=42`.
+- 2026-06-15: `background_unknown_review=151`, `sca_branch_s_review=14`.
+
+This improves interpretability and truth-safety. It does not prove FP/review
+burden is solved and does not promote Branch B V2 to final-report logic.
+
 ### Branch S
 
 Branch S is not final SCA, but it must not be omitted from report development.
@@ -241,7 +276,9 @@ A, Branch B, Branch S, background source, and limitations explicitly.
    into a hard filter, final benign/artifact call, or universal demotion.
 6. Background context is now materialized as a review label only; do not treat
    `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT` as benign or background-compatible.
-7. Upgrade Branch S toward review-reportable output with controlled negative/ref
+7. B-side signal context and length tiers are review/disposition context only;
+   do not convert them into hard filters without a locked-truth ablation.
+8. Upgrade Branch S toward review-reportable output with controlled negative/ref
    FP burden; final SCA promotion remains a separate truth gate.
-8. Generate the next P6/report package only after the fixed A/B/S contracts are
+9. Generate the next P6/report package only after the fixed A/B/S contracts are
    represented in workflow outputs.

@@ -53,13 +53,21 @@ Immediate execution order:
    `v2_background_context_reason`, and `background_context_label_counts`.
    These fields are review context only and must not be interpreted as benign,
    background-compatible, or final-reportable evidence.
-10. The next Branch B V2 refinement should use these explicit background
-   context labels to design truth-safe burden stratification. Do not convert
-   background context or direction support into a hard filter.
-11. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+10. Branch B V2 method reset is now materialized. The active V2 interpretation
+   is Branch-A-anchored evidence stratification, not legacy/current-code Branch
+   B filtering. The classifier now emits signal-strength, length, clean-support,
+   GC/RC context, B-side signal context, and conservative V2 disposition fields.
+11. Current first-round dispositions are `background_unknown_review` and
+   `sca_branch_s_review` in the materialized cohorts. This preserves truth but
+   does not yet reduce FP/review burden enough for final report promotion.
+12. The next Branch B V2 refinement should use the new disposition/context
+   fields to design truth-safe burden stratification. Do not convert background
+   context, B-side signal context, or length tier into a hard filter without a
+   locked-truth ablation.
+13. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-12. Generate the next P6/report package from workflow outputs after fixed Branch
+14. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 
@@ -111,10 +119,18 @@ Minimum next implementation plan:
 - Do not treat `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT` as benign. It now appears
   as explicit V2 review context and marks missing matched-negative plus missing
   calibration-null support.
+- Do not treat `B_SIGNAL_DISCORDANT_WITH_A_DIRECTION` as Branch B calling an
+  opposite event. It is a B-side auxiliary signal discordance review label only.
+- Use the new V2 disposition fields as review/report-support context:
+  `background_unknown_review`, `sca_branch_s_review`, `technical_risk_review`,
+  `review_candidate`, and `report_candidate`. In current materialized cohorts,
+  only `background_unknown_review` and `sca_branch_s_review` are present.
 - Continue excluding `final_disposition`, `branch_b_keep_event`, legacy artifact
   status, and legacy kept counts from V2 decision and metric computation.
 - Refine Branch B V2 evidence/disposition so it can reduce FP/review burden
-  without hard suppression of truth-overlap candidates.
+  without hard suppression of truth-overlap candidates. Any future reduction
+  rule needs a locked Y1-Y8/H1-H6 truth-safe ablation and explicit H6 chr21
+  preservation.
 - Keep H7-H16 and 0615 as burden/context only unless locked truth labels are
   added.
 

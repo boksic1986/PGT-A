@@ -31,6 +31,10 @@ def test_v2_benchmark_preserves_truth_overlap_without_legacy_fields(tmp_path: Pa
                 "v2_classifier_action": "V2_REVIEW_POSITIVE_SUPPORT",
                 "v2_evidence_tier": "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT",
                 "v2_evidence_gate": "NO_HARD_SUPPRESSION",
+                "v2_disposition": "background_unknown_review",
+                "v2_length_tier": "reportable_candidate_ge2mb",
+                "v2_clean_support_label": "CLEAN_SUPPORT_AVAILABLE",
+                "attenuation_ratio": 0.42,
             }
         ]
     ).to_csv(classification, sep="\t", index=False)
@@ -61,6 +65,12 @@ def test_v2_benchmark_preserves_truth_overlap_without_legacy_fields(tmp_path: Pa
     assert payload["FN_count"] == 0
     assert payload["truth_hard_suppressed_count"] == 0
     assert payload["legacy_branch_b_decision_fields_used"] is False
+
+    truth_row = pd.read_csv(truth_metrics, sep="\t").iloc[0]
+    assert truth_row["top_v2_disposition"] == "background_unknown_review"
+    assert truth_row["top_v2_length_tier"] == "reportable_candidate_ge2mb"
+    assert truth_row["top_v2_clean_support_label"] == "CLEAN_SUPPORT_AVAILABLE"
+    assert truth_row["top_attenuation_ratio"] == 0.42
 
     written = json.loads(summary.read_text(encoding="utf-8"))
     assert written["ignored_legacy_decision_fields"] == [

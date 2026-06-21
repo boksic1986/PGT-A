@@ -326,7 +326,7 @@ def test_sex_chromosome_candidate_routes_to_branch_s_review_not_autosomal_positi
     assert row["v2_final_report_impact"] == "none_shadow_only"
 
 
-def test_direction_support_is_review_label_only_for_a_only_truth_like_positive():
+def test_b_side_weak_signal_is_review_label_only_for_a_anchored_truth_like_positive():
     frame = pd.DataFrame(
         [
             {
@@ -350,11 +350,12 @@ def test_direction_support_is_review_label_only_for_a_only_truth_like_positive()
     assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
     assert row["v2_classifier_action"] == "V2_REVIEW_POSITIVE_SUPPORT"
     assert row["v2_final_report_impact"] == "none_shadow_only"
-    assert row["v2_direction_support_label"] == "A_ONLY_WEAK_B_DIRECTION"
-    assert row["v2_direction_support_reason"] == "positive_support_without_branch_b_direction_support"
+    assert row["v2_direction_support_label"] == "A_ANCHORED_WEAK_B_SIGNAL"
+    assert row["v2_b_signal_context_label"] == "A_ANCHORED_WEAK_B_SIGNAL"
+    assert row["v2_b_signal_context_reason"] == "positive_support_without_branch_b_signal_support"
 
 
-def test_direction_support_label_marks_branch_b_supported_without_report_promotion():
+def test_b_side_signal_support_label_marks_branch_b_supported_without_report_promotion():
     frame = pd.DataFrame(
         [
             {
@@ -377,11 +378,15 @@ def test_direction_support_label_marks_branch_b_supported_without_report_promoti
 
     assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
     assert row["v2_final_report_impact"] == "none_shadow_only"
-    assert row["v2_direction_support_label"] == "B_DIRECTION_SUPPORTED"
-    assert row["v2_direction_support_reason"] == "same_direction_fraction_ge_0.50"
+    assert row["v2_direction_support_label"] == "B_SIGNAL_SUPPORTED_A_DIRECTION"
+    assert row["v2_b_signal_context_label"] == "B_SIGNAL_SUPPORTED_A_DIRECTION"
+    assert row["v2_b_signal_context_reason"] == "same_direction_fraction_ge_0.50"
+    assert row["v2_signal_strength_tier"] == "A_SENSITIVE_Z_5_TO_10"
+    assert row["v2_length_tier"] == "review_only_ge1mb"
+    assert row["v2_disposition"] == "background_unknown_review"
 
 
-def test_v2_summary_reports_direction_support_label_counts():
+def test_v2_summary_reports_b_signal_context_label_counts():
     classified = classify_branch_b_v2_candidates(
         pd.DataFrame(
             [
@@ -411,13 +416,16 @@ def test_v2_summary_reports_direction_support_label_counts():
 
     summary = summarize_v2_classification("mixed", classified)
 
-    assert summary["direction_support_label_counts"] == {
-        "A_ONLY_WEAK_B_DIRECTION": 1,
-        "B_DIRECTION_SUPPORTED": 1,
+    assert summary["b_signal_context_label_counts"] == {
+        "A_ANCHORED_WEAK_B_SIGNAL": 1,
+        "B_SIGNAL_SUPPORTED_A_DIRECTION": 1,
+    }
+    assert summary["disposition_counts"] == {
+        "background_unknown_review": 2,
     }
 
 
-def test_direction_conflict_label_takes_priority_over_fraction_support():
+def test_b_side_signal_discordance_is_review_context_not_no_call_contract_risk():
     frame = pd.DataFrame(
         [
             {
@@ -435,9 +443,47 @@ def test_direction_conflict_label_takes_priority_over_fraction_support():
 
     row = classify_branch_b_v2_candidates(frame).iloc[0]
 
-    assert row["v2_candidate_class"] == "V2_NO_CALL_CONTRACT_RISK"
-    assert row["v2_direction_support_label"] == "B_DIRECTION_CONFLICT"
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_classifier_action"] == "V2_REVIEW_POSITIVE_SUPPORT"
+    assert row["v2_direction_support_label"] == "B_SIGNAL_DISCORDANT_WITH_A_DIRECTION"
+    assert row["v2_b_signal_context_label"] == "B_SIGNAL_DISCORDANT_WITH_A_DIRECTION"
+    assert row["v2_b_signal_context_reason"] == "b_side_amplitude_opposite_a_direction_abs_ge_2"
+    assert row["v2_evidence_tier"] == "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT"
+    assert row["v2_disposition"] == "background_unknown_review"
     assert row["v2_final_report_impact"] == "none_shadow_only"
+
+
+def test_length_and_clean_support_tiers_do_not_hard_suppress_sensitive_positive():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "H6",
+                "candidate_id": "H6_chr21_gain",
+                "chrom": "chr21",
+                "start": 20_700_000,
+                "end": 22_300_000,
+                "state": "gain",
+                "a_abs_zscore": 7.11,
+                "clean_bin_fraction": 0.85,
+                "high_risk_bin_fraction": 0.05,
+                "attenuation_ratio": 0.42,
+                "same_direction_fraction": 0.92,
+                "corrected_amplitude": 0.40,
+                "raw_amplitude": 0.95,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_signal_strength_tier"] == "A_SENSITIVE_Z_5_TO_10"
+    assert row["v2_length_tier"] == "review_only_ge1mb"
+    assert row["v2_clean_support_label"] == "CLEAN_SUPPORT_AVAILABLE"
+    assert row["v2_gc_rc_context_label"] == "GC_RC_ATTENUATED_SEVERE"
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_disposition"] == "background_unknown_review"
 
 
 def test_unknown_background_no_null_support_is_explicit_review_context_not_filter():

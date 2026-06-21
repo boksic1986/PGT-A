@@ -18,10 +18,17 @@ V2_CLASSIFIER_COLUMNS = [
     "v2_evidence_tier",
     "v2_evidence_gate",
     "v2_review_priority",
+    "v2_signal_strength_tier",
+    "v2_length_tier",
+    "v2_clean_support_label",
+    "v2_gc_rc_context_label",
     "v2_background_context_label",
     "v2_background_context_reason",
     "v2_direction_support_label",
     "v2_direction_support_reason",
+    "v2_b_signal_context_label",
+    "v2_b_signal_context_reason",
+    "v2_disposition",
     "v2_final_report_impact",
 ]
 
@@ -104,23 +111,91 @@ def signed_signal_support(row):
 
 def branch_b_direction_support_label(row):
     if has_direction_conflict(row):
-        return "B_DIRECTION_CONFLICT", "amplitude_opposite_direction_abs_ge_2"
+        return "B_SIGNAL_DISCORDANT_WITH_A_DIRECTION", "b_side_amplitude_opposite_a_direction_abs_ge_2"
 
     same_direction = safe_float(row.get("same_direction_fraction", math.nan), default=math.nan)
     if math.isfinite(same_direction) and same_direction >= 0.50:
-        return "B_DIRECTION_SUPPORTED", "same_direction_fraction_ge_0.50"
+        return "B_SIGNAL_SUPPORTED_A_DIRECTION", "same_direction_fraction_ge_0.50"
 
     direction = state_direction(row.get("state", ""))
     if direction != 0.0:
         for column in ["corrected_amplitude", "raw_amplitude"]:
             value = safe_float(row.get(column, math.nan), default=math.nan)
             if math.isfinite(value) and abs(value) >= 2.0 and value * direction > 0.0:
-                return "B_DIRECTION_SUPPORTED", f"{column}_same_direction_abs_ge_2"
+                return "B_SIGNAL_SUPPORTED_A_DIRECTION", f"{column}_same_direction_abs_ge_2"
 
     if has_positive_branch_a_support(row):
-        return "A_ONLY_WEAK_B_DIRECTION", "positive_support_without_branch_b_direction_support"
+        return "A_ANCHORED_WEAK_B_SIGNAL", "positive_support_without_branch_b_signal_support"
 
-    return "NO_POSITIVE_SUPPORT", "no_positive_support_to_compare_direction"
+    return "NO_POSITIVE_A_SIGNAL", "no_positive_a_signal_to_compare_b_signal"
+
+
+def signal_strength_tier(row):
+    a_abs_zscore = safe_float(row.get("a_abs_zscore", math.nan), default=math.nan)
+    if not math.isfinite(a_abs_zscore):
+        return "A_Z_MISSING"
+    if a_abs_zscore >= 10.0:
+        return "A_STRONG_Z_GE_10"
+    if a_abs_zscore >= 5.0:
+        return "A_SENSITIVE_Z_5_TO_10"
+    return "A_WEAK_Z_LT_5"
+
+
+def event_length_bp(row):
+    start = safe_float(row.get("start", math.nan), default=math.nan)
+    end = safe_float(row.get("end", math.nan), default=math.nan)
+    if not math.isfinite(start) or not math.isfinite(end) or end <= start:
+        return math.nan
+    return float(end - start)
+
+
+def length_tier(row):
+    length = event_length_bp(row)
+    if not math.isfinite(length):
+        return "unknown_length"
+    if length >= 10_000_000:
+        return "large_ge10mb"
+    if length >= 4_000_000:
+        return "broad_review_ge4mb"
+    if length >= 2_000_000:
+        return "reportable_candidate_ge2mb"
+    if length >= 1_000_000:
+        return "review_only_ge1mb"
+    return "focal_high_risk_lt1mb"
+
+
+def clean_support_label(row):
+    if has_ref_contract_risk(row):
+        return "REF_CONTRACT_RISK"
+    clean_fraction = safe_float(row.get("clean_bin_fraction", math.nan), default=math.nan)
+    high_risk_fraction = safe_float(row.get("high_risk_bin_fraction", math.nan), default=math.nan)
+    hard_region_fraction = safe_float(row.get("hard_region_fraction", math.nan), default=math.nan)
+    if math.isfinite(clean_fraction):
+        if clean_fraction < 0.20 and math.isfinite(high_risk_fraction) and high_risk_fraction >= 0.50:
+            return "LOW_CLEAN_SUPPORT_HIGH_RISK"
+        if clean_fraction >= 0.50 and (not math.isfinite(high_risk_fraction) or high_risk_fraction <= 0.25):
+            return "CLEAN_SUPPORT_AVAILABLE"
+        return "CLEAN_SUPPORT_REVIEW"
+    if math.isfinite(hard_region_fraction):
+        if hard_region_fraction >= 0.50:
+            return "LOW_CLEAN_SUPPORT_HIGH_RISK"
+        if hard_region_fraction <= 0.25:
+            return "CLEAN_SUPPORT_AVAILABLE"
+        return "CLEAN_SUPPORT_REVIEW"
+    return "CLEAN_SUPPORT_UNKNOWN"
+
+
+def gc_rc_context_label(row):
+    attenuation = safe_float(row.get("attenuation_ratio", math.nan), default=math.nan)
+    if not math.isfinite(attenuation):
+        return "GC_RC_CONTEXT_UNKNOWN"
+    if attenuation < 0.50:
+        return "GC_RC_ATTENUATED_SEVERE"
+    if attenuation < 0.80:
+        return "GC_RC_ATTENUATED"
+    if attenuation <= 1.25:
+        return "GC_RC_STABLE"
+    return "GC_RC_AMPLIFIED"
 
 
 def background_context_label(row):
@@ -218,8 +293,6 @@ def classify_evidence_tier(row):
     if has_unknown_matched_negative_background(row):
         if has_ref_contract_risk(row):
             return "UNKNOWN_BACKGROUND_REF_CONTRACT_RISK", "NO_CALL_CONTRACT_RISK", "MEDIUM"
-        if has_direction_conflict(row):
-            return "UNKNOWN_BACKGROUND_DIRECTION_CONFLICT", "NO_CALL_CONTRACT_RISK", "MEDIUM"
         if positive_support:
             return "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT", "NO_HARD_SUPPRESSION", "HIGH"
         if technical_risk:
@@ -253,88 +326,122 @@ def classify_evidence_tier(row):
     return "NO_MATCHED_BACKGROUND_REVIEW", "NO_BACKGROUND_INPUT", "LOW"
 
 
-def classify_candidate_row(row):
-    tier, gate, priority = classify_evidence_tier(row)
-    direction_label, direction_reason = branch_b_direction_support_label(row)
-    background_label, background_reason = background_context_label(row)
-
-    if is_sex_chromosome_candidate(row):
-        return {
-            "v2_candidate_class": "V2_SEX_CHROMOSOME_REVIEW",
-            "v2_classifier_action": "V2_ROUTE_BRANCH_S_REVIEW",
-            "v2_classifier_reason": f"sex_chromosome_branch_s_review:{tier.lower()}",
-            "v2_evidence_tier": tier,
-            "v2_evidence_gate": gate,
-            "v2_review_priority": priority,
-            "v2_background_context_label": background_label,
-            "v2_background_context_reason": background_reason,
-            "v2_direction_support_label": direction_label,
-            "v2_direction_support_reason": direction_reason,
-        }
-    if tier.endswith("REF_CONTRACT_RISK") or tier.endswith("DIRECTION_CONFLICT"):
-        return {
-            "v2_candidate_class": "V2_NO_CALL_CONTRACT_RISK",
-            "v2_classifier_action": "V2_REVIEW_NO_HARD_SUPPRESSION",
-            "v2_classifier_reason": tier.lower(),
-            "v2_evidence_tier": tier,
-            "v2_evidence_gate": gate,
-            "v2_review_priority": priority,
-            "v2_background_context_label": background_label,
-            "v2_background_context_reason": background_reason,
-            "v2_direction_support_label": direction_label,
-            "v2_direction_support_reason": direction_reason,
-        }
+def candidate_disposition(candidate_class, tier, background_label, length_label, clean_label):
+    if candidate_class == "V2_SEX_CHROMOSOME_REVIEW":
+        return "sca_branch_s_review"
+    if candidate_class in {"V2_NO_CALL_CONTRACT_RISK", "V2_TECHNICAL_REVIEW"} or "REF_CONTRACT_RISK" in tier:
+        return "technical_risk_review"
     if "POSITIVE_SUPPORT" in tier:
-        return {
-            "v2_candidate_class": "V2_POSITIVE_SUPPORT_REVIEW",
-            "v2_classifier_action": "V2_REVIEW_POSITIVE_SUPPORT",
-            "v2_classifier_reason": tier.lower(),
-            "v2_evidence_tier": tier,
-            "v2_evidence_gate": gate,
-            "v2_review_priority": priority,
-            "v2_background_context_label": background_label,
-            "v2_background_context_reason": background_reason,
-            "v2_direction_support_label": direction_label,
-            "v2_direction_support_reason": direction_reason,
-        }
-    if "BACKGROUND_COMPATIBLE" in tier or tier == "SHADOW_BACKGROUND_COMPATIBLE":
-        return {
-            "v2_candidate_class": "V2_BACKGROUND_COMPATIBLE_REVIEW",
-            "v2_classifier_action": "V2_REVIEW_BACKGROUND_COMPATIBLE",
-            "v2_classifier_reason": tier.lower(),
-            "v2_evidence_tier": tier,
-            "v2_evidence_gate": gate,
-            "v2_review_priority": priority,
-            "v2_background_context_label": background_label,
-            "v2_background_context_reason": background_reason,
-            "v2_direction_support_label": direction_label,
-            "v2_direction_support_reason": direction_reason,
-        }
+        if (
+            background_label.startswith("UNKNOWN_BACKGROUND")
+            or background_label.startswith("NO_")
+            or "NO_NULL_SUPPORT" in background_label
+        ):
+            return "background_unknown_review"
+        if length_label in {"large_ge10mb", "broad_review_ge4mb", "reportable_candidate_ge2mb"} and clean_label != "LOW_CLEAN_SUPPORT_HIGH_RISK":
+            return "report_candidate"
+        return "review_candidate"
     if "TECHNICAL_REVIEW" in tier:
-        return {
-            "v2_candidate_class": "V2_TECHNICAL_REVIEW",
-            "v2_classifier_action": "V2_REVIEW_TECHNICAL_RISK",
-            "v2_classifier_reason": tier.lower(),
-            "v2_evidence_tier": tier,
-            "v2_evidence_gate": gate,
-            "v2_review_priority": priority,
-            "v2_background_context_label": background_label,
-            "v2_background_context_reason": background_reason,
-            "v2_direction_support_label": direction_label,
-            "v2_direction_support_reason": direction_reason,
-        }
+        return "technical_risk_review"
+    if (
+        background_label.startswith("UNKNOWN_BACKGROUND")
+        or background_label.startswith("NO_")
+        or "NO_NULL_SUPPORT" in background_label
+    ):
+        return "background_unknown_review"
+    return "review_candidate"
+
+
+def candidate_context_payload(row, tier, gate, priority, candidate_class, action, reason):
+    signal_label, signal_reason = branch_b_direction_support_label(row)
+    background_label, background_reason = background_context_label(row)
+    strength_label = signal_strength_tier(row)
+    length_label = length_tier(row)
+    clean_label = clean_support_label(row)
+    gc_label = gc_rc_context_label(row)
     return {
-        "v2_candidate_class": "V2_REVIEW_REQUIRED",
-        "v2_classifier_action": "V2_REVIEW_ONLY",
-        "v2_classifier_reason": tier.lower(),
+        "v2_candidate_class": candidate_class,
+        "v2_classifier_action": action,
+        "v2_classifier_reason": reason,
         "v2_evidence_tier": tier,
         "v2_evidence_gate": gate,
         "v2_review_priority": priority,
+        "v2_signal_strength_tier": strength_label,
+        "v2_length_tier": length_label,
+        "v2_clean_support_label": clean_label,
+        "v2_gc_rc_context_label": gc_label,
         "v2_background_context_label": background_label,
         "v2_background_context_reason": background_reason,
-        "v2_direction_support_label": direction_label,
-        "v2_direction_support_reason": direction_reason,
+        "v2_direction_support_label": signal_label,
+        "v2_direction_support_reason": signal_reason,
+        "v2_b_signal_context_label": signal_label,
+        "v2_b_signal_context_reason": signal_reason,
+        "v2_disposition": candidate_disposition(candidate_class, tier, background_label, length_label, clean_label),
     }
+
+
+def classify_candidate_row(row):
+    tier, gate, priority = classify_evidence_tier(row)
+
+    if is_sex_chromosome_candidate(row):
+        return candidate_context_payload(
+            row,
+            tier,
+            gate,
+            priority,
+            "V2_SEX_CHROMOSOME_REVIEW",
+            "V2_ROUTE_BRANCH_S_REVIEW",
+            f"sex_chromosome_branch_s_review:{tier.lower()}",
+        )
+    if tier.endswith("REF_CONTRACT_RISK"):
+        return candidate_context_payload(
+            row,
+            tier,
+            gate,
+            priority,
+            "V2_NO_CALL_CONTRACT_RISK",
+            "V2_REVIEW_NO_HARD_SUPPRESSION",
+            tier.lower(),
+        )
+    if "POSITIVE_SUPPORT" in tier:
+        return candidate_context_payload(
+            row,
+            tier,
+            gate,
+            priority,
+            "V2_POSITIVE_SUPPORT_REVIEW",
+            "V2_REVIEW_POSITIVE_SUPPORT",
+            tier.lower(),
+        )
+    if "BACKGROUND_COMPATIBLE" in tier or tier == "SHADOW_BACKGROUND_COMPATIBLE":
+        return candidate_context_payload(
+            row,
+            tier,
+            gate,
+            priority,
+            "V2_BACKGROUND_COMPATIBLE_REVIEW",
+            "V2_REVIEW_BACKGROUND_COMPATIBLE",
+            tier.lower(),
+        )
+    if "TECHNICAL_REVIEW" in tier:
+        return candidate_context_payload(
+            row,
+            tier,
+            gate,
+            priority,
+            "V2_TECHNICAL_REVIEW",
+            "V2_REVIEW_TECHNICAL_RISK",
+            tier.lower(),
+        )
+    return candidate_context_payload(
+        row,
+        tier,
+        gate,
+        priority,
+        "V2_REVIEW_REQUIRED",
+        "V2_REVIEW_ONLY",
+        tier.lower(),
+    )
 
 
 def classify_branch_b_v2_candidates(candidate_ledger, version="branch_ab_v2"):
@@ -386,6 +493,16 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         if "v2_background_context_label" in classified_df.columns
         else {}
     )
+    b_signal_context_label_counts = (
+        classified_df["v2_b_signal_context_label"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_b_signal_context_label" in classified_df.columns
+        else {}
+    )
+    disposition_counts = (
+        classified_df["v2_disposition"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_disposition" in classified_df.columns
+        else {}
+    )
     return {
         "sample_id": str(sample_id),
         "version": str(version),
@@ -396,6 +513,12 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         "review_priority_counts": {str(key): int(value) for key, value in review_priority_counts.items()},
         "background_context_label_counts": {
             str(key): int(value) for key, value in background_context_label_counts.items()
+        },
+        "b_signal_context_label_counts": {
+            str(key): int(value) for key, value in b_signal_context_label_counts.items()
+        },
+        "disposition_counts": {
+            str(key): int(value) for key, value in disposition_counts.items()
         },
         "direction_support_label_counts": {
             str(key): int(value) for key, value in direction_support_label_counts.items()

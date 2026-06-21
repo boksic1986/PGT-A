@@ -353,6 +353,86 @@ Important interpretation:
 - The 2026-06-15 cohort remains burden/context only because it has no locked
   truth table.
 
+## 2026-06-21 Branch B V2 Method Reset And Threshold Inventory
+
+Current report:
+`docs/reports/branch_b_v2_method_reset_threshold_inventory_2026-06-21.md`.
+
+This loop resets the Branch B V2 interpretation from legacy/current-code
+Branch B filtering toward Branch-A-anchored evidence stratification.
+
+Key contract:
+
+- Branch A remains the WisecondorX/CBS-derived primary discovery layer.
+- Branch B V2 does not create B-only final/report events.
+- GC/RC corrected signal is auxiliary context only; it must not define the
+  primary gain/loss direction and must not hard-filter Branch A positives.
+- The old direction-conflict wording is replaced by B-side signal-context
+  wording:
+  - `B_SIGNAL_SUPPORTED_A_DIRECTION`;
+  - `A_ANCHORED_WEAK_B_SIGNAL`;
+  - `B_SIGNAL_DISCORDANT_WITH_A_DIRECTION`;
+  - `NO_POSITIVE_A_SIGNAL`.
+- `B_SIGNAL_DISCORDANT_WITH_A_DIRECTION` means auxiliary B-side signal is
+  discordant with Branch A direction. It does not mean Branch B called an
+  opposite event.
+- Current first-round V2 dispositions are:
+  - `report_candidate`;
+  - `review_candidate`;
+  - `technical_risk_review`;
+  - `background_unknown_review`;
+  - `sca_branch_s_review`.
+
+Legacy/current-code thresholds were inventoried and remain excluded from V2
+final decision evidence unless a future truth-safe ablation promotes a specific
+rule. This includes old `min_event_bins`, `min_abs_calibrated_z`,
+`high_confidence_z`, A-branch artifact-protection thresholds, and CNVpro-like
+length thresholds. The CNVpro-like size values are review/reportability tiers,
+not truth/falsity filters.
+
+Remote validation and materialization:
+
+- Unit tests:
+  `tests/unit/test_branch_b_v2_classifier.py`,
+  `tests/unit/test_branch_b_v2_benchmark.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`,
+  `tests/unit/test_cnv_report.py`:
+  `45 passed in 1.26s`.
+- Snakemake dry-runs succeeded for
+  `branch_b_v2_benchmark branch_s_review cnv_report` under all three active
+  gap2m configs.
+- Forced materialization completed for `cnv_branch_b_v2_classifier`,
+  `cnv_branch_b_v2_benchmark`, and `branch_b_v2_benchmark` under all three
+  active gap2m configs.
+
+Materialized preservation result:
+
+- Y1-Y8: candidates=97; truth preserved 10/10; FN=0;
+  hard-suppressed truth=0.
+- H1-H16: candidates=105; truth preserved 10/10; FN=0;
+  hard-suppressed truth=0.
+- 2026-06-15: candidates=165; no locked truth; status `skipped_no_truth`.
+
+H6 chr21 remains retained:
+
+```text
+top_candidate_id=H6.A0003
+top_a_abs_zscore=7.113507302991461
+top_v2_disposition=background_unknown_review
+top_v2_b_signal_context_label=B_SIGNAL_SUPPORTED_A_DIRECTION
+top_v2_gc_rc_context_label=GC_RC_ATTENUATED
+```
+
+Materialized V2 disposition counts:
+
+- Y1-Y8: `background_unknown_review=84`, `sca_branch_s_review=13`.
+- H1-H16: `background_unknown_review=63`, `sca_branch_s_review=42`.
+- 2026-06-15: `background_unknown_review=151`, `sca_branch_s_review=14`.
+
+This loop improves interpretability and truth-safety. It still does not solve
+FP/review burden and does not promote Branch B V2, Branch S, the gap2m overlay,
+or the shadow reference to final release.
+
 ## 2026-06-21 P1-P6 Credibility Audit Override
 
 Current audit report:
