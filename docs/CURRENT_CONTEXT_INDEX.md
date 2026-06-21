@@ -28,7 +28,7 @@ active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_evidence_design_legacy_excluded
+branch_b_status: v2_gap2m_benchmark_materialized_truth_preserved
 branch_s_status: review_reportable_with_limitations
 report_status: final_delivery_target_after_a_b_strengthening
 
@@ -38,6 +38,7 @@ report_status: final_delivery_target_after_a_b_strengthening
 - `docs/reports/h7_h16_reference_cohort_decision_2026-06-20.md`
 - `docs/reports/branch_a_validation_h_r0_shadow_2026-06-20.md`
 - `docs/reports/branch_a_burden_optimization_phase1_2026-06-21.md`
+- `docs/reports/branch_b_v2_gap2m_benchmark_2026-06-21.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
 - `docs/reports/p6_report_package_contract_2026-06-20.md`
@@ -95,10 +96,21 @@ legacy/current-code Branch B artifact labels, old N0=0, or N1-only
 matched-negative promotion as V2 evidence, benchmark truth, or report-release
 criteria.
 
-The next Branch B gate is to implement V2-only evidence/disposition evaluation
-against Y1-Y8 and H1-H6 truth, using reference-cohort background only as a
-limited and explicitly labeled context source until formal N0/cross-fit evidence
-exists.
+Branch B V2-only benchmark has now been materialized on the explicit Branch A
+`merge_gap_bp=2_000_000` overlay. The benchmark consumes V2 classifier rows
+only and explicitly ignores legacy/current-code Branch B decision fields.
+
+Current V2 benchmark preservation result:
+
+- Y1-Y8: 97 Branch A gap2m candidates; truth preserved 10/10; FN=0;
+  hard-suppressed truth=0.
+- H1-H16: 105 Branch A gap2m candidates; truth preserved 10/10; FN=0;
+  hard-suppressed truth=0; H6 chr21 remains preserved.
+- 2026-06-15: 165 Branch A gap2m candidates; no locked truth, context only.
+
+This proves truth-overlap preservation and no hard suppression under the current
+V2 shadow contract. It does not prove FP/review burden is solved and does not
+promote Branch B V2 to final-report logic.
 
 ### Branch S
 
@@ -144,8 +156,8 @@ A, Branch B, Branch S, background source, and limitations explicitly.
 3. Use the materialized explicit `merge_gap_bp=2_000_000` overlay for the next
    Branch B V2-only benchmark unless a blocking regression appears; keep
    default `merge_gap_bp=0` as rollback/control.
-4. Implement Branch B V2-only truth benchmark and evidence/disposition output,
-   excluding legacy/current-code Branch B fields from decisions.
+4. Refine Branch B V2 evidence/disposition for FP and review burden while
+   preserving the materialized no-FN/no-hard-suppression benchmark.
 5. Upgrade Branch S toward review-reportable output with controlled negative/ref
    FP burden; final SCA promotion remains a separate truth gate.
 6. Generate the next P6/report package only after the fixed A/B/S contracts are

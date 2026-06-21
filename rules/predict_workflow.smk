@@ -836,6 +836,41 @@ if CNV_ENABLED:
                     check=True,
                 )
 
+        if "branch_b_v2_benchmark" in AVAILABLE_TARGETS:
+            rule cnv_branch_b_v2_benchmark:
+                input:
+                    classifications=expand(CNV_B_V2_CLASSIFIER, sample=SAMPLES),
+                    truth=([CNV_BENCHMARK_TRUTH_TSV] if CNV_BENCHMARK_TRUTH_TSV else []),
+                    metadata=RUN_METADATA
+                output:
+                    truth_metrics=CNV_B_V2_BENCHMARK_TRUTH_METRICS,
+                    sample_summary=CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY,
+                    summary=CNV_B_V2_BENCHMARK_SUMMARY
+                log:
+                    project_path("logs", "cnv", "branch_b_v2_benchmark.log")
+                threads: 1
+                run:
+                    from pgta.core.logging import write_rule_audit_log
+                    import subprocess
+
+                    write_rule_audit_log(log[0], input.metadata)
+                    command = [
+                        config["biosoft"]["python"],
+                        SCRIPT_BRANCH_B_V2_BENCHMARK,
+                        SCRIPT_BRANCH_B_V2_BENCHMARK_ACTION,
+                        "--reference-id", CNV_REFERENCE_ID,
+                        "--output-truth-metrics", output.truth_metrics,
+                        "--output-sample-summary", output.sample_summary,
+                        "--output-summary", output.summary,
+                    ]
+                    if input.truth:
+                        command.extend(["--truth-tsv", str(input.truth[0])])
+                    for sample_id in SAMPLES:
+                        command.extend(["--sample-id", str(sample_id)])
+                    for path_value in input.classifications:
+                        command.extend(["--classification-tsv", path_value])
+                    subprocess.run(command, check=True)
+
         rule cnv_branch_s_shadow:
             input:
                 bins=CNV_B_CALIBRATED_BINS,

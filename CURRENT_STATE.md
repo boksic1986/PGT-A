@@ -106,6 +106,44 @@ Ablation conclusions:
   the fixed Branch B V2 / Branch S / report chain must be rerun under this
   explicit config and benchmarked.
 
+## 2026-06-21 Branch B V2 Gap2m Benchmark
+
+Current report:
+`docs/reports/branch_b_v2_gap2m_benchmark_2026-06-21.md`.
+
+This phase materialized the first Branch B V2-only benchmark on top of the
+explicit Branch A `merge_gap_bp=2_000_000` overlay. It does not promote
+Branch B V2, Branch S, the report package, or the shadow reference.
+
+Workflow contract:
+
+- New target: `branch_b_v2_benchmark`.
+- Benchmark scope: `v2_classifier_rows_only`.
+- Legacy/current-code Branch B decision fields are explicitly ignored:
+  `final_disposition`, `branch_b_keep_event`, `branch_b_report_class`, and
+  `branch_b_artifact_status`.
+- `final_report_impact=none_shadow_only`.
+
+Remote materialization after correcting the benchmark hard-suppression
+semantics:
+
+- Y1-Y8: candidates=97, truth preserved=10/10, FN=0,
+  hard-suppressed truth=0.
+- H1-H16: candidates=105, truth preserved=10/10, FN=0,
+  hard-suppressed truth=0; H6 chr21 remains preserved with
+  `top_a_abs_zscore=7.1135`.
+- 2026-06-15: candidates=165, no locked truth table; burden/context only.
+
+Important interpretation:
+
+- V2 now proves it can avoid hard suppression of locked truth-overlap
+  candidates under the gap2m overlay.
+- It does not yet prove FP/review burden is low enough for final reporting.
+- Sex-chromosome truth events such as Y3/H5/H6 chrX loss are preserved as
+  `V2_NO_CALL_CONTRACT_RISK` / `V2_REVIEW_NO_HARD_SUPPRESSION`, not as final
+  SCA calls. Branch S remains a separate review-reportable-with-limitations
+  gate.
+
 ## 2026-06-21 P1-P6 Credibility Audit Override
 
 Current audit report:

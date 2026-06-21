@@ -14,6 +14,7 @@ def test_predict_dispatcher_exposes_phase1_phase2_actions():
     dispatcher = read_text("scripts/_compat_entry.py")
 
     assert '"cnv_evidence_ledger": "pgta.predict.branch_b.evidence_ledger"' in dispatcher
+    assert '"branch_b_v2_benchmark": "pgta.predict.branch_b.v2_benchmark"' in dispatcher
     assert '"negative_bank_labels": "pgta.predict.branch_b.negative_bank"' in dispatcher
     assert '"reference_candidate_audit": "pgta.reference.audit"' in dispatcher
 
@@ -130,7 +131,7 @@ def test_branch_b_evidence_target_is_p3_only_and_report_safe():
     assert "CNV_B_EVIDENCE_LEDGER" in target_assembly
     assert "rule branch_b_evidence" in snakefile
 
-    evidence_target = target_assembly.split('if "branch_b_evidence" in REQUESTED_TARGETS', 1)[1].split('if "reference_audit" in REQUESTED_TARGETS', 1)[0]
+    evidence_target = target_assembly.split('if "branch_b_evidence" in REQUESTED_TARGETS', 1)[1].split('if "branch_b_v2_benchmark" in REQUESTED_TARGETS', 1)[0]
     assert "CNV_B_EVIDENCE_LEDGER" in evidence_target
     assert "CNV_B_EVIDENCE_SUMMARY" in evidence_target
     assert "CNV_B_V2_CLASSIFIER" not in evidence_target
@@ -140,6 +141,39 @@ def test_branch_b_evidence_target_is_p3_only_and_report_safe():
     report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
     assert "CNV_B_EVIDENCE_LEDGER" not in report_rule
     assert "CNV_B_EVIDENCE_SUMMARY" in report_rule
+
+
+def test_branch_b_v2_benchmark_is_v2_only_and_report_safe():
+    dispatcher = read_text("scripts/_compat_entry.py")
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+    pipeline_modes = read_text("rules/pipeline_modes.smk")
+    target_assembly = read_text("rules/target_assembly.smk")
+    snakefile = read_text("Snakefile")
+
+    assert '"branch_b_v2_benchmark": "pgta.predict.branch_b.v2_benchmark"' in dispatcher
+    assert '"branch_b_v2_benchmark"' in pipeline_modes
+    assert "CNV_POSTPROCESS_CFG.get(\"output_dir\"" in layout
+    assert "CNV_B_V2_BENCHMARK_TRUTH_METRICS" in layout
+    assert "CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY" in layout
+    assert "CNV_B_V2_BENCHMARK_SUMMARY" in layout
+    assert "rule cnv_branch_b_v2_benchmark" in workflow
+    assert "rule branch_b_v2_benchmark" in snakefile
+    assert "SCRIPT_BRANCH_B_V2_BENCHMARK_ACTION" in workflow
+
+    benchmark_rule = workflow.split("rule cnv_branch_b_v2_benchmark:", 1)[1].split("rule cnv_branch_s_shadow:", 1)[0]
+    assert "CNV_B_V2_CLASSIFIER" in benchmark_rule
+    assert "CNV_B_FINAL_EVENTS" not in benchmark_rule
+    assert "CNV_B_ARTIFACT_SUMMARY" not in benchmark_rule
+    assert "CNV_B_MATCHED_NEGATIVE" not in benchmark_rule
+
+    benchmark_target = target_assembly.split('if "branch_b_v2_benchmark" in REQUESTED_TARGETS', 1)[1].split('if "reference_audit" in REQUESTED_TARGETS', 1)[0]
+    assert "CNV_B_V2_CLASSIFIER" in benchmark_target
+    assert "CNV_B_V2_BENCHMARK_SUMMARY" in benchmark_target
+    assert "CNV_REPORT_TSV" not in benchmark_target
+
+    report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
+    assert "CNV_B_V2_BENCHMARK_SUMMARY" not in report_rule
 
 
 def test_negative_bank_rule_is_config_gated_and_not_automatic_n0():

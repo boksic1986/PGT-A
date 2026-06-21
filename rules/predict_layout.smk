@@ -85,7 +85,9 @@ CNV_POSTPROCESS_AMBIGUOUS_ALIGNMENT_BED = (
     if CNV_POSTPROCESS_ANNOTATION_CFG.get("ambiguous_alignment_bed", "")
     else ""
 )
-CNV_POSTPROCESS_DIR = str(Path(CNV_DIR) / "postprocess")
+CNV_POSTPROCESS_DIR = resolve_path(
+    CNV_POSTPROCESS_CFG.get("output_dir", str(Path(CNV_DIR) / "postprocess"))
+)
 CNV_PLOTS_DIR = str(Path(CNV_DIR) / "plots")
 CNV_B_CORRECTED_BINS = str(Path(CNV_POSTPROCESS_DIR) / "correction" / "{sample}.bins.tsv")
 CNV_B_CORRECTION_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "correction" / "{sample}.summary.json")
@@ -106,6 +108,10 @@ CNV_B_MATCHED_NEGATIVE = str(Path(CNV_POSTPROCESS_DIR) / "matched_negative" / "{
 CNV_B_MATCHED_NEGATIVE_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "matched_negative" / "{sample}.summary.json")
 CNV_B_V2_CLASSIFIER = str(Path(CNV_POSTPROCESS_DIR) / "v2_classifier" / "{sample}.candidate_classification.tsv")
 CNV_B_V2_CLASSIFIER_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "v2_classifier" / "{sample}.summary.json")
+CNV_B_V2_BENCHMARK_DIR = str(Path(CNV_POSTPROCESS_DIR) / "v2_benchmark")
+CNV_B_V2_BENCHMARK_TRUTH_METRICS = str(Path(CNV_B_V2_BENCHMARK_DIR) / "truth_metrics.tsv")
+CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY = str(Path(CNV_B_V2_BENCHMARK_DIR) / "sample_summary.tsv")
+CNV_B_V2_BENCHMARK_SUMMARY = str(Path(CNV_B_V2_BENCHMARK_DIR) / "summary.json")
 CNV_BRANCH_S_EVIDENCE = str(Path(CNV_POSTPROCESS_DIR) / "branch_s" / "{sample}.sex_chrom_evidence.tsv")
 CNV_BRANCH_S_SCORES = str(Path(CNV_POSTPROCESS_DIR) / "branch_s" / "{sample}.sca_state_scores.tsv")
 CNV_BRANCH_S_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "branch_s" / "{sample}.summary.json")

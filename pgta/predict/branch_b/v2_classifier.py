@@ -185,42 +185,51 @@ def classify_evidence_tier(row):
 
 
 def classify_candidate_row(row):
-    disposition = normalized_disposition(row)
+    tier, gate, priority = classify_evidence_tier(row)
 
-    if has_unknown_matched_negative_background(row):
+    if tier.endswith("REF_CONTRACT_RISK") or tier.endswith("DIRECTION_CONFLICT"):
         return {
-            "v2_candidate_class": "REVIEW_REQUIRED",
-            "v2_classifier_action": "SHADOW_REVIEW_ONLY",
-            "v2_classifier_reason": "unknown_matched_negative_background",
+            "v2_candidate_class": "V2_NO_CALL_CONTRACT_RISK",
+            "v2_classifier_action": "V2_REVIEW_NO_HARD_SUPPRESSION",
+            "v2_classifier_reason": tier.lower(),
+            "v2_evidence_tier": tier,
+            "v2_evidence_gate": gate,
+            "v2_review_priority": priority,
         }
-    if disposition == "CONFIRMED":
+    if "POSITIVE_SUPPORT" in tier:
         return {
-            "v2_candidate_class": "CONFIRMED_SHADOW",
-            "v2_classifier_action": "SHADOW_CONFIRM",
-            "v2_classifier_reason": "legacy_confirmed_with_shadow_evidence",
+            "v2_candidate_class": "V2_POSITIVE_SUPPORT_REVIEW",
+            "v2_classifier_action": "V2_REVIEW_POSITIVE_SUPPORT",
+            "v2_classifier_reason": tier.lower(),
+            "v2_evidence_tier": tier,
+            "v2_evidence_gate": gate,
+            "v2_review_priority": priority,
         }
-    if disposition == "MOSAIC_SUSPECT":
+    if "BACKGROUND_COMPATIBLE" in tier or tier == "SHADOW_BACKGROUND_COMPATIBLE":
         return {
-            "v2_candidate_class": "MOSAIC_SUSPECT_SHADOW",
-            "v2_classifier_action": "SHADOW_MOSAIC_REVIEW",
-            "v2_classifier_reason": "legacy_mosaic_suspect",
+            "v2_candidate_class": "V2_BACKGROUND_COMPATIBLE_REVIEW",
+            "v2_classifier_action": "V2_REVIEW_BACKGROUND_COMPATIBLE",
+            "v2_classifier_reason": tier.lower(),
+            "v2_evidence_tier": tier,
+            "v2_evidence_gate": gate,
+            "v2_review_priority": priority,
         }
-    if disposition == "LIKELY_ARTIFACT":
+    if "TECHNICAL_REVIEW" in tier:
         return {
-            "v2_candidate_class": "LIKELY_ARTIFACT_SHADOW",
-            "v2_classifier_action": "SHADOW_ARTIFACT_REVIEW",
-            "v2_classifier_reason": "legacy_artifact_with_shadow_evidence",
-        }
-    if disposition == "NO_CALL":
-        return {
-            "v2_candidate_class": "REVIEW_REQUIRED",
-            "v2_classifier_action": "SHADOW_REVIEW_ONLY",
-            "v2_classifier_reason": "legacy_no_call",
+            "v2_candidate_class": "V2_TECHNICAL_REVIEW",
+            "v2_classifier_action": "V2_REVIEW_TECHNICAL_RISK",
+            "v2_classifier_reason": tier.lower(),
+            "v2_evidence_tier": tier,
+            "v2_evidence_gate": gate,
+            "v2_review_priority": priority,
         }
     return {
-        "v2_candidate_class": "REVIEW_REQUIRED",
-        "v2_classifier_action": "SHADOW_REVIEW_ONLY",
-        "v2_classifier_reason": "legacy_review_required_or_unclassified",
+        "v2_candidate_class": "V2_REVIEW_REQUIRED",
+        "v2_classifier_action": "V2_REVIEW_ONLY",
+        "v2_classifier_reason": tier.lower(),
+        "v2_evidence_tier": tier,
+        "v2_evidence_gate": gate,
+        "v2_review_priority": priority,
     }
 
 
@@ -235,11 +244,7 @@ def classify_branch_b_v2_candidates(candidate_ledger, version="branch_ab_v2"):
     payloads = []
     for _, row in frame.iterrows():
         payload = classify_candidate_row(row)
-        tier, gate, priority = classify_evidence_tier(row)
         payload["v2_classifier_version"] = str(version)
-        payload["v2_evidence_tier"] = tier
-        payload["v2_evidence_gate"] = gate
-        payload["v2_review_priority"] = priority
         payload["v2_final_report_impact"] = "none_shadow_only"
         payloads.append(payload)
     payload_df = pd.DataFrame(payloads)
@@ -277,6 +282,13 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         "review_priority_counts": {str(key): int(value) for key, value in review_priority_counts.items()},
         "final_report_impact": "none_shadow_only",
         "classified_only_branch_a_candidates": True,
+        "legacy_decision_fields_ignored": True,
+        "ignored_legacy_decision_fields": [
+            "final_disposition",
+            "branch_b_keep_event",
+            "branch_b_report_class",
+            "branch_b_artifact_status",
+        ],
     }
 
 

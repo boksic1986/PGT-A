@@ -30,14 +30,15 @@ Immediate execution order:
    ablation evidence, and isolated `merge_gap_bp=2_000_000` materialization.
    Defaults remain unchanged. The next benchmark can use the explicit gap2m
    overlay, but promotion still requires the fixed A/B/S chain and report gate.
-4. Implement Branch B V2-only evidence/disposition benchmark against Y1-Y8 and
-   H1-H6 truth, excluding `final_disposition`, `branch_b_keep_event`, legacy
-   artifact labels, old `N0=0`, and N1-only matched-negative promotion from
-   decisions.
-5. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+4. Branch B V2-only benchmark has been materialized on the explicit gap2m
+   overlay. It preserves Y1-Y8 and H1-H6 truth-overlap candidates without hard
+   suppression, while still remaining `none_shadow_only`.
+5. Next Branch B work should refine evidence/disposition for FP and review
+   burden without reintroducing legacy/current-code Branch B decision fields.
+6. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-6. Generate the next P6/report package from workflow outputs after fixed Branch
+7. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 
@@ -74,15 +75,16 @@ Current planning constraints:
 
 Minimum next implementation plan:
 
-- Use the explicit Branch A `merge_gap_bp=2_000_000` overlay for the next
-  benchmark unless a blocking regression appears; keep the default
-  `merge_gap_bp=0` path as rollback/control.
-- Define a V2-only benchmark that consumes Branch A candidates, P3/V2 evidence
-  fields, and Y1-Y8/H1-H6 truth tables.
-- Explicitly exclude `final_disposition`, `branch_b_keep_event`, legacy artifact
+- Keep the explicit Branch A `merge_gap_bp=2_000_000` overlay as the current
+  Branch B V2 benchmark input while keeping default `merge_gap_bp=0` as
+  rollback/control.
+- Treat the materialized V2-only benchmark as a preservation gate, not a final
+  performance gate: Y1-Y8 and H1-H6 truth are preserved 10/10 with FN=0 and no
+  hard-suppressed truth, but FP/review burden is not yet solved.
+- Continue excluding `final_disposition`, `branch_b_keep_event`, legacy artifact
   status, and legacy kept counts from V2 decision and metric computation.
-- Report known-positive preservation first: Y1-Y8/H1-H6 truth, H6 chr21, and
-  no hard suppression of truth-overlap candidates.
+- Refine Branch B V2 evidence/disposition so it can reduce FP/review burden
+  without hard suppression of truth-overlap candidates.
 - Keep H7-H16 and 0615 as burden/context only unless locked truth labels are
   added.
 

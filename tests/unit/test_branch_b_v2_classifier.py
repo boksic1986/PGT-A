@@ -60,9 +60,9 @@ def test_unknown_matched_negative_background_forces_review_not_artifact():
 
     assert row["final_disposition"] == "LIKELY_ARTIFACT"
     assert row["matched_negative_background_status"] == "UNKNOWN_BACKGROUND"
-    assert row["v2_candidate_class"] == "REVIEW_REQUIRED"
-    assert row["v2_classifier_action"] == "SHADOW_REVIEW_ONLY"
-    assert "unknown_matched_negative_background" in row["v2_classifier_reason"]
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_classifier_action"] == "V2_REVIEW_POSITIVE_SUPPORT"
+    assert row["v2_evidence_tier"] == "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT"
 
 
 def test_phase1_unknown_matched_negative_source_forces_review_not_artifact():
@@ -90,9 +90,9 @@ def test_phase1_unknown_matched_negative_source_forces_review_not_artifact():
 
     assert row["final_disposition"] == "LIKELY_ARTIFACT"
     assert row["matched_negative_source"] == "UNKNOWN_BACKGROUND"
-    assert row["v2_candidate_class"] == "REVIEW_REQUIRED"
-    assert row["v2_classifier_action"] == "SHADOW_REVIEW_ONLY"
-    assert row["v2_classifier_reason"] == "unknown_matched_negative_background"
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_classifier_action"] == "V2_REVIEW_POSITIVE_SUPPORT"
+    assert row["v2_evidence_tier"] == "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT"
 
 
 def test_blank_background_status_falls_back_to_unknown_source():
@@ -114,18 +114,45 @@ def test_blank_background_status_falls_back_to_unknown_source():
 
     row = classify_branch_b_v2_candidates(frame).iloc[0]
 
-    assert row["v2_candidate_class"] == "REVIEW_REQUIRED"
-    assert row["v2_classifier_action"] == "SHADOW_REVIEW_ONLY"
-    assert row["v2_classifier_reason"] == "unknown_matched_negative_background"
+    assert row["v2_candidate_class"] == "V2_REVIEW_REQUIRED"
+    assert row["v2_classifier_action"] == "V2_REVIEW_ONLY"
+    assert row["v2_evidence_tier"] == "UNKNOWN_BACKGROUND_REVIEW"
 
 
-def test_confirmed_legacy_candidate_is_confirmed_shadow():
-    classified = classify_branch_b_v2_candidates(_candidate_frame())
-    row = classified.loc[classified["candidate_id"].eq("Y1_chr21_gain")].iloc[0]
+def test_legacy_final_disposition_does_not_change_v2_classification():
+    base = {
+        "sample_id": "Y1",
+        "chrom": "chr21",
+        "start": 1000000,
+        "end": 6000000,
+        "state": "gain",
+        "a_abs_zscore": 18.0,
+        "same_direction_fraction": 0.95,
+        "corrected_amplitude": 5.1,
+        "matched_negative_background_status": "OK",
+        "matched_negative_abs_percentile": 0.995,
+    }
+    frame = pd.DataFrame(
+        [
+            {
+                **base,
+                "candidate_id": "legacy_confirmed",
+                "final_disposition": "CONFIRMED",
+                "branch_b_keep_event": 1,
+            },
+            {
+                **base,
+                "candidate_id": "legacy_artifact",
+                "final_disposition": "LIKELY_ARTIFACT",
+                "branch_b_keep_event": 0,
+            },
+        ]
+    )
+    classified = classify_branch_b_v2_candidates(frame).set_index("candidate_id")
 
-    assert row["v2_candidate_class"] == "CONFIRMED_SHADOW"
-    assert row["v2_classifier_action"] == "SHADOW_CONFIRM"
-    assert row["v2_classifier_reason"] == "legacy_confirmed_with_shadow_evidence"
+    assert classified.loc["legacy_confirmed", "v2_candidate_class"] == classified.loc["legacy_artifact", "v2_candidate_class"]
+    assert classified.loc["legacy_confirmed", "v2_classifier_action"] == classified.loc["legacy_artifact", "v2_classifier_action"]
+    assert classified.loc["legacy_confirmed", "v2_evidence_tier"] == "MATCHED_NEGATIVE_OUTLIER_POSITIVE_SUPPORT"
 
 
 def test_v2_summary_reports_review_burden_without_report_promotion():
@@ -134,8 +161,9 @@ def test_v2_summary_reports_review_burden_without_report_promotion():
 
     assert summary["sample_id"] == "Y1"
     assert summary["candidate_count"] == 2
-    assert summary["class_counts"] == {"CONFIRMED_SHADOW": 1, "REVIEW_REQUIRED": 1}
+    assert summary["class_counts"] == {"V2_POSITIVE_SUPPORT_REVIEW": 1, "V2_REVIEW_REQUIRED": 1}
     assert summary["final_report_impact"] == "none_shadow_only"
+    assert summary["legacy_decision_fields_ignored"] is True
 
 
 def test_unknown_background_strong_a_support_gets_positive_review_tier():
@@ -160,8 +188,8 @@ def test_unknown_background_strong_a_support_gets_positive_review_tier():
 
     row = classify_branch_b_v2_candidates(frame).iloc[0]
 
-    assert row["v2_candidate_class"] == "REVIEW_REQUIRED"
-    assert row["v2_classifier_action"] == "SHADOW_REVIEW_ONLY"
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_classifier_action"] == "V2_REVIEW_POSITIVE_SUPPORT"
     assert row["v2_final_report_impact"] == "none_shadow_only"
     assert row["v2_evidence_tier"] == "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT"
     assert row["v2_review_priority"] == "HIGH"
@@ -190,7 +218,7 @@ def test_matched_negative_outlier_gets_positive_support_tier_shadow_only():
 
     row = classify_branch_b_v2_candidates(frame).iloc[0]
 
-    assert row["v2_candidate_class"] == "REVIEW_REQUIRED"
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
     assert row["v2_evidence_tier"] == "MATCHED_NEGATIVE_OUTLIER_POSITIVE_SUPPORT"
     assert row["v2_evidence_gate"] == "BACKGROUND_INFORMATIVE"
     assert row["v2_review_priority"] == "HIGH"
@@ -263,8 +291,8 @@ def test_shadow_background_context_does_not_become_final_filter():
 
     row = classify_branch_b_v2_candidates(frame).iloc[0]
 
-    assert row["v2_candidate_class"] == "REVIEW_REQUIRED"
-    assert row["v2_classifier_action"] == "SHADOW_REVIEW_ONLY"
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_classifier_action"] == "V2_REVIEW_POSITIVE_SUPPORT"
     assert row["v2_evidence_tier"] == "SHADOW_BACKGROUND_OUTLIER_POSITIVE_SUPPORT"
     assert row["v2_evidence_gate"] == "SHADOW_BACKGROUND_CONTEXT"
     assert row["v2_final_report_impact"] == "none_shadow_only"
