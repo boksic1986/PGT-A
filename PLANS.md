@@ -1,5 +1,51 @@
 # PLANS.md
 
+## 2026-06-22 Report Main And CNV Plot Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`.
+
+Current report:
+`docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
+
+The report layer now has a usable development contract:
+
+- final autosomal main-table events are `report_strong_event` and
+  `report_weak_event`;
+- internal review, filtered audit, and Branch S are separate from the autosomal
+  main table;
+- zero-report-event samples remain visible in sample summaries;
+- every materialized sample has a calibrated-z WisecondorX-style CNV plot and
+  plot-bin TSV.
+
+The next gate is candidate-level interpretation of the remaining report burden,
+not another broad threshold.
+
+Immediate next steps:
+
+1. Review `report_strong_event` and `report_weak_event` rows for Y/H/G/0615 by
+   candidate-level evidence:
+   - A z and length tier;
+   - B-side signal context;
+   - lowres same-direction support;
+   - ref-MAD stability;
+   - clean support;
+   - acrocentric/telomere/centromere/high-repeat risk;
+   - matching visual trend in the `.final_cnv.svg`.
+2. Use Y1-Y8, H1-H6, and G1-G8 locked truth as the no-FN guardrail.
+3. Keep H6 chr21 and G2 locked truth visible.
+4. Treat 2026-06-15 as burden/context only until locked truth labels exist.
+5. Do not use sample-level report event counts, truth labels, or 2026-06-15
+   burden counts to derive candidate filters.
+6. If a new demotion/filter candidate is proposed, run an ablation table first:
+   affected truth rows, affected 0615 rows, and affected plot-visible events.
+
+Current open issue:
+
+- 2026-06-15 still has 71 autosomal report events across 5 samples. This is too
+  high for a final-style report, but broad filtering risks FN. The next
+  reduction must be candidate-level and truth-safe.
+
 ## 2026-06-22 Lowres Branch B/S Next Gate
 
 Current handoff:

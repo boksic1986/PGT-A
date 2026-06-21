@@ -1,5 +1,63 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Report Main Convergence And CNV Plot
+
+Current handoff:
+`docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`.
+
+Current report:
+`docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
+
+This loop changed only report-layer behavior, Branch B V2 report visibility, and
+CNV plot output. It did not modify Branch A, rebuild reference, rerun mapping,
+or promote Branch B V2 / Branch S / the shadow reference to production-final.
+
+Implemented contract:
+
+- Branch B V2 report visibility labels are now:
+  `report_strong_event`, `report_weak_event`, `internal_review_event`,
+  `filtered_event`, and `branch_s_event`.
+- The autosomal final report main table consumes V2 benchmark
+  `report_events.tsv`, which contains `report_strong_event` and
+  `report_weak_event`.
+- Internal review rows remain separate from the main table.
+- Filtered rows remain audit-only.
+- Branch S rows remain in the sex-chromosome/SCA section.
+- `cnv_report` now consumes V2 sample summary whenever V2 benchmark is
+  available, so zero-autosomal-report-event samples remain visible in
+  `cnv_summary.tsv`.
+- WisecondorX-style CNV plots now use only `calibrated_z`; missing/non-finite
+  bins are skipped and missing `calibrated_z` is an error.
+- Plot TSV outputs are written as
+  `wisecondorx/cnv/plots/{sample}.plot_bins.tsv` with states limited to
+  `dup`, `del`, and `neutral`.
+
+Remote validation:
+
+- Relevant unit tests: `79 passed`.
+- Four active lowres-enabled gap2m configs dry-ran successfully for
+  `branch_b_v2_benchmark branch_s_review cnv_report`.
+- Reports were rematerialized by forcing the real report rule:
+  `--forcerun cnv_report_summary cnv_report`.
+
+Materialized acceptance:
+
+- Y1-Y8: truth 10/10, FN=0, truth filtered=0, report=40, strong=21,
+  weak=19, plots 8/8, report rows 8/8.
+- H1-H16: truth 10/10, FN=0, truth filtered=0, H6 chr21 remains
+  `report_weak_event`, report=23, strong=6, weak=17, plots 16/16, report rows
+  16/16.
+- G1-G8: truth 10/10, FN=0, truth filtered=0, G2 truth is not filtered,
+  report=26, strong=15, weak=11, plots 8/8, report rows 8/8.
+- 2026-06-15: no locked truth, burden/context only, report=71, strong=52,
+  weak=19, plots 5/5, report rows 5/5.
+
+Current limitation:
+
+- 2026-06-15 final report burden remains high. Further reduction must start
+  from candidate-level evidence review and must not use sample-level event
+  counts or 2026-06-15 burden counts to reverse-engineer filters.
+
 ## 2026-06-22 Lowres Branch B/S Integration
 
 Current handoff:

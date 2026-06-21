@@ -335,7 +335,19 @@ def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Pa
                 "end": 42_000_000,
                 "state": "gain",
                 "v2_report_layer_class": "report_event",
-                "v2_report_visibility": "final_report",
+                "v2_report_visibility": "report_strong_event",
+                "v2_burden_reduction_tier": "report_event",
+                "v2_filter_action": "keep_report_event",
+            },
+            {
+                "sample_id": "S1",
+                "candidate_id": "S1.weak_report",
+                "chrom": "chr22",
+                "start": 20_000_000,
+                "end": 23_000_000,
+                "state": "gain",
+                "v2_report_layer_class": "report_event",
+                "v2_report_visibility": "report_weak_event",
                 "v2_burden_reduction_tier": "report_event",
                 "v2_filter_action": "keep_report_event",
             },
@@ -347,7 +359,7 @@ def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Pa
                 "end": 5_000_000,
                 "state": "gain",
                 "v2_report_layer_class": "internal_review_event",
-                "v2_report_visibility": "internal_review",
+                "v2_report_visibility": "internal_review_event",
                 "v2_burden_reduction_tier": "internal_review_event",
                 "v2_filter_action": "keep_internal_review_event",
             },
@@ -359,7 +371,7 @@ def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Pa
                 "end": 1_800_000,
                 "state": "loss",
                 "v2_report_layer_class": "filtered_event",
-                "v2_report_visibility": "audit_only",
+                "v2_report_visibility": "filtered_event",
                 "v2_burden_reduction_tier": "filtered_event",
                 "v2_filter_action": "filter_report_layer_combined_technical_risk",
                 "v2_report_filter_rule_tags": "short_or_focal;low_clean_high_risk;b_signal_not_supportive;gc_rc_attenuated",
@@ -372,7 +384,7 @@ def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Pa
                 "end": 155_000_000,
                 "state": "loss",
                 "v2_report_layer_class": "branch_s_event",
-                "v2_report_visibility": "branch_s_report_section",
+                "v2_report_visibility": "branch_s_event",
                 "v2_burden_reduction_tier": "branch_s_event",
                 "v2_filter_action": "route_to_branch_s_review",
             },
@@ -394,11 +406,11 @@ def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Pa
     )
 
     row = written_sample_summary.iloc[0]
-    assert row["v2_report_event_count"] == 1
+    assert row["v2_report_event_count"] == 2
     assert row["v2_internal_review_event_count"] == 1
     assert row["v2_filtered_event_count"] == 1
     assert row["v2_branch_s_event_count"] == 1
-    assert payload["v2_report_event_count"] == 1
+    assert payload["v2_report_event_count"] == 2
     assert payload["v2_internal_review_event_count"] == 1
     assert payload["v2_filtered_event_count"] == 1
     assert payload["v2_branch_s_event_count"] == 1
@@ -415,10 +427,10 @@ def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Pa
     }
 
     report_df = pd.read_csv(report_events, sep="\t")
-    assert report_df["candidate_id"].tolist() == ["S1.report"]
+    assert report_df["candidate_id"].tolist() == ["S1.report", "S1.weak_report"]
     report_payload = json.loads(report_events_json.read_text(encoding="utf-8"))
-    assert report_payload["report_event_count"] == 1
-    assert report_payload["report_event_ids"] == ["S1.report"]
+    assert report_payload["report_event_count"] == 2
+    assert report_payload["report_event_ids"] == ["S1.report", "S1.weak_report"]
 
 
 def test_v2_benchmark_marks_sample_report_burden_without_candidate_demotion(tmp_path: Path):
@@ -436,7 +448,7 @@ def test_v2_benchmark_marks_sample_report_burden_without_candidate_demotion(tmp_
                 "end": i * 1_000_000 + 20_000_000,
                 "state": "gain",
                 "v2_report_layer_class": "report_event",
-                "v2_report_visibility": "final_report",
+                "v2_report_visibility": "report_strong_event",
                 "v2_filter_action": "keep_report_event",
             }
             for i in range(1, 4)
@@ -477,7 +489,7 @@ def test_v2_report_layer_filtered_truth_overlap_counts_as_fn(tmp_path: Path):
                 "a_abs_zscore": 7.11,
                 "v2_candidate_class": "V2_POSITIVE_SUPPORT_REVIEW",
                 "v2_report_layer_class": "filtered_event",
-                "v2_report_visibility": "audit_only",
+                "v2_report_visibility": "filtered_event",
                 "v2_filter_action": "filter_report_layer_combined_technical_risk",
                 "v2_burden_reduction_tier": "filtered_event",
             }

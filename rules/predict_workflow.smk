@@ -709,11 +709,12 @@ if CNV_ENABLED:
         rule cnv_branch_ab_plot:
             input:
                 bins=CNV_B_CALIBRATED_BINS,
-                events=CNV_B_FINAL_EVENTS,
+                events=CNV_B_V2_BENCHMARK_REPORT_EVENTS,
                 a_branch=([CNV_A_ABERRATIONS_BED] if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
                 metadata=RUN_METADATA
             output:
-                svg=CNV_B_PLOT_SVG
+                svg=CNV_B_PLOT_SVG,
+                bins_tsv=CNV_B_PLOT_BINS_TSV
             log:
                 project_path("logs", "cnv", "{sample}.branch_ab_plot.log")
             threads: 1
@@ -730,6 +731,7 @@ if CNV_ENABLED:
                     "--input-bins", input.bins,
                     "--input-events", input.events,
                     "--output-svg", output.svg,
+                    "--output-bins-tsv", output.bins_tsv,
                     "--log", log[0],
                 ]
                 if input.a_branch:
@@ -1167,7 +1169,11 @@ if CNV_ENABLED:
         rule cnv_report_summary:
             input:
                 metadata=RUN_METADATA,
-                events=(expand(CNV_B_FINAL_EVENTS, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
+                events=(
+                    [CNV_B_V2_BENCHMARK_REPORT_EVENTS]
+                    if "branch_b_v2_benchmark" in AVAILABLE_TARGETS
+                    else (expand(CNV_B_FINAL_EVENTS, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
+                ),
                 plots=(expand(CNV_B_PLOT_SVG, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 genders=(expand(CNV_GENDER_TSV, sample=SAMPLES) if PREDICT_BY_SEX_ENABLED else []),
                 qcs=expand(CNV_QC_TSV, sample=SAMPLES),
@@ -1175,8 +1181,8 @@ if CNV_ENABLED:
                 branch_a_validation_summaries=CNV_REPORT_BRANCH_A_VALIDATION_SUMMARIES,
                 branch_b_evidence_summaries=(expand(CNV_B_EVIDENCE_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 branch_s_summaries=(expand(CNV_BRANCH_S_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
-                branch_b_v2_benchmark_summary=([CNV_B_V2_BENCHMARK_SUMMARY] if "branch_b_v2_benchmark" in REQUESTED_TARGETS else []),
-                branch_b_v2_sample_summary=([CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY] if "branch_b_v2_benchmark" in REQUESTED_TARGETS else []),
+                branch_b_v2_benchmark_summary=([CNV_B_V2_BENCHMARK_SUMMARY] if "branch_b_v2_benchmark" in AVAILABLE_TARGETS else []),
+                branch_b_v2_sample_summary=([CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY] if "branch_b_v2_benchmark" in AVAILABLE_TARGETS else []),
                 evaluation_summary=([CNV_EVAL_SUMMARY] if "cnv_eval" in REQUESTED_TARGETS else []),
                 ml_summary=([CNV_ML_SUMMARY] if "cnv_ml" in REQUESTED_TARGETS else []),
                 benchmark_summary=([CNV_BENCHMARK_SUMMARY] if "cnv_benchmark" in REQUESTED_TARGETS else []),

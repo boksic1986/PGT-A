@@ -494,12 +494,22 @@ def is_autosomal_chromosome(row):
     return chrom.isdigit() and 1 <= int(chrom) <= 22
 
 
+def has_lowres_same_direction_support(row):
+    label, _ = lowres_context_label(row)
+    return label in {
+        "LOWRES_2MB_3MB_SAME_DIRECTION_SUPPORT",
+        "LOWRES_2MB_SUPPORT_FOR_3_4MB_EVENT",
+        "LOWRES_2MB_SAME_DIRECTION_SUPPORT",
+        "LOWRES_3MB_SAME_DIRECTION_SUPPORT",
+    }
+
+
 def report_layer_payload(row, candidate_class, disposition, length_label, clean_label, gc_label, b_signal_label):
     if candidate_class == "V2_SEX_CHROMOSOME_REVIEW":
         return {
             "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
             "v2_report_layer_class": "branch_s_event",
-            "v2_report_visibility": "branch_s_report_section",
+            "v2_report_visibility": "branch_s_event",
             "v2_report_filter_reason": "sex_chromosome_event_routed_to_branch_s",
             "v2_report_filter_rule_tags": "branch_s_route",
             "v2_report_filter_evidence_count": 1,
@@ -509,7 +519,7 @@ def report_layer_payload(row, candidate_class, disposition, length_label, clean_
         return {
             "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
             "v2_report_layer_class": "filtered_event",
-            "v2_report_visibility": "audit_only",
+            "v2_report_visibility": "filtered_event",
             "v2_report_filter_reason": "workflow_reference_contract_risk",
             "v2_report_filter_rule_tags": "workflow_reference_contract_risk",
             "v2_report_filter_evidence_count": 1,
@@ -517,6 +527,7 @@ def report_layer_payload(row, candidate_class, disposition, length_label, clean_
 
     tags = report_layer_rule_tags(row, length_label, clean_label, gc_label, b_signal_label)
     strong_a_signal = is_strong_a_signal(row)
+    sensitive_a_signal = is_sensitive_a_signal(row)
     report_layer_ready = (
         is_autosomal_chromosome(row)
         and strong_a_signal
@@ -528,9 +539,26 @@ def report_layer_payload(row, candidate_class, disposition, length_label, clean_
         return {
             "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
             "v2_report_layer_class": "report_event",
-            "v2_report_visibility": "final_report",
+            "v2_report_visibility": "report_strong_event",
             "v2_report_filter_reason": "strong_a_supported_report_layer_event",
             "v2_report_filter_rule_tags": "strong_a_signal;b_signal_supported;reportable_length;clean_support",
+            "v2_report_filter_evidence_count": 4,
+        }
+
+    weak_report_ready = (
+        is_autosomal_chromosome(row)
+        and sensitive_a_signal
+        and b_signal_label == "B_SIGNAL_SUPPORTED_A_DIRECTION"
+        and clean_label == "CLEAN_SUPPORT_AVAILABLE"
+        and has_lowres_same_direction_support(row)
+    )
+    if weak_report_ready:
+        return {
+            "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
+            "v2_report_layer_class": "report_event",
+            "v2_report_visibility": "report_weak_event",
+            "v2_report_filter_reason": "sensitive_a_supported_report_layer_event",
+            "v2_report_filter_rule_tags": "sensitive_a_signal;b_signal_supported;clean_support;weak_positive_protected",
             "v2_report_filter_evidence_count": 4,
         }
 
@@ -547,7 +575,7 @@ def report_layer_payload(row, candidate_class, disposition, length_label, clean_
         return {
             "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
             "v2_report_layer_class": "filtered_event",
-            "v2_report_visibility": "audit_only",
+            "v2_report_visibility": "filtered_event",
             "v2_report_filter_reason": "combined_sensitive_or_short_b_signal_gc_rc",
             "v2_report_filter_rule_tags": ";".join(tags),
             "v2_report_filter_evidence_count": len(tags),
@@ -557,7 +585,7 @@ def report_layer_payload(row, candidate_class, disposition, length_label, clean_
         return {
             "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
             "v2_report_layer_class": "report_event",
-            "v2_report_visibility": "final_report",
+            "v2_report_visibility": "report_strong_event" if strong_a_signal else "report_weak_event",
             "v2_report_filter_reason": "positive_support_with_report_layer_requirements",
             "v2_report_filter_rule_tags": "report_layer_pass",
             "v2_report_filter_evidence_count": 0,
@@ -566,7 +594,7 @@ def report_layer_payload(row, candidate_class, disposition, length_label, clean_
     return {
         "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
         "v2_report_layer_class": "internal_review_event",
-        "v2_report_visibility": "internal_review",
+        "v2_report_visibility": "internal_review_event",
         "v2_report_filter_reason": "retained_for_internal_review",
         "v2_report_filter_rule_tags": ";".join(tags) if tags else "review_retained",
         "v2_report_filter_evidence_count": len(tags),

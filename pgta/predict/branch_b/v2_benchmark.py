@@ -69,6 +69,8 @@ SAMPLE_SUMMARY_COLUMNS = [
     "v2_technical_risk_burden_count",
     "v2_branch_s_review_burden_count",
     "v2_report_event_count",
+    "v2_report_strong_event_count",
+    "v2_report_weak_event_count",
     "sample_report_burden_flag",
     "sample_report_burden_reason",
     "v2_internal_review_event_count",
@@ -192,7 +194,17 @@ def report_layer_filtered_mask(frame: pd.DataFrame) -> pd.Series:
         return pd.Series(False, index=frame.index, dtype=bool)
     report_class = frame.get("v2_report_layer_class", pd.Series("", index=frame.index)).fillna("").astype(str)
     visibility = frame.get("v2_report_visibility", pd.Series("", index=frame.index)).fillna("").astype(str)
-    return report_class.eq("filtered_event") | visibility.eq("audit_only")
+    return report_class.eq("filtered_event") | visibility.isin({"filtered_event", "audit_only"})
+
+
+def report_layer_event_mask(frame: pd.DataFrame) -> pd.Series:
+    if frame.empty:
+        return pd.Series(False, index=frame.index, dtype=bool)
+    report_class = frame.get("v2_report_layer_class", pd.Series("", index=frame.index)).fillna("").astype(str)
+    visibility = frame.get("v2_report_visibility", pd.Series("", index=frame.index)).fillna("").astype(str)
+    return report_class.eq("report_event") | visibility.isin(
+        {"report_strong_event", "report_weak_event", "final_report"}
+    )
 
 
 def positive_support_mask(frame: pd.DataFrame) -> pd.Series:
@@ -324,7 +336,10 @@ def build_v2_benchmark(
         sample_truth = truth_metrics[truth_metrics["sample_id"].astype(str).eq(str(sample_id))].copy()
         truth_event_count = int(len(sample_truth))
         truth_preserved = int(sample_truth["v2_preserved_count"].gt(0).sum()) if not sample_truth.empty else 0
-        report_event_count = _count_equals(sample_class, "v2_report_layer_class", "report_event")
+        visibility = sample_class.get("v2_report_visibility", pd.Series("", index=sample_class.index)).fillna("").astype(str)
+        report_event_count = int(report_layer_event_mask(sample_class).sum()) if not sample_class.empty else 0
+        report_strong_event_count = int(visibility.eq("report_strong_event").sum()) if not sample_class.empty else 0
+        report_weak_event_count = int(visibility.eq("report_weak_event").sum()) if not sample_class.empty else 0
         sample_report_burden_flag = int(report_event_count >= SAMPLE_REPORT_BURDEN_THRESHOLD)
         sample_report_burden_reason = (
             f"report_event_count_ge_{SAMPLE_REPORT_BURDEN_THRESHOLD}" if sample_report_burden_flag else ""
@@ -359,6 +374,8 @@ def build_v2_benchmark(
                     sample_class, "v2_burden_reduction_tier", "branch_s_review"
                 ),
                 "v2_report_event_count": report_event_count,
+                "v2_report_strong_event_count": report_strong_event_count,
+                "v2_report_weak_event_count": report_weak_event_count,
                 "sample_report_burden_flag": sample_report_burden_flag,
                 "sample_report_burden_reason": sample_report_burden_reason,
                 "v2_internal_review_event_count": _count_equals(
@@ -390,6 +407,8 @@ def build_v2_benchmark(
         "v2_technical_risk_burden_count": int(sample_summary["v2_technical_risk_burden_count"].sum()) if not sample_summary.empty else 0,
         "v2_branch_s_review_burden_count": int(sample_summary["v2_branch_s_review_burden_count"].sum()) if not sample_summary.empty else 0,
         "v2_report_event_count": int(sample_summary["v2_report_event_count"].sum()) if not sample_summary.empty else 0,
+        "v2_report_strong_event_count": int(sample_summary["v2_report_strong_event_count"].sum()) if not sample_summary.empty else 0,
+        "v2_report_weak_event_count": int(sample_summary["v2_report_weak_event_count"].sum()) if not sample_summary.empty else 0,
         "sample_report_burden_threshold": SAMPLE_REPORT_BURDEN_THRESHOLD,
         "sample_report_burden_flag_count": (
             int(sample_summary["sample_report_burden_flag"].sum()) if not sample_summary.empty else 0
@@ -450,12 +469,7 @@ def build_v2_benchmark(
             else []
         ),
     }
-    report_classifications = classifications.loc[
-        classifications.get("v2_report_layer_class", pd.Series("", index=classifications.index))
-        .fillna("")
-        .astype(str)
-        .eq("report_event")
-    ].copy()
+    report_classifications = classifications.loc[report_layer_event_mask(classifications)].copy()
     report_payload = {
         "report_event_count": int(len(report_classifications)),
         "report_event_rule_counts": _rule_tag_counts(report_classifications, "v2_report_filter_rule_tags"),

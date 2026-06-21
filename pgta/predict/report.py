@@ -24,6 +24,17 @@ CNVSEQ_TIER_RANK = {
     "review_1_2mb": 2,
     "subreportable_lt1mb": 3,
 }
+BRANCH_B_SAMPLE_DEFAULTS = {
+    "branch_b_total_events": 0,
+    "branch_b_kept_events": 0,
+    "branch_b_pass_events": 0,
+    "branch_b_review_events": 0,
+    "branch_b_reportable_events": 0,
+    "branch_b_review_tier_events": 0,
+    "branch_b_subreportable_events": 0,
+    "branch_b_top_priority_score": 0.0,
+    "branch_b_suppressed_sex_review_events": 0,
+}
 
 
 def parse_args():
@@ -261,6 +272,8 @@ def load_branch_b_v2_burden_summaries(sample_summary_path="", benchmark_summary_
             "branch_b_v2_technical_risk_review_count": 0,
             "branch_b_v2_report_candidate_count": 0,
             "branch_b_v2_report_event_count": 0,
+            "branch_b_v2_report_strong_event_count": 0,
+            "branch_b_v2_report_weak_event_count": 0,
             "branch_b_v2_internal_review_event_count": 0,
             "branch_b_v2_filtered_event_count": 0,
             "branch_b_v2_branch_s_event_count": 0,
@@ -287,6 +300,8 @@ def load_branch_b_v2_burden_summaries(sample_summary_path="", benchmark_summary_
         "branch_b_v2_technical_risk_review_count": int(summary.get("v2_technical_risk_burden_count", 0) or 0),
         "branch_b_v2_report_candidate_count": int(summary.get("v2_report_candidate_burden_count", 0) or 0),
         "branch_b_v2_report_event_count": int(summary.get("v2_report_event_count", 0) or 0),
+        "branch_b_v2_report_strong_event_count": int(summary.get("v2_report_strong_event_count", 0) or 0),
+        "branch_b_v2_report_weak_event_count": int(summary.get("v2_report_weak_event_count", 0) or 0),
         "branch_b_v2_internal_review_event_count": int(summary.get("v2_internal_review_event_count", 0) or 0),
         "branch_b_v2_filtered_event_count": int(summary.get("v2_filtered_event_count", 0) or 0),
         "branch_b_v2_branch_s_event_count": int(summary.get("v2_branch_s_event_count", 0) or 0),
@@ -328,6 +343,8 @@ def load_branch_b_v2_burden_summaries(sample_summary_path="", benchmark_summary_
                 "branch_b_v2_report_candidate_count": int(row.get("v2_report_candidate_burden_count", 0) or 0),
                 "branch_b_v2_review_candidate_count": int(row.get("v2_review_candidate_burden_count", 0) or 0),
                 "branch_b_v2_report_event_count": int(row.get("v2_report_event_count", 0) or 0),
+                "branch_b_v2_report_strong_event_count": int(row.get("v2_report_strong_event_count", 0) or 0),
+                "branch_b_v2_report_weak_event_count": int(row.get("v2_report_weak_event_count", 0) or 0),
                 "branch_b_v2_internal_review_event_count": int(row.get("v2_internal_review_event_count", 0) or 0),
                 "branch_b_v2_filtered_event_count": int(row.get("v2_filtered_event_count", 0) or 0),
                 "branch_b_v2_branch_s_event_count": int(row.get("v2_branch_s_event_count", 0) or 0),
@@ -515,12 +532,85 @@ def format_branch_b_v2_burden_status(row):
         f"technical_risk_review={int(row.get('branch_b_v2_technical_risk_review_count', 0) or 0)}; "
         f"report_candidate={int(row.get('branch_b_v2_report_candidate_count', 0) or 0)}; "
         f"report_event={int(row.get('branch_b_v2_report_event_count', 0) or 0)}; "
+        f"report_strong={int(row.get('branch_b_v2_report_strong_event_count', 0) or 0)}; "
+        f"report_weak={int(row.get('branch_b_v2_report_weak_event_count', 0) or 0)}; "
         f"internal_review_event={int(row.get('branch_b_v2_internal_review_event_count', 0) or 0)}; "
         f"filtered_event={int(row.get('branch_b_v2_filtered_event_count', 0) or 0)}; "
         f"branch_s_event={int(row.get('branch_b_v2_branch_s_event_count', 0) or 0)}; "
         f"sample_report_burden_flag={int(row.get('branch_b_v2_sample_report_burden_flag', 0) or 0)}; "
         f"impact={text_or_empty(row.get('branch_b_v2_final_impact', 'development_review_only')) or 'development_review_only'}"
     )
+
+
+def cnvseq_tier_from_length_tier(value):
+    text = str(value or "").strip()
+    if text == "large_ge10mb":
+        return "whole_chromosome"
+    if text in {"broad_review_ge4mb", "reportable_candidate_ge2mb"}:
+        return "reportable"
+    if text == "review_only_1_2mb":
+        return "review_1_2mb"
+    if text == "subreportable_lt1mb":
+        return "subreportable_lt1mb"
+    return ""
+
+
+def normalize_branch_b_report_events(events_df):
+    ranked_df = events_df.copy()
+    has_v2_report_contract = "v2_report_layer_class" in ranked_df.columns or "v2_report_visibility" in ranked_df.columns
+    if not has_v2_report_contract:
+        return ranked_df
+
+    report_class = ranked_df.get("v2_report_layer_class", pd.Series("", index=ranked_df.index)).fillna("").astype(str)
+    visibility = ranked_df.get("v2_report_visibility", pd.Series("", index=ranked_df.index)).fillna("").astype(str)
+    report_mask = report_class.eq("report_event") | visibility.isin(
+        {"report_strong_event", "report_weak_event", "final_report"}
+    )
+    ranked_df = ranked_df.loc[report_mask].copy()
+
+    if "event_id" not in ranked_df.columns:
+        ranked_df["event_id"] = ranked_df.get(
+            "candidate_id",
+            pd.Series([f"v2_report_event_{idx}" for idx in ranked_df.index], index=ranked_df.index),
+        )
+    if "keep_event" not in ranked_df.columns:
+        ranked_df["keep_event"] = 1
+    if "artifact_status" not in ranked_df.columns:
+        ranked_df["artifact_status"] = visibility.map(
+            {
+                "report_strong_event": "pass",
+                "report_weak_event": "review",
+                "final_report": "review",
+            }
+        ).fillna("review")
+    if "technical_confidence" not in ranked_df.columns:
+        ranked_df["technical_confidence"] = visibility.map(
+            {
+                "report_strong_event": "strong",
+                "report_weak_event": "weak",
+                "final_report": "report",
+            }
+        ).fillna("report")
+    if "priority_score" not in ranked_df.columns:
+        ranked_df["priority_score"] = ranked_df.get(
+            "a_abs_zscore",
+            ranked_df.get("abs_zscore", pd.Series(0.0, index=ranked_df.index)),
+        )
+    if "n_bins" not in ranked_df.columns:
+        ranked_df["n_bins"] = ranked_df.get("event_bin_count", pd.Series(0, index=ranked_df.index))
+    if "cnvseq_report_tier" not in ranked_df.columns:
+        ranked_df["cnvseq_report_tier"] = ranked_df.get(
+            "v2_length_tier",
+            pd.Series("", index=ranked_df.index),
+        ).map(cnvseq_tier_from_length_tier)
+    if "cnvseq_reportable" not in ranked_df.columns:
+        ranked_df["cnvseq_reportable"] = ranked_df["cnvseq_report_tier"].isin(
+            {"whole_chromosome", "reportable"}
+        ).astype(int)
+    for column in ("artifact_flags", "downgrade_reason", "filter_reason", "retain_reason"):
+        if column not in ranked_df.columns:
+            ranked_df[column] = ""
+    return ranked_df
 
 
 def format_sca_report_status(row):
@@ -535,7 +625,9 @@ def format_sca_report_status(row):
 
 
 def summarize_branch_b_events(events_df):
-    ranked_df = events_df.copy()
+    ranked_df = normalize_branch_b_report_events(events_df)
+    if ranked_df.empty:
+        return pd.DataFrame(columns=["sample_id"]), pd.DataFrame(columns=["sample_id", "branch_b_top_event"])
     if "cnvseq_report_tier" not in ranked_df.columns:
         ranked_df["cnvseq_report_tier"] = ""
     if "cnvseq_reportable" not in ranked_df.columns:
@@ -691,6 +783,31 @@ def summarize_branch_b_events(events_df):
     return sample_df, top_branch_b
 
 
+def ensure_branch_b_v2_sample_universe(sample_df, branch_b_v2_df):
+    """Keep samples with zero final report events visible in the sample report."""
+    if branch_b_v2_df.empty or "sample_id" not in branch_b_v2_df.columns:
+        return sample_df
+
+    sample_ids = branch_b_v2_df[["sample_id"]].copy()
+    if not sample_df.empty and "sample_id" in sample_df.columns:
+        sample_ids = pd.concat([sample_ids, sample_df[["sample_id"]]], ignore_index=True)
+    sample_ids["sample_id"] = sample_ids["sample_id"].fillna("").astype(str)
+    sample_ids = sample_ids.loc[sample_ids["sample_id"].ne("")].drop_duplicates().reset_index(drop=True)
+    if sample_ids.empty:
+        return sample_df
+
+    if sample_df.empty or "sample_id" not in sample_df.columns:
+        expanded = sample_ids.copy()
+    else:
+        expanded = sample_ids.merge(sample_df, on="sample_id", how="left")
+
+    for column, default in BRANCH_B_SAMPLE_DEFAULTS.items():
+        if column not in expanded.columns:
+            expanded[column] = default
+        expanded[column] = expanded[column].fillna(default)
+    return expanded
+
+
 def format_technical_conclusion(row):
     suppressed_count = int(row.get("branch_b_suppressed_sex_review_events", 0) or 0)
     top_event = text_or_empty(row.get("branch_b_top_event", "")) or ("suppressed_sex_chromosome_review" if suppressed_count > 0 else "none")
@@ -735,6 +852,8 @@ def format_technical_conclusion(row):
                 f"Bv2_technical_risk_review={int(row.get('branch_b_v2_technical_risk_review_count', 0) or 0)}",
                 f"Bv2_report_candidate={int(row.get('branch_b_v2_report_candidate_count', 0) or 0)}",
                 f"Bv2_report_event={int(row.get('branch_b_v2_report_event_count', 0) or 0)}",
+                f"Bv2_report_strong={int(row.get('branch_b_v2_report_strong_event_count', 0) or 0)}",
+                f"Bv2_report_weak={int(row.get('branch_b_v2_report_weak_event_count', 0) or 0)}",
                 f"Bv2_internal_review_event={int(row.get('branch_b_v2_internal_review_event_count', 0) or 0)}",
                 f"Bv2_filtered_event={int(row.get('branch_b_v2_filtered_event_count', 0) or 0)}",
                 f"Bv2_branch_s_event={int(row.get('branch_b_v2_branch_s_event_count', 0) or 0)}",
@@ -821,7 +940,7 @@ def main():
     fraction_benchmark = benchmark_summary.get("fraction_estimation", {}) if isinstance(benchmark_summary, dict) else {}
     low_fraction_detection = benchmark_summary.get("low_fraction_detection", []) if isinstance(benchmark_summary, dict) else []
 
-    if events_df.empty:
+    if events_df.empty and branch_b_v2_df.empty:
         empty = pd.DataFrame(columns=["sample_id"])
         ensure_parent(args.output_tsv)
         empty.to_csv(args.output_tsv, sep="\t", index=False)
@@ -832,6 +951,7 @@ def main():
         return
 
     sample_df, top_branch_b = summarize_branch_b_events(events_df)
+    sample_df = ensure_branch_b_v2_sample_universe(sample_df, branch_b_v2_df)
 
     sample_df = sample_df.merge(top_branch_b, on="sample_id", how="left")
     if not gender_df.empty:
@@ -924,6 +1044,8 @@ def main():
         f"- Branch B V2 technical-risk review burden: `{report_contract['branch_b_v2_technical_risk_review_count']}`",
         f"- Branch B V2 report-candidate burden: `{report_contract['branch_b_v2_report_candidate_count']}`",
         f"- Branch B V2 final report events: `{report_contract['branch_b_v2_report_event_count']}`",
+        f"- Branch B V2 final report strong events: `{report_contract['branch_b_v2_report_strong_event_count']}`",
+        f"- Branch B V2 final report weak events: `{report_contract['branch_b_v2_report_weak_event_count']}`",
         f"- Branch B V2 internal review events: `{report_contract['branch_b_v2_internal_review_event_count']}`",
         f"- Branch B V2 filtered events: `{report_contract['branch_b_v2_filtered_event_count']}`",
         f"- Branch B V2 Branch S events: `{report_contract['branch_b_v2_branch_s_event_count']}`",
@@ -1000,6 +1122,8 @@ def main():
         f"<p>Samples: {sample_df['sample_id'].nunique()} | Branch B kept events: {int(sample_df['branch_b_kept_events'].sum())} | "
         f"Report release status: {html_lib.escape(report_contract['status'])}</p>"
         f"<p>Branch B V2 report-layer events: report={int(report_contract['branch_b_v2_report_event_count'])}; "
+        f"report_strong={int(report_contract['branch_b_v2_report_strong_event_count'])}; "
+        f"report_weak={int(report_contract['branch_b_v2_report_weak_event_count'])}; "
         f"internal_review={int(report_contract['branch_b_v2_internal_review_event_count'])}; "
         f"filtered={int(report_contract['branch_b_v2_filtered_event_count'])}; "
         f"branch_s={int(report_contract['branch_b_v2_branch_s_event_count'])}; "
