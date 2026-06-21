@@ -15,6 +15,8 @@ def test_predict_dispatcher_exposes_phase1_phase2_actions():
 
     assert '"cnv_evidence_ledger": "pgta.predict.branch_b.evidence_ledger"' in dispatcher
     assert '"branch_b_v2_benchmark": "pgta.predict.branch_b.v2_benchmark"' in dispatcher
+    assert '"branch_b_lowres_evidence": "pgta.predict.branch_b.lowres_evidence"' in dispatcher
+    assert '"branch_b_ref_stability": "pgta.predict.branch_b.ref_stability"' in dispatcher
     assert '"negative_bank_labels": "pgta.predict.branch_b.negative_bank"' in dispatcher
     assert '"reference_candidate_audit": "pgta.reference.audit"' in dispatcher
 
@@ -315,3 +317,38 @@ def test_p6_report_package_consumes_review_summaries_only():
     assert "CNV_B_V2_CLASSIFIER" not in report_rule
     assert "final_disposition" not in report_rule
     assert "branch_b_keep_event" not in report_rule
+
+
+def test_lowres_evidence_is_optional_v2_ledger_context_not_report_promotion():
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+    target_assembly = read_text("rules/target_assembly.smk")
+
+    assert "CNV_LOWRES_EVIDENCE_CFG" in layout
+    assert "CNV_B_REF_STABILITY_BINS" in layout
+    assert "CNV_B_LOWRES_EVIDENCE" in layout
+    assert "lowres_evidence.enable=true requires lowres_evidence.reference_npz" in layout
+    assert "reference_sample_ids must match lowres_evidence.reference_npz length" in layout
+    assert "SCRIPT_BRANCH_B_LOWRES_EVIDENCE_ACTION" in workflow
+    assert "SCRIPT_BRANCH_B_REF_STABILITY_ACTION" in workflow
+    assert "rule cnv_branch_b_ref_stability" in workflow
+    assert "rule cnv_branch_b_lowres_evidence" in workflow
+
+    lowres_rule = workflow.split("rule cnv_branch_b_lowres_evidence:", 1)[1].split("rule cnv_branch_b_v2_classifier:", 1)[0]
+    assert "CNV_B_LOWRES_EVIDENCE" in lowres_rule
+    assert "--lowres-2mb-events" in lowres_rule
+    assert "--lowres-3mb-events" in lowres_rule
+    assert "--ref-stability-events" in lowres_rule
+    assert "CNV_B_FINAL_EVENTS" not in lowres_rule
+    assert "final_disposition" not in lowres_rule
+    assert "branch_b_keep_event" not in lowres_rule
+
+    classifier_rule = workflow.split("rule cnv_branch_b_v2_classifier:", 1)[1].split("if \"branch_b_v2_benchmark\" in AVAILABLE_TARGETS:", 1)[0]
+    assert "CNV_B_LOWRES_EVIDENCE" in classifier_rule
+
+    branch_b_target = target_assembly.split('if "branch_b_v2_benchmark" in REQUESTED_TARGETS', 1)[1].split('if "reference_audit" in REQUESTED_TARGETS', 1)[0]
+    assert "CNV_B_LOWRES_EVIDENCE" in branch_b_target
+
+    report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
+    assert "CNV_B_LOWRES_EVIDENCE" not in report_rule
+    assert "CNV_B_REF_STABILITY_BINS" not in report_rule

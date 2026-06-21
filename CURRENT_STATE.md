@@ -221,6 +221,37 @@ Current Branch B V2 pass2 correction:
   information. Previous pass2 counts remain historical methodology-audit output
   only and must not be used as current V2 performance evidence.
 
+Current Branch B V2 low-resolution/ref-MAD evidence interface:
+
+- Current report:
+  `docs/reports/branch_b_v2_lowres_ref_evidence_2026-06-21.md`.
+- This loop adds a config-gated auxiliary evidence path for 2Mb/3Mb
+  low-resolution same-direction support and reference-bin MAD stability.
+- The active Branch A/WisecondorX/CBS chain remains the primary discovery
+  layer. The low-resolution path does not replace WisecondorX predict/CBS, does
+  not create B-only events, does not modify Branch A, and does not promote
+  Branch B V2 or Branch S.
+- The new optional workflow path emits low-resolution support fields and
+  ref-MAD stability fields before `cnv_branch_b_v2_classifier`:
+  `lowres_2mb_*`, `lowres_3mb_*`, `lowres_consensus_label`,
+  `event_ref_mad_median`, `event_ref_mad_p90`,
+  `high_ref_mad_bin_fraction`, and `ref_stability_context`.
+- The V2 classifier exposes the evidence as
+  `v2_lowres_context_label`, `v2_lowres_context_reason`, and
+  `v2_ref_stability_context`, and adds `[lowres-shadow]` /
+  `[ref-mad-shadow]` audit tags when configured.
+- Low-resolution absence remains context only. It does not change
+  `v2_report_layer_class`, `v2_report_visibility`, `v2_filter_action`, or
+  `v2_burden_reduction_action`.
+- `core.wisecondorx.cnv.lowres_evidence.enable=true` now requires
+  `lowres_evidence.reference_npz`; if `reference_sample_ids` is supplied, its
+  length must match the NPZ list.
+- Default behavior remains unchanged when lowres evidence is disabled.
+- This loop has not built `h_r0_shadow_ref_20260619_2mb` or
+  `h_r0_shadow_ref_20260619_3mb`, and has not materialized low-res predict
+  events for Y/H/G/2026-06-15. Those are the next long-task gate, not a
+  completed result.
+
 ## 2026-06-21 Branch A Burden Optimization Phase 1
 
 Current report:

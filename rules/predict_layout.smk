@@ -106,6 +106,57 @@ CNV_B_EVIDENCE_LEDGER = str(Path(CNV_POSTPROCESS_DIR) / "evidence_ledger" / "{sa
 CNV_B_EVIDENCE_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "evidence_ledger" / "{sample}.summary.json")
 CNV_B_MATCHED_NEGATIVE = str(Path(CNV_POSTPROCESS_DIR) / "matched_negative" / "{sample}.candidate_evidence.tsv")
 CNV_B_MATCHED_NEGATIVE_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "matched_negative" / "{sample}.summary.json")
+CNV_LOWRES_EVIDENCE_CFG = CNV_CFG.get("lowres_evidence", {})
+CNV_LOWRES_EVIDENCE_ENABLE = bool(CNV_LOWRES_EVIDENCE_CFG.get("enable", False))
+CNV_LOWRES_2MB_EVENTS_DIR = (
+    resolve_path(CNV_LOWRES_EVIDENCE_CFG.get("events_2mb_dir", ""))
+    if str(CNV_LOWRES_EVIDENCE_CFG.get("events_2mb_dir", "")).strip()
+    else ""
+)
+CNV_LOWRES_3MB_EVENTS_DIR = (
+    resolve_path(CNV_LOWRES_EVIDENCE_CFG.get("events_3mb_dir", ""))
+    if str(CNV_LOWRES_EVIDENCE_CFG.get("events_3mb_dir", "")).strip()
+    else ""
+)
+CNV_LOWRES_2MB_EVENTS = (
+    str(Path(CNV_LOWRES_2MB_EVENTS_DIR) / "{sample}.candidate_events.tsv")
+    if CNV_LOWRES_2MB_EVENTS_DIR
+    else ""
+)
+CNV_LOWRES_3MB_EVENTS = (
+    str(Path(CNV_LOWRES_3MB_EVENTS_DIR) / "{sample}.candidate_events.tsv")
+    if CNV_LOWRES_3MB_EVENTS_DIR
+    else ""
+)
+CNV_LOWRES_REF_NPZ_PATHS = [
+    resolve_path(item)
+    for item in CNV_LOWRES_EVIDENCE_CFG.get("reference_npz", [])
+    if str(item).strip()
+]
+CNV_LOWRES_REF_SAMPLE_IDS = [
+    str(item)
+    for item in CNV_LOWRES_EVIDENCE_CFG.get("reference_sample_ids", [])
+    if str(item).strip()
+]
+if CNV_LOWRES_EVIDENCE_ENABLE and not CNV_LOWRES_REF_NPZ_PATHS:
+    raise ValueError("core.wisecondorx.cnv.lowres_evidence.enable=true requires lowres_evidence.reference_npz")
+if (
+    CNV_LOWRES_EVIDENCE_ENABLE
+    and CNV_LOWRES_REF_SAMPLE_IDS
+    and len(CNV_LOWRES_REF_SAMPLE_IDS) != len(CNV_LOWRES_REF_NPZ_PATHS)
+):
+    raise ValueError(
+        "core.wisecondorx.cnv.lowres_evidence.reference_sample_ids must match lowres_evidence.reference_npz length"
+    )
+CNV_LOWRES_REF_MODERATE_MAD_Z = float(CNV_LOWRES_EVIDENCE_CFG.get("moderate_mad_z", 2.0))
+CNV_LOWRES_REF_HIGH_MAD_Z = float(CNV_LOWRES_EVIDENCE_CFG.get("high_mad_z", 4.0))
+CNV_B_REF_STABILITY_DIR = str(Path(CNV_POSTPROCESS_DIR) / "ref_stability")
+CNV_B_REF_STABILITY_BINS = str(Path(CNV_B_REF_STABILITY_DIR) / "ref_bin_stability.tsv")
+CNV_B_REF_STABILITY_SUMMARY = str(Path(CNV_B_REF_STABILITY_DIR) / "summary.json")
+CNV_B_REF_STABILITY_EVENTS = str(Path(CNV_B_REF_STABILITY_DIR) / "{sample}.candidate_ref_stability.tsv")
+CNV_B_REF_STABILITY_EVENTS_SUMMARY = str(Path(CNV_B_REF_STABILITY_DIR) / "{sample}.summary.json")
+CNV_B_LOWRES_EVIDENCE = str(Path(CNV_POSTPROCESS_DIR) / "lowres_evidence" / "{sample}.candidate_evidence.tsv")
+CNV_B_LOWRES_EVIDENCE_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "lowres_evidence" / "{sample}.summary.json")
 CNV_B_V2_CLASSIFIER = str(Path(CNV_POSTPROCESS_DIR) / "v2_classifier" / "{sample}.candidate_classification.tsv")
 CNV_B_V2_CLASSIFIER_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "v2_classifier" / "{sample}.summary.json")
 CNV_B_V2_BENCHMARK_DIR = str(Path(CNV_POSTPROCESS_DIR) / "v2_benchmark")

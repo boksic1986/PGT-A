@@ -805,10 +805,110 @@ if CNV_ENABLED:
                         command.extend(["--background-ledger", background_ledger])
                     subprocess.run(command, check=True)
 
+    if CNV_POSTPROCESS_ENABLE_BRANCH_B and CNV_LOWRES_EVIDENCE_ENABLE:
+        rule cnv_branch_b_ref_stability_bins:
+            input:
+                npz=CNV_LOWRES_REF_NPZ_PATHS,
+                metadata=RUN_METADATA
+            output:
+                bins=CNV_B_REF_STABILITY_BINS,
+                summary=CNV_B_REF_STABILITY_SUMMARY
+            log:
+                project_path("logs", "cnv", "branch_b.ref_stability.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                command = [
+                    config["biosoft"]["python"],
+                    SCRIPT_BRANCH_B_REF_STABILITY,
+                    SCRIPT_BRANCH_B_REF_STABILITY_ACTION,
+                    "--output-bins", output.bins,
+                    "--output-summary", output.summary,
+                    "--moderate-mad-z", str(CNV_LOWRES_REF_MODERATE_MAD_Z),
+                    "--high-mad-z", str(CNV_LOWRES_REF_HIGH_MAD_Z),
+                ]
+                for npz_path in input.npz:
+                    command.extend(["--input-npz", str(npz_path)])
+                for sample_id in CNV_LOWRES_REF_SAMPLE_IDS:
+                    command.extend(["--sample-id", str(sample_id)])
+                subprocess.run(command, check=True)
+
+        rule cnv_branch_b_ref_stability:
+            input:
+                ledger=(CNV_B_MATCHED_NEGATIVE if CNV_NEGATIVE_BANK_SAMPLES_TSV else CNV_B_EVIDENCE_LEDGER),
+                bins=CNV_B_REF_STABILITY_BINS,
+                metadata=RUN_METADATA
+            output:
+                events=CNV_B_REF_STABILITY_EVENTS,
+                summary=CNV_B_REF_STABILITY_EVENTS_SUMMARY
+            log:
+                project_path("logs", "cnv", "{sample}.branch_b.ref_stability.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                subprocess.run(
+                    [
+                        config["biosoft"]["python"],
+                        SCRIPT_BRANCH_B_REF_STABILITY,
+                        SCRIPT_BRANCH_B_REF_STABILITY_ACTION,
+                        "--input-bins", input.bins,
+                        "--input-events", input.ledger,
+                        "--output-events", output.events,
+                        "--output-summary", output.summary,
+                        "--moderate-mad-z", str(CNV_LOWRES_REF_MODERATE_MAD_Z),
+                        "--high-mad-z", str(CNV_LOWRES_REF_HIGH_MAD_Z),
+                    ],
+                    check=True,
+                )
+
+        rule cnv_branch_b_lowres_evidence:
+            input:
+                ledger=(CNV_B_MATCHED_NEGATIVE if CNV_NEGATIVE_BANK_SAMPLES_TSV else CNV_B_EVIDENCE_LEDGER),
+                lowres_2mb=([CNV_LOWRES_2MB_EVENTS] if CNV_LOWRES_2MB_EVENTS else []),
+                lowres_3mb=([CNV_LOWRES_3MB_EVENTS] if CNV_LOWRES_3MB_EVENTS else []),
+                ref_stability=CNV_B_REF_STABILITY_EVENTS,
+                metadata=RUN_METADATA
+            output:
+                ledger=CNV_B_LOWRES_EVIDENCE,
+                summary=CNV_B_LOWRES_EVIDENCE_SUMMARY
+            log:
+                project_path("logs", "cnv", "{sample}.branch_b.lowres_evidence.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                command = [
+                    config["biosoft"]["python"],
+                    SCRIPT_BRANCH_B_LOWRES_EVIDENCE,
+                    SCRIPT_BRANCH_B_LOWRES_EVIDENCE_ACTION,
+                    "--sample-id", wildcards.sample,
+                    "--input-ledger", input.ledger,
+                    "--ref-stability-events", input.ref_stability,
+                    "--output-ledger", output.ledger,
+                    "--output-summary", output.summary,
+                ]
+                if input.lowres_2mb:
+                    command.extend(["--lowres-2mb-events", input.lowres_2mb[0]])
+                if input.lowres_3mb:
+                    command.extend(["--lowres-3mb-events", input.lowres_3mb[0]])
+                subprocess.run(command, check=True)
+
     if CNV_POSTPROCESS_ENABLE_BRANCH_B:
         rule cnv_branch_b_v2_classifier:
             input:
-                ledger=(CNV_B_MATCHED_NEGATIVE if CNV_NEGATIVE_BANK_SAMPLES_TSV else CNV_B_EVIDENCE_LEDGER),
+                ledger=(
+                    CNV_B_LOWRES_EVIDENCE
+                    if CNV_LOWRES_EVIDENCE_ENABLE
+                    else (CNV_B_MATCHED_NEGATIVE if CNV_NEGATIVE_BANK_SAMPLES_TSV else CNV_B_EVIDENCE_LEDGER)
+                ),
                 metadata=RUN_METADATA
             output:
                 classification=CNV_B_V2_CLASSIFIER,
