@@ -173,7 +173,12 @@ def test_branch_b_v2_benchmark_is_v2_only_and_report_safe():
     assert "CNV_REPORT_TSV" not in benchmark_target
 
     report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
-    assert "CNV_B_V2_BENCHMARK_SUMMARY" not in report_rule
+    assert "CNV_B_V2_BENCHMARK_SUMMARY" in report_rule
+    assert "CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY" in report_rule
+    assert "--branch-b-v2-benchmark-summary" in report_rule
+    assert "--branch-b-v2-sample-summary" in report_rule
+    v2_report_input_block = report_rule.split("branch_b_v2_benchmark_summary", 1)[1].split("evaluation_summary", 1)[0]
+    assert "CNV_B_FINAL_EVENTS" not in v2_report_input_block
 
 
 def test_negative_bank_rule_is_config_gated_and_not_automatic_n0():
@@ -285,8 +290,12 @@ def test_p6_report_package_consumes_review_summaries_only():
     assert "--branch-a-validation-summary" in report_rule
     assert "--branch-b-evidence-summary" in report_rule
     assert "--branch-s-summary" in report_rule
+    assert "--branch-b-v2-benchmark-summary" in report_rule
+    assert "--branch-b-v2-sample-summary" in report_rule
     assert "CNV_B_EVIDENCE_LEDGER" not in report_rule
     assert "CNV_BRANCH_S_EVIDENCE" not in report_rule
     assert "CNV_BRANCH_S_SCORES" not in report_rule
     assert "CNV_B_MATCHED_NEGATIVE" not in report_rule
     assert "CNV_B_V2_CLASSIFIER" not in report_rule
+    assert "final_disposition" not in report_rule
+    assert "branch_b_keep_event" not in report_rule

@@ -1061,6 +1061,8 @@ if CNV_ENABLED:
                 branch_a_validation_summaries=CNV_REPORT_BRANCH_A_VALIDATION_SUMMARIES,
                 branch_b_evidence_summaries=(expand(CNV_B_EVIDENCE_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 branch_s_summaries=(expand(CNV_BRANCH_S_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
+                branch_b_v2_benchmark_summary=([CNV_B_V2_BENCHMARK_SUMMARY] if "branch_b_v2_benchmark" in REQUESTED_TARGETS else []),
+                branch_b_v2_sample_summary=([CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY] if "branch_b_v2_benchmark" in REQUESTED_TARGETS else []),
                 evaluation_summary=([CNV_EVAL_SUMMARY] if "cnv_eval" in REQUESTED_TARGETS else []),
                 ml_summary=([CNV_ML_SUMMARY] if "cnv_ml" in REQUESTED_TARGETS else []),
                 benchmark_summary=([CNV_BENCHMARK_SUMMARY] if "cnv_benchmark" in REQUESTED_TARGETS else []),
@@ -1105,6 +1107,10 @@ if CNV_ENABLED:
                     command.extend(["--benchmark-summary", input.benchmark_summary[0]])
                 if input.mosaic_truth_validation:
                     command.extend(["--truth-validation-summary", input.mosaic_truth_validation[0]])
+                if input.branch_b_v2_benchmark_summary:
+                    command.extend(["--branch-b-v2-benchmark-summary", input.branch_b_v2_benchmark_summary[0]])
+                if input.branch_b_v2_sample_summary:
+                    command.extend(["--branch-b-v2-sample-summary", input.branch_b_v2_sample_summary[0]])
                 for path_value in input.branch_a_validation_summaries:
                     command.extend(["--branch-a-validation-summary", path_value])
                 for path_value in input.events:

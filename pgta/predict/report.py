@@ -35,6 +35,8 @@ def parse_args():
     parser.add_argument("--branch-a-validation-summary", action="append", default=[])
     parser.add_argument("--branch-b-evidence-summary", action="append", default=[])
     parser.add_argument("--branch-s-summary", action="append", default=[])
+    parser.add_argument("--branch-b-v2-benchmark-summary", default="")
+    parser.add_argument("--branch-b-v2-sample-summary", default="")
     parser.add_argument("--reference-id", default="")
     parser.add_argument("--wisecondorx-predict-command", default="")
     parser.add_argument("--evaluation-summary", default="")
@@ -249,6 +251,74 @@ def load_branch_b_evidence_summaries(paths):
     return pd.DataFrame(rows)
 
 
+def load_branch_b_v2_burden_summaries(sample_summary_path="", benchmark_summary_path="", report_reference_id=""):
+    summary = read_optional_json(benchmark_summary_path)
+    if not summary:
+        return pd.DataFrame(), {
+            "branch_b_v2_burden_status": "not_configured",
+            "branch_b_v2_background_unknown_review_count": 0,
+            "branch_b_v2_branch_s_review_count": 0,
+            "branch_b_v2_technical_risk_review_count": 0,
+            "branch_b_v2_report_candidate_count": 0,
+            "branch_b_v2_legacy_fields_used": False,
+            "branch_b_v2_final_impact": "development_review_only",
+            "branch_b_v2_same_reference_config_status": "not_configured",
+            "branch_b_v2_sample_summary_count": 0,
+            "branch_b_v2_note": "Branch B V2 burden stratification is not configured for this report.",
+        }
+
+    summary_reference = str(summary.get("reference_id", ""))
+    report_reference = str(report_reference_id or "")
+    same_reference = bool(summary_reference and report_reference and summary_reference == report_reference)
+    same_reference_status = "matched" if same_reference else "mismatch"
+    legacy_used = bool(summary.get("legacy_branch_b_decision_fields_used", False))
+    contract = {
+        "branch_b_v2_burden_status": str(summary.get("status", "unknown")),
+        "branch_b_v2_background_unknown_review_count": int(
+            summary.get("v2_background_unknown_review_burden_count", 0) or 0
+        ),
+        "branch_b_v2_branch_s_review_count": int(summary.get("v2_branch_s_review_burden_count", 0) or 0),
+        "branch_b_v2_technical_risk_review_count": int(summary.get("v2_technical_risk_burden_count", 0) or 0),
+        "branch_b_v2_report_candidate_count": int(summary.get("v2_report_candidate_burden_count", 0) or 0),
+        "branch_b_v2_legacy_fields_used": legacy_used,
+        "branch_b_v2_final_impact": "development_review_only",
+        "branch_b_v2_same_reference_config_status": same_reference_status,
+        "branch_b_v2_sample_summary_count": int(summary.get("sample_count", 0) or 0),
+        "branch_b_v2_note": (
+            "Branch B V2 burden stratification is displayed as development_review_only evidence; "
+            "it is not FP-reduction proof and does not promote Branch B V2 or Branch S."
+        ),
+    }
+
+    sample_path = Path(sample_summary_path) if sample_summary_path else None
+    if sample_path is None or not sample_path.exists():
+        return pd.DataFrame(), contract
+
+    sample_summary = pd.read_csv(sample_path, sep="\t")
+    if sample_summary.empty or "sample_id" not in sample_summary.columns:
+        return pd.DataFrame(), contract
+
+    rows = []
+    for row in sample_summary.to_dict(orient="records"):
+        rows.append(
+            {
+                "sample_id": str(row.get("sample_id", "")),
+                "branch_b_v2_burden_status": contract["branch_b_v2_burden_status"],
+                "branch_b_v2_background_unknown_review_count": int(
+                    row.get("v2_background_unknown_review_burden_count", 0) or 0
+                ),
+                "branch_b_v2_branch_s_review_count": int(row.get("v2_branch_s_review_burden_count", 0) or 0),
+                "branch_b_v2_technical_risk_review_count": int(row.get("v2_technical_risk_burden_count", 0) or 0),
+                "branch_b_v2_report_candidate_count": int(row.get("v2_report_candidate_burden_count", 0) or 0),
+                "branch_b_v2_review_candidate_count": int(row.get("v2_review_candidate_burden_count", 0) or 0),
+                "branch_b_v2_legacy_fields_used": legacy_used,
+                "branch_b_v2_final_impact": "development_review_only",
+                "branch_b_v2_same_reference_config_status": same_reference_status,
+            }
+        )
+    return pd.DataFrame(rows), contract
+
+
 def load_branch_a_validation_summaries(paths):
     rows = []
     for path_value in paths:
@@ -406,6 +476,20 @@ def format_branch_b_evidence_status(row):
     impact = text_or_empty(row.get("branch_b_evidence_final_report_impact", "")) or "not_recorded"
     review = int(row.get("branch_b_evidence_review_required_count", 0) or 0)
     return f"candidates={int(count)}; review_required={review}; background={background}; impact={impact}"
+
+
+def format_branch_b_v2_burden_status(row):
+    status = row.get("branch_b_v2_burden_status", "")
+    if pd.isna(status) or status == "":
+        return "not_available"
+    return (
+        f"status={status}; "
+        f"background_unknown_review={int(row.get('branch_b_v2_background_unknown_review_count', 0) or 0)}; "
+        f"branch_s_review={int(row.get('branch_b_v2_branch_s_review_count', 0) or 0)}; "
+        f"technical_risk_review={int(row.get('branch_b_v2_technical_risk_review_count', 0) or 0)}; "
+        f"report_candidate={int(row.get('branch_b_v2_report_candidate_count', 0) or 0)}; "
+        f"impact={text_or_empty(row.get('branch_b_v2_final_impact', 'development_review_only')) or 'development_review_only'}"
+    )
 
 
 def format_sca_report_status(row):
@@ -609,6 +693,19 @@ def format_technical_conclusion(row):
                 f"P3_report_impact={text_or_empty(row.get('branch_b_evidence_final_report_impact', 'not_recorded')) or 'not_recorded'}",
             ]
         )
+    v2_status = row.get("branch_b_v2_burden_status", "")
+    if not pd.isna(v2_status) and v2_status != "":
+        parts.extend(
+            [
+                f"Bv2_burden_status={text_or_empty(v2_status)}",
+                f"Bv2_background_unknown_review={int(row.get('branch_b_v2_background_unknown_review_count', 0) or 0)}",
+                f"Bv2_branch_s_review={int(row.get('branch_b_v2_branch_s_review_count', 0) or 0)}",
+                f"Bv2_technical_risk_review={int(row.get('branch_b_v2_technical_risk_review_count', 0) or 0)}",
+                f"Bv2_report_candidate={int(row.get('branch_b_v2_report_candidate_count', 0) or 0)}",
+                f"Bv2_final_impact={text_or_empty(row.get('branch_b_v2_final_impact', 'development_review_only')) or 'development_review_only'}",
+                f"Bv2_legacy_fields_used={bool(row.get('branch_b_v2_legacy_fields_used', False))}",
+            ]
+        )
     sca_mode = text_or_empty(row.get("sca_output_mode", ""))
     if sca_mode:
         parts.extend(
@@ -648,6 +745,11 @@ def main():
     branch_a_validation_summaries = load_branch_a_validation_summaries(args.branch_a_validation_summary)
     branch_b_evidence_df = load_branch_b_evidence_summaries(args.branch_b_evidence_summary)
     branch_s_df = load_branch_s_summaries(args.branch_s_summary)
+    branch_b_v2_df, branch_b_v2_contract = load_branch_b_v2_burden_summaries(
+        sample_summary_path=args.branch_b_v2_sample_summary,
+        benchmark_summary_path=args.branch_b_v2_benchmark_summary,
+        report_reference_id=args.reference_id,
+    )
     evaluation_summary = read_optional_json(args.evaluation_summary)
     ml_summary = read_optional_json(args.ml_summary)
     benchmark_summary = read_optional_json(args.benchmark_summary)
@@ -689,10 +791,13 @@ def main():
         sample_df = sample_df.merge(branch_b_evidence_df, on="sample_id", how="left")
     if not branch_s_df.empty:
         sample_df = sample_df.merge(branch_s_df, on="sample_id", how="left")
+    if not branch_b_v2_df.empty:
+        sample_df = sample_df.merge(branch_b_v2_df, on="sample_id", how="left")
 
     sample_df["technical_conclusion"] = sample_df.apply(format_technical_conclusion, axis=1)
     sample_df["biological_candidate_conclusion"] = sample_df.apply(format_biological_candidate_conclusion, axis=1)
     sample_df["branch_b_evidence_status"] = sample_df.apply(format_branch_b_evidence_status, axis=1)
+    sample_df["branch_b_v2_burden_display"] = sample_df.apply(format_branch_b_v2_burden_status, axis=1)
     sample_df["sca_report_status"] = sample_df.apply(format_sca_report_status, axis=1)
     sample_df = sample_df.drop(columns=[column for column in A_BRANCH_INTERNAL_COLUMNS if column in sample_df.columns])
 
@@ -708,9 +813,13 @@ def main():
         "same_reference_config_status": branch_a_validation_gate["same_reference_config_status"],
         "branch_b_evidence_summary_count": int(len(branch_b_evidence_df)),
         "branch_s_summary_count": int(len(branch_s_df)),
+        **branch_b_v2_contract,
         "branch_b_raw_ledger_used": False,
         "branch_s_raw_evidence_used": False,
-        "note": "P6 report package carries P3/P5 review summaries only; it does not promote Branch B or SCA.",
+        "note": (
+            "P6 report package carries P3/P5 review summaries and Branch B V2 burden display only; "
+            "it does not promote Branch B V2, Branch S, or SCA."
+        ),
     }
     payload = {
         "status": "completed",
@@ -744,11 +853,19 @@ def main():
         f"- H6 chr21 status: `{branch_a_validation_gate['H6_chr21_status']}`",
         f"- Branch B evidence summaries: `{report_contract['branch_b_evidence_summary_count']}`",
         f"- Branch S summaries: `{report_contract['branch_s_summary_count']}`",
+        f"- Branch B V2 burden status: `{report_contract['branch_b_v2_burden_status']}`",
+        f"- Branch B V2 final impact: `{report_contract['branch_b_v2_final_impact']}`",
+        f"- Branch B V2 legacy fields used: `{report_contract['branch_b_v2_legacy_fields_used']}`",
+        f"- Branch B V2 background-unknown review burden: `{report_contract['branch_b_v2_background_unknown_review_count']}`",
+        f"- Branch B V2 Branch S review burden: `{report_contract['branch_b_v2_branch_s_review_count']}`",
+        f"- Branch B V2 technical-risk review burden: `{report_contract['branch_b_v2_technical_risk_review_count']}`",
+        f"- Branch B V2 report-candidate burden: `{report_contract['branch_b_v2_report_candidate_count']}`",
+        "- Branch B V2 limitation: `development_review_only display; not FP-reduction proof; not final promotion`",
         "",
         "## Sample Table",
         "",
-        "| Sample | QC | Sex | Plot | Branch B Top Event | P3 Evidence | SCA Status | Technical Conclusion | Biological Candidate Conclusion |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Sample | QC | Sex | Plot | Branch B Top Event | P3 Evidence | Branch B V2 Burden | SCA Status | Technical Conclusion | Biological Candidate Conclusion |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     if fraction_benchmark:
         md_lines[8:8] = [
@@ -783,6 +900,7 @@ def main():
             f"{plot_link or ''} | "
             f"{getattr(row, 'branch_b_top_event', '') or 'none'} | "
             f"{getattr(row, 'branch_b_evidence_status', 'not_available')} | "
+            f"{getattr(row, 'branch_b_v2_burden_display', 'not_available')} | "
             f"{getattr(row, 'sca_report_status', 'not_available')} | "
             f"{row.technical_conclusion} | {row.biological_candidate_conclusion} |"
         )
@@ -799,6 +917,7 @@ def main():
             f"<td>{plot_link}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'branch_b_top_event', '') or 'none'))}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'branch_b_evidence_status', 'not_available')))}</td>"
+            f"<td>{html_lib.escape(str(getattr(row, 'branch_b_v2_burden_display', 'not_available')))}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'sca_report_status', 'not_available')))}</td>"
             f"<td>{html_lib.escape(str(row.technical_conclusion))}</td>"
             f"<td>{html_lib.escape(str(row.biological_candidate_conclusion))}</td>"
@@ -811,8 +930,9 @@ def main():
         "</head><body><h1>CNV Report</h1>"
         f"<p>Samples: {sample_df['sample_id'].nunique()} | Branch B kept events: {int(sample_df['branch_b_kept_events'].sum())} | "
         f"Report release status: {html_lib.escape(report_contract['status'])}</p>"
+        "<p>Branch B V2 burden display is development_review_only evidence; it is not FP-reduction proof and is not final promotion.</p>"
         "<table><thead><tr><th>Sample</th><th>QC</th><th>Sex</th><th>Plot</th><th>Branch B Top Event</th>"
-        "<th>P3 Evidence</th><th>SCA Status</th><th>Technical Conclusion</th><th>Biological Candidate Conclusion</th></tr></thead><tbody>"
+        "<th>P3 Evidence</th><th>Branch B V2 Burden</th><th>SCA Status</th><th>Technical Conclusion</th><th>Biological Candidate Conclusion</th></tr></thead><tbody>"
         + "".join(html_rows)
         + "</tbody></table></body></html>"
     )

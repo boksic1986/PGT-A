@@ -23,14 +23,15 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_1527_branch_b_v2_burden_stratification_handoff.md
+active_handoff: docs/handoff/2026-06-21_1614_branch_b_v2_report_contract_handoff.md
+previous_handoff: docs/handoff/2026-06-21_1527_branch_b_v2_burden_stratification_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_burden_stratification_materialized_truth_preserved
+branch_b_status: v2_burden_display_report_contract_integrated
 branch_s_status: review_reportable_with_limitations
-report_status: final_delivery_target_after_a_b_strengthening
+report_status: branch_b_v2_burden_display_contract_integrated_development_only
 
 ## Current Evidence Files
 
@@ -46,6 +47,8 @@ report_status: final_delivery_target_after_a_b_strengthening
 - `docs/reports/branch_b_v2_method_reset_threshold_inventory_2026-06-21.md`
 - `docs/reports/branch_b_v2_truth_safe_filter_2026-06-21.md`
 - `docs/reports/branch_b_v2_burden_stratification_2026-06-21.md`
+- `docs/reports/branch_b_v2_report_contract_2026-06-21.md`
+- `docs/handoff/2026-06-21_1614_branch_b_v2_report_contract_handoff.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
 - `docs/reports/p6_report_package_contract_2026-06-20.md`
@@ -302,6 +305,22 @@ Materialized burden-stratification result:
 This improves auditability and future report/review routing, but it still does
 not prove FP/review burden reduction. It must not be treated as Branch B V2
 final-report promotion.
+
+The Branch B V2 report-contract integration loop is now represented in
+`docs/reports/branch_b_v2_report_contract_2026-06-21.md`. `cnv_report` can
+consume the V2 benchmark summary and sample-summary table and expose:
+
+- `branch_b_v2_burden_status`;
+- `branch_b_v2_background_unknown_review_count`;
+- `branch_b_v2_branch_s_review_count`;
+- `branch_b_v2_technical_risk_review_count`;
+- `branch_b_v2_report_candidate_count`;
+- `branch_b_v2_legacy_fields_used=false`;
+- `branch_b_v2_final_impact=development_review_only`.
+
+These fields are report-display context only. They do not modify Branch A,
+do not add hard filters, and do not promote Branch B V2 or Branch S to final
+report logic.
 
 ### Branch S
 

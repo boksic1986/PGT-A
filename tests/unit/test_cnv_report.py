@@ -16,6 +16,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - environment-dependent s
     IMPORT_ERROR = exc
 else:
     IMPORT_ERROR = None
+    import pgta.predict.report as report_module
     from pgta.predict.report import (
         build_plot_lookup,
         format_biological_candidate_conclusion,
@@ -274,6 +275,94 @@ class CnvReportRankingTest(unittest.TestCase):
         self.assertEqual(branch_b_df.iloc[0]["branch_b_evidence_final_report_impact"], "none_shadow_only")
         self.assertEqual(branch_s_df.iloc[0]["sca_candidate_state"], "X_LOSS")
         self.assertEqual(branch_s_df.iloc[0]["sca_output_mode"], "review_development_only")
+
+    def test_report_loads_branch_b_v2_burden_summary_for_development_display(self):
+        self.assertTrue(hasattr(report_module, "load_branch_b_v2_burden_summaries"))
+
+        with tempfile.TemporaryDirectory() as temp_dir_value:
+            temp_dir = Path(temp_dir_value)
+            sample_summary = temp_dir / "sample_summary.tsv"
+            sample_summary.write_text(
+                "\t".join(
+                    [
+                        "sample_id",
+                        "candidate_count",
+                        "v2_report_candidate_burden_count",
+                        "v2_review_candidate_burden_count",
+                        "v2_background_unknown_review_burden_count",
+                        "v2_technical_risk_burden_count",
+                        "v2_branch_s_review_burden_count",
+                    ]
+                )
+                + "\n"
+                + "\t".join(["S1", "5", "1", "3", "2", "1", "1"])
+                + "\n",
+                encoding="utf-8",
+            )
+            benchmark_summary = temp_dir / "summary.json"
+            benchmark_summary.write_text(
+                """
+                {
+                  "status": "ready",
+                  "reference_id": "h_r0_shadow_ref_20260619",
+                  "sample_count": 1,
+                  "candidate_count": 5,
+                  "v2_report_candidate_burden_count": 1,
+                  "v2_review_candidate_burden_count": 3,
+                  "v2_background_unknown_review_burden_count": 2,
+                  "v2_technical_risk_burden_count": 1,
+                  "v2_branch_s_review_burden_count": 1,
+                  "legacy_branch_b_decision_fields_used": false,
+                  "final_report_impact": "none_shadow_only",
+                  "benchmark_scope": "v2_classifier_rows_only"
+                }
+                """,
+                encoding="utf-8",
+            )
+
+            v2_df, v2_contract = report_module.load_branch_b_v2_burden_summaries(
+                sample_summary_path=str(sample_summary),
+                benchmark_summary_path=str(benchmark_summary),
+                report_reference_id="h_r0_shadow_ref_20260619",
+            )
+
+        self.assertEqual(v2_contract["branch_b_v2_burden_status"], "ready")
+        self.assertEqual(v2_contract["branch_b_v2_legacy_fields_used"], False)
+        self.assertEqual(v2_contract["branch_b_v2_final_impact"], "development_review_only")
+        self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_report_candidate_count"]), 1)
+        self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_background_unknown_review_count"]), 2)
+        self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_branch_s_review_count"]), 1)
+
+    def test_technical_conclusion_marks_branch_b_v2_development_only_burden(self):
+        row = pd.Series(
+            {
+                "branch_b_kept_events": 0,
+                "branch_b_suppressed_sex_review_events": 0,
+                "a_branch_event_count": 1,
+                "a_branch_top_event": "chr21:20700000-22300000 gain",
+                "a_branch_review_candidate_count": 1,
+                "a_branch_review_shortlist": "chr21:20700000-22300000 gain z=7.11",
+                "a_branch_strong_signal_count": 0,
+                "branch_b_v2_burden_status": "ready",
+                "branch_b_v2_background_unknown_review_count": 2,
+                "branch_b_v2_branch_s_review_count": 1,
+                "branch_b_v2_technical_risk_review_count": 0,
+                "branch_b_v2_report_candidate_count": 0,
+                "branch_b_v2_final_impact": "development_review_only",
+                "branch_b_v2_legacy_fields_used": False,
+                "qc_status": "PASS",
+                "sex_call": "XY",
+            }
+        )
+
+        conclusion = format_technical_conclusion(row)
+
+        self.assertIn("Bv2_burden_status=ready", conclusion)
+        self.assertIn("Bv2_background_unknown_review=2", conclusion)
+        self.assertIn("Bv2_branch_s_review=1", conclusion)
+        self.assertIn("Bv2_report_candidate=0", conclusion)
+        self.assertIn("Bv2_final_impact=development_review_only", conclusion)
+        self.assertIn("Bv2_legacy_fields_used=False", conclusion)
 
     def test_technical_conclusion_marks_p6_review_development_context(self):
         row = pd.Series(
