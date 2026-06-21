@@ -11,11 +11,11 @@ def test_current_context_index_exists_and_pins_active_context():
 
     required_tokens = [
         "status: active_current_index",
-        "active_handoff: docs/handoff/2026-06-21_0318_branch_a_gap2m_materialization_handoff.md",
+        "active_handoff: docs/handoff/2026-06-21_1415_branch_b_v2_method_reset_handoff.md",
         "active_reference_id: h_r0_shadow_ref_20260619",
         "reference_status: fixed_shadow_baseline_not_production",
         "branch_a_status: burden_phase1_gap2m_materialized_default_unchanged",
-        "branch_b_status: v2_evidence_design_legacy_excluded",
+        "branch_b_status: v2_gap2m_method_reset_disposition_materialized_truth_preserved",
         "branch_s_status: review_reportable_with_limitations",
         "report_status: final_delivery_target_after_a_b_strengthening",
     ]
