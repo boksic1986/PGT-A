@@ -39,6 +39,22 @@ Remote materialized active gap2m Branch S results:
 - 2026-06-15: 2 weak SCA internal-review events and 3 no-call; burden/context
   only, no TP/FN/FP conclusion.
 
+Current report-layer totals from `wisecondorx/cnv/report/cnv_summary.tsv`:
+
+- Y1-Y8: report=21, internal_review=50, filtered audit-only=13,
+  Branch-S-routed=13, sample burden flags=2.
+- H1-H16: report=6, internal_review=49, filtered audit-only=8,
+  Branch-S-routed=42, sample burden flags=1.
+- G1-G8: report=15, internal_review=40, filtered audit-only=7,
+  Branch-S-routed=13, sample burden flags=1.
+- 2026-06-15: report=52, internal_review=76, filtered audit-only=23,
+  Branch-S-routed=14, sample burden flags=5.
+
+`Branch-S-routed` counts are sex-chromosome candidate routing burden, not SCA
+positive counts. The SCA correction reduces false strong SCA interpretation
+inside the Branch S section; it does not by itself reduce autosomal report
+events.
+
 Remote validation:
 
 - `tests/unit/test_branch_s_shadow.py`,

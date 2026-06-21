@@ -71,12 +71,75 @@ results_20260615_h_r0_shadow_ref_20260619/wisecondorx/cnv/postprocess_gap2m/bran
 
 ### Cohort Summary
 
+This table is the Branch S / SCA section after the sex-aware correction. It is
+not the autosomal CNV report-event count.
+
 | cohort | samples | SCA review strong | SCA review weak | SCA no-call | report review | internal review | sex-consistent/audit | no-call |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Y1-Y8 | 8 | 1 | 0 | 7 | 1 | 0 | 5 | 2 |
 | H1-H16 | 16 | 2 | 1 | 13 | 2 | 1 | 12 | 1 |
 | G1-G8 | 8 | 0 | 2 | 6 | 0 | 2 | 3 | 3 |
 | 2026-06-15 | 5 | 0 | 2 | 3 | 0 | 2 | 3 | 0 |
+
+### CNV Report-Layer Totals
+
+These counts come from `wisecondorx/cnv/report/cnv_summary.tsv`. They describe
+the full Branch B V2 report-layer burden. `branch_s_routed_events` is the number
+of sex-chromosome candidates routed out of the autosomal CNV table and into
+Branch S context; it is not the number of SCA positives.
+
+| cohort | samples | report events | internal review events | filtered audit-only events | branch-s routed events | sample burden flags |
+|---|---:|---:|---:|---:|---:|---:|
+| Y1-Y8 | 8 | 21 | 50 | 13 | 13 | 2 |
+| H1-H16 | 16 | 6 | 49 | 8 | 42 | 1 |
+| G1-G8 | 8 | 15 | 40 | 7 | 13 | 1 |
+| 2026-06-15 | 5 | 52 | 76 | 23 | 14 | 5 |
+
+The SCA correction primarily reduces false strong SCA interpretation inside the
+Branch S section. It does not by itself reduce autosomal `report_events` or
+`internal_review_events`.
+
+### SCA Sample-Level Results
+
+| cohort | sample | sex | Branch A X | Branch A Y | SCA state | SCA tier | report layer | reason |
+|---|---|---|---|---|---|---|---|---|
+| Y1-Y8 | Y1 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| Y1-Y8 | Y2 | XX | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| Y1-Y8 | Y3 | XX | present | absent | X_LOSS | SCA_REVIEW_STRONG | sca_report_review_event | sca_review_strong_with_nonpar_corroboration |
+| Y1-Y8 | Y4 | XX | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| Y1-Y8 | Y5 | XX | absent | absent | none_detected | SCA_NO_CALL | sca_no_call | insufficient_sca_evidence |
+| Y1-Y8 | Y6 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| Y1-Y8 | Y7 | XX | absent | absent | none_detected | SCA_NO_CALL | sca_no_call | insufficient_sca_evidence |
+| Y1-Y8 | Y8 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H1 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H2 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H3 | XX | absent | absent | none_detected | SCA_NO_CALL | sca_no_call | insufficient_sca_evidence |
+| H1-H16 | H4 | XX | present | absent | X_LOSS | SCA_REVIEW_WEAK | sca_internal_review_event | sca_review_weak_with_nonpar_corroboration |
+| H1-H16 | H5 | XX | present | absent | X_LOSS | SCA_REVIEW_STRONG | sca_report_review_event | sca_review_strong_with_nonpar_corroboration |
+| H1-H16 | H6 | XX | present | absent | X_LOSS | SCA_REVIEW_STRONG | sca_report_review_event | sca_review_strong_with_nonpar_corroboration |
+| H1-H16 | H7 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H8 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H9 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H10 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H11 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H12 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H13 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H14 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H15 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| H1-H16 | H16 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| G1-G8 | G1 | XX | absent | absent | none_detected | SCA_NO_CALL | sca_no_call | insufficient_sca_evidence |
+| G1-G8 | G2 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| G1-G8 | G3 | XX | present | absent | X_LOSS | SCA_REVIEW_WEAK | sca_internal_review_event | sca_review_weak_with_nonpar_corroboration |
+| G1-G8 | G4 | XX | absent | absent | none_detected | SCA_NO_CALL | sca_no_call | insufficient_sca_evidence |
+| G1-G8 | G5 | XX | present | absent | X_LOSS | SCA_REVIEW_WEAK | sca_internal_review_event | sca_review_weak_with_nonpar_corroboration |
+| G1-G8 | G6 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| G1-G8 | G7 | XX | absent | absent | none_detected | SCA_NO_CALL | sca_no_call | insufficient_sca_evidence |
+| G1-G8 | G8 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| 2026-06-15 | JZ26125843-56-56 | XX | present | absent | X_LOSS | SCA_REVIEW_WEAK | sca_internal_review_event | sca_review_weak_with_nonpar_corroboration |
+| 2026-06-15 | JZ26125844-59-59 | XX | present | absent | X_LOSS | SCA_REVIEW_WEAK | sca_internal_review_event | sca_review_weak_with_nonpar_corroboration |
+| 2026-06-15 | JZ26125845-60-60 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| 2026-06-15 | JZ26125846-61-61 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
+| 2026-06-15 | JZ26125847-62-62 | XY | present | absent | none_detected | SCA_NO_CALL | sca_filtered_or_sex_consistent_event | branch_a_only_uncorroborated_by_nonpar_median |
 
 ### Locked SCA Truth Visibility
 
@@ -116,7 +179,7 @@ PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
 Result:
 
 ```text
-38 passed in 1.25s
+38 passed in 1.10s
 ```
 
 Remote dry-run target for all active gap2m configs:

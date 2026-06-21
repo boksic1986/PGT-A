@@ -99,6 +99,20 @@ Cohort summary:
 | G1-G8 | 8 | 0 | 2 | 6 | 0 | 2 | 3 |
 | 2026-06-15 | 5 | 0 | 2 | 3 | 0 | 2 | 3 |
 
+CNV report-layer totals from `wisecondorx/cnv/report/cnv_summary.tsv`:
+
+| cohort | samples | report events | internal review | filtered audit-only | Branch-S routed | sample burden flags |
+|---|---:|---:|---:|---:|---:|---:|
+| Y1-Y8 | 8 | 21 | 50 | 13 | 13 | 2 |
+| H1-H16 | 16 | 6 | 49 | 8 | 42 | 1 |
+| G1-G8 | 8 | 15 | 40 | 7 | 13 | 1 |
+| 2026-06-15 | 5 | 52 | 76 | 23 | 14 | 5 |
+
+`Branch-S routed` is not the SCA-positive count. It is the number of
+sex-chromosome candidates routed out of the autosomal CNV table into Branch S
+context. The SCA-specific result is the `SCA review strong/weak/no-call` table
+above.
+
 Locked SCA truth visibility:
 
 - Y3: `X_LOSS`, `SCA_REVIEW_STRONG`, `sca_report_review_event`.
