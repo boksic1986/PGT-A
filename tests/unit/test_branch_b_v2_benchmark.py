@@ -32,6 +32,7 @@ def test_v2_benchmark_preserves_truth_overlap_without_legacy_fields(tmp_path: Pa
                 "v2_evidence_tier": "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT",
                 "v2_evidence_gate": "NO_HARD_SUPPRESSION",
                 "v2_disposition": "background_unknown_review",
+                "v2_filter_action": "keep_background_unknown_review",
                 "v2_length_tier": "reportable_candidate_ge2mb",
                 "v2_clean_support_label": "CLEAN_SUPPORT_AVAILABLE",
                 "attenuation_ratio": 0.42,
@@ -68,6 +69,7 @@ def test_v2_benchmark_preserves_truth_overlap_without_legacy_fields(tmp_path: Pa
 
     truth_row = pd.read_csv(truth_metrics, sep="\t").iloc[0]
     assert truth_row["top_v2_disposition"] == "background_unknown_review"
+    assert truth_row["top_v2_filter_action"] == "keep_background_unknown_review"
     assert truth_row["top_v2_length_tier"] == "reportable_candidate_ge2mb"
     assert truth_row["top_v2_clean_support_label"] == "CLEAN_SUPPORT_AVAILABLE"
     assert truth_row["top_attenuation_ratio"] == 0.42
@@ -175,3 +177,52 @@ def test_no_hard_suppression_review_preserves_truth_overlap(tmp_path: Path):
     assert payload["truth_preserved_count"] == 1
     assert payload["FN_count"] == 0
     assert payload["truth_hard_suppressed_count"] == 0
+
+
+def test_v2_filter_contract_suppression_counts_as_fn(tmp_path: Path):
+    classification = tmp_path / "Y1.candidate_classification.tsv"
+    truth = tmp_path / "truth.tsv"
+
+    pd.DataFrame(
+        [
+            {
+                "sample_id": "Y1",
+                "candidate_id": "Y1.A0001",
+                "chrom": "chr1",
+                "start": 1_000_000,
+                "end": 12_000_000,
+                "state": "gain",
+                "a_abs_zscore": 32.0,
+                "v2_candidate_class": "V2_NO_CALL_CONTRACT_RISK",
+                "v2_classifier_action": "V2_REVIEW_NO_HARD_SUPPRESSION",
+                "v2_filter_action": "suppress_workflow_contract_risk",
+                "v2_evidence_tier": "UNKNOWN_BACKGROUND_REF_CONTRACT_RISK",
+            }
+        ]
+    ).to_csv(classification, sep="\t", index=False)
+    pd.DataFrame(
+        [
+            {
+                "sample_id": "Y1",
+                "chrom": "chr1",
+                "start": 2_000_000,
+                "end": 10_000_000,
+                "expected_state": "gain",
+            }
+        ]
+    ).to_csv(truth, sep="\t", index=False)
+
+    _, _, payload = build_v2_benchmark(
+        classification_paths=[str(classification)],
+        truth_tsv=str(truth),
+        sample_ids=["Y1"],
+        reference_id="h_r0_shadow_ref_20260619",
+        output_truth_metrics=str(tmp_path / "truth_metrics.tsv"),
+        output_sample_summary=str(tmp_path / "sample_summary.tsv"),
+        output_summary=str(tmp_path / "summary.json"),
+    )
+
+    assert payload["truth_event_count"] == 1
+    assert payload["truth_preserved_count"] == 0
+    assert payload["FN_count"] == 1
+    assert payload["truth_hard_suppressed_count"] == 1

@@ -34,6 +34,7 @@ TRUTH_METRIC_COLUMNS = [
     "top_v2_evidence_tier",
     "top_v2_classifier_action",
     "top_v2_disposition",
+    "top_v2_filter_action",
     "top_v2_length_tier",
     "top_v2_clean_support_label",
     "top_v2_gc_rc_context_label",
@@ -53,6 +54,7 @@ SAMPLE_SUMMARY_COLUMNS = [
     "v2_technical_review_count",
     "v2_contract_risk_count",
     "v2_hard_suppressed_count",
+    "v2_filter_suppressed_count",
 ]
 
 
@@ -145,6 +147,7 @@ def hard_suppression_mask(frame: pd.DataFrame) -> pd.Series:
     if frame.empty:
         return pd.Series(False, index=frame.index, dtype=bool)
     action = frame.get("v2_classifier_action", pd.Series("", index=frame.index)).fillna("").astype(str).str.upper()
+    filter_action = frame.get("v2_filter_action", pd.Series("", index=frame.index)).fillna("").astype(str).str.lower()
     klass = frame.get("v2_candidate_class", pd.Series("", index=frame.index)).fillna("").astype(str).str.upper()
     hard_action = (
         action.str.startswith("V2_SUPPRESS_")
@@ -153,7 +156,8 @@ def hard_suppression_mask(frame: pd.DataFrame) -> pd.Series:
         | action.str.startswith("HARD_SUPPRESS")
         | action.str.contains("ARTIFACT", regex=False)
     )
-    return hard_action | klass.str.contains(
+    hard_filter_action = filter_action.eq("suppress_workflow_contract_risk") | filter_action.str.startswith("suppress_")
+    return hard_action | hard_filter_action | klass.str.contains(
         "ARTIFACT", regex=False
     )
 
@@ -234,6 +238,7 @@ def build_v2_benchmark(
                 "top_v2_evidence_tier": "" if top is None else str(top.get("v2_evidence_tier", "")),
                 "top_v2_classifier_action": "" if top is None else str(top.get("v2_classifier_action", "")),
                 "top_v2_disposition": "" if top is None else str(top.get("v2_disposition", "")),
+                "top_v2_filter_action": "" if top is None else str(top.get("v2_filter_action", "")),
                 "top_v2_length_tier": "" if top is None else str(top.get("v2_length_tier", "")),
                 "top_v2_clean_support_label": "" if top is None else str(top.get("v2_clean_support_label", "")),
                 "top_v2_gc_rc_context_label": "" if top is None else str(top.get("v2_gc_rc_context_label", "")),
@@ -261,6 +266,7 @@ def build_v2_benchmark(
                 "v2_technical_review_count": _count_contains(sample_class, "v2_candidate_class", "TECHNICAL_REVIEW"),
                 "v2_contract_risk_count": _count_contains(sample_class, "v2_candidate_class", "CONTRACT_RISK"),
                 "v2_hard_suppressed_count": int(hard_suppression_mask(sample_class).sum()) if not sample_class.empty else 0,
+                "v2_filter_suppressed_count": _count_contains(sample_class, "v2_filter_action", "suppress_"),
             }
         )
     sample_summary = pd.DataFrame(sample_rows, columns=SAMPLE_SUMMARY_COLUMNS)
@@ -277,6 +283,7 @@ def build_v2_benchmark(
         "truth_recall_by_v2_preservation": (truth_preserved_count / truth_event_count if truth_event_count else None),
         "truth_hard_suppressed_count": int(truth_metrics["v2_hard_suppressed_count"].sum()) if not truth_metrics.empty else 0,
         "v2_positive_support_candidate_count": int(sample_summary["v2_positive_support_count"].sum()) if not sample_summary.empty else 0,
+        "v2_filter_suppressed_candidate_count": int(sample_summary["v2_filter_suppressed_count"].sum()) if not sample_summary.empty else 0,
         "legacy_branch_b_decision_fields_used": False,
         "ignored_legacy_decision_fields": [
             "final_disposition",

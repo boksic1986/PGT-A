@@ -50,6 +50,9 @@ def test_v2_classifier_keeps_one_row_per_a_candidate_and_shadow_only():
 
     assert classified["candidate_id"].tolist() == ["Y1_chr21_gain", "Y1_chr16_loss"]
     assert classified["v2_final_report_impact"].tolist() == ["none_shadow_only", "none_shadow_only"]
+    assert "v2_filter_action" in classified.columns
+    assert "v2_filter_reason" in classified.columns
+    assert "v2_filter_scope" in classified.columns
     assert "final_disposition" in classified.columns
     assert "branch_b_report_class" in classified.columns
 
@@ -384,6 +387,8 @@ def test_b_side_signal_support_label_marks_branch_b_supported_without_report_pro
     assert row["v2_signal_strength_tier"] == "A_SENSITIVE_Z_5_TO_10"
     assert row["v2_length_tier"] == "review_only_ge1mb"
     assert row["v2_disposition"] == "background_unknown_review"
+    assert row["v2_filter_action"] == "keep_background_unknown_review"
+    assert row["v2_filter_hard_suppression_allowed"] == 0
 
 
 def test_v2_summary_reports_b_signal_context_label_counts():
@@ -450,6 +455,8 @@ def test_b_side_signal_discordance_is_review_context_not_no_call_contract_risk()
     assert row["v2_b_signal_context_reason"] == "b_side_amplitude_opposite_a_direction_abs_ge_2"
     assert row["v2_evidence_tier"] == "UNKNOWN_BACKGROUND_POSITIVE_SUPPORT"
     assert row["v2_disposition"] == "background_unknown_review"
+    assert row["v2_filter_action"] == "keep_background_unknown_review"
+    assert row["v2_filter_hard_suppression_allowed"] == 0
     assert row["v2_final_report_impact"] == "none_shadow_only"
 
 
@@ -484,6 +491,8 @@ def test_length_and_clean_support_tiers_do_not_hard_suppress_sensitive_positive(
     assert row["v2_gc_rc_context_label"] == "GC_RC_ATTENUATED_SEVERE"
     assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
     assert row["v2_disposition"] == "background_unknown_review"
+    assert row["v2_filter_action"] == "keep_background_unknown_review"
+    assert row["v2_filter_hard_suppression_allowed"] == 0
 
 
 def test_unknown_background_no_null_support_is_explicit_review_context_not_filter():
@@ -576,3 +585,97 @@ def test_v2_summary_reports_background_context_label_counts():
         "SHADOW_BACKGROUND_NO_NULL_SUPPORT": 1,
         "UNKNOWN_BACKGROUND_NO_NULL_SUPPORT": 1,
     }
+
+
+def test_ref_contract_risk_is_the_only_truth_safe_hard_filter_action():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "Y1",
+                "candidate_id": "Y1_chr1_gain_leakage",
+                "chrom": "chr1",
+                "start": 1_000_000,
+                "end": 12_000_000,
+                "state": "gain",
+                "a_abs_zscore": 32.0,
+                "same_direction_fraction": 0.95,
+                "corrected_amplitude": 4.0,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "refmap_status": "SAME_CHROM_REF_LEAKAGE",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "V2_NO_CALL_CONTRACT_RISK"
+    assert row["v2_disposition"] == "technical_risk_review"
+    assert row["v2_filter_action"] == "suppress_workflow_contract_risk"
+    assert row["v2_filter_reason"] == "same_chrom_ref_leakage_contract_risk"
+    assert row["v2_filter_hard_suppression_allowed"] == 1
+    assert row["v2_final_report_impact"] == "none_shadow_only"
+
+
+def test_low_clean_support_high_risk_downgrades_but_does_not_hard_filter():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "JZ26125843-56-56",
+                "candidate_id": "JZ26125843-56-56.A0001",
+                "chrom": "chr16",
+                "start": 500_000,
+                "end": 4_500_000,
+                "state": "loss",
+                "a_abs_zscore": 6.0,
+                "same_direction_fraction": 0.55,
+                "corrected_amplitude": -0.8,
+                "clean_bin_fraction": 0.10,
+                "high_risk_bin_fraction": 0.80,
+                "hard_region_fraction": 0.65,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "LIMITED_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_clean_support_label"] == "LOW_CLEAN_SUPPORT_HIGH_RISK"
+    assert row["v2_filter_action"] == "downgrade_to_technical_risk_review"
+    assert row["v2_filter_hard_suppression_allowed"] == 0
+    assert row["v2_final_report_impact"] == "none_shadow_only"
+
+
+def test_v2_summary_reports_filter_action_counts():
+    classified = classify_branch_b_v2_candidates(
+        pd.DataFrame(
+            [
+                {
+                    "sample_id": "H6",
+                    "candidate_id": "H6_chr21_gain",
+                    "chrom": "chr21",
+                    "state": "gain",
+                    "a_abs_zscore": 7.11,
+                    "same_direction_fraction": 0.92,
+                    "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                },
+                {
+                    "sample_id": "Y1",
+                    "candidate_id": "Y1_chr1_gain_leakage",
+                    "chrom": "chr1",
+                    "state": "gain",
+                    "a_abs_zscore": 32.0,
+                    "refmap_status": "SAME_CHROM_REF_LEAKAGE",
+                    "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                },
+            ]
+        )
+    )
+
+    summary = summarize_v2_classification("mixed", classified)
+
+    assert summary["filter_action_counts"] == {
+        "keep_background_unknown_review": 1,
+        "suppress_workflow_contract_risk": 1,
+    }
+    assert summary["filter_hard_suppression_allowed_count"] == 1

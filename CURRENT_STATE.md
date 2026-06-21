@@ -433,6 +433,78 @@ This loop improves interpretability and truth-safety. It still does not solve
 FP/review burden and does not promote Branch B V2, Branch S, the gap2m overlay,
 or the shadow reference to final release.
 
+## 2026-06-21 Branch B V2 Truth-Safe Filter Contract
+
+Current report:
+`docs/reports/branch_b_v2_truth_safe_filter_2026-06-21.md`.
+
+This loop adds an explicit filter-action contract on top of the Branch B V2
+method reset. It keeps Branch A as the only discovery anchor and keeps Branch B
+V2 as candidate-level evidence/disposition logic.
+
+New classifier fields:
+
+- `v2_filter_version`;
+- `v2_filter_action`;
+- `v2_filter_reason`;
+- `v2_filter_scope`;
+- `v2_filter_hard_suppression_allowed`.
+
+New benchmark fields:
+
+- `top_v2_filter_action` in truth-overlap metrics;
+- `v2_filter_suppressed_count` per sample;
+- `v2_filter_suppressed_candidate_count` in benchmark summary JSON.
+
+Current filter contract:
+
+- `suppress_workflow_contract_risk` is the only hard-suppression action.
+- The current implemented hard-suppression reason is
+  `same_chrom_ref_leakage_contract_risk`.
+- GC/RC attenuation, B-side signal discordance, unknown background, length
+  tier, low clean support, and high region-risk burden cannot hard-suppress a
+  Branch A candidate.
+- Low clean support/high-risk burden can only downgrade to
+  `technical_risk_review`.
+- Sex-chromosome candidates route to Branch S review; this does not finalize
+  SCA.
+
+Remote validation:
+
+```text
+tests/unit/test_branch_b_v2_classifier.py
+tests/unit/test_branch_b_v2_benchmark.py
+26 passed in 0.90s
+```
+
+Broader remote unit tests after syncing the full contract:
+
+```text
+55 passed in 1.37s
+```
+
+Remote Snakemake dry-runs succeeded for
+`branch_b_v2_benchmark branch_s_review cnv_report` under all three active
+gap2m configs. Forced materialization then refreshed
+`cnv_branch_b_v2_classifier`, `cnv_branch_b_v2_benchmark`, and
+`branch_b_v2_benchmark`.
+
+Materialized result:
+
+- Y1-Y8: candidates=97; truth preserved 10/10; FN=0;
+  hard-suppressed truth=0; filter-suppressed candidates=0.
+- H1-H16: candidates=105; truth preserved 10/10; FN=0;
+  hard-suppressed truth=0; filter-suppressed candidates=0.
+- 2026-06-15: candidates=165; no locked truth; status `skipped_no_truth`;
+  filter-suppressed candidates=0.
+
+Remote output files now include `v2_filter_action`, `top_v2_filter_action`,
+and `v2_filter_suppressed_count`.
+
+This is a materialized truth-safe filter contract validation. It does not yet
+claim FP reduction, Branch B V2 final promotion, Branch S finalization, report
+release, or production reference promotion.
+
 ## 2026-06-21 P1-P6 Credibility Audit Override
 
 Current audit report:

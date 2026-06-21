@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_1415_branch_b_v2_method_reset_handoff.md`
+2. `docs/handoff/2026-06-21_1454_branch_b_v2_truth_safe_filter_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,12 +23,12 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_1415_branch_b_v2_method_reset_handoff.md
+active_handoff: docs/handoff/2026-06-21_1454_branch_b_v2_truth_safe_filter_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_gap2m_method_reset_disposition_materialized_truth_preserved
+branch_b_status: v2_truth_safe_filter_materialized_truth_preserved
 branch_s_status: review_reportable_with_limitations
 report_status: final_delivery_target_after_a_b_strengthening
 
@@ -44,6 +44,7 @@ report_status: final_delivery_target_after_a_b_strengthening
 - `docs/reports/branch_b_v2_direction_support_label_2026-06-21.md`
 - `docs/reports/branch_b_v2_background_context_label_2026-06-21.md`
 - `docs/reports/branch_b_v2_method_reset_threshold_inventory_2026-06-21.md`
+- `docs/reports/branch_b_v2_truth_safe_filter_2026-06-21.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
 - `docs/reports/p6_report_package_contract_2026-06-20.md`
@@ -225,6 +226,55 @@ Materialized disposition counts:
 This improves interpretability and truth-safety. It does not prove FP/review
 burden is solved and does not promote Branch B V2 to final-report logic.
 
+The next Branch B V2 truth-safe filter contract is now materialized on the
+active gap2m benchmark path. The classifier emits explicit filter-action
+fields:
+
+- `v2_filter_version`;
+- `v2_filter_action`;
+- `v2_filter_reason`;
+- `v2_filter_scope`;
+- `v2_filter_hard_suppression_allowed`.
+
+The benchmark now records filter actions in truth-overlap output and counts
+filter-level hard suppression. Current hard suppression is allowed only for
+workflow/reference contract risk, currently
+`same_chrom_ref_leakage_contract_risk`. GC/RC attenuation, B-side signal
+discordance, unknown background, length tier, low clean support, and high
+region-risk burden cannot hard-suppress a Branch A candidate. Low clean support
+can only downgrade to technical review.
+
+Remote validation:
+
+```text
+tests/unit/test_branch_b_v2_classifier.py
+tests/unit/test_branch_b_v2_benchmark.py
+26 passed in 0.90s
+```
+
+Broader remote unit tests:
+
+```text
+55 passed in 1.37s
+```
+
+Snakemake dry-runs passed for
+`branch_b_v2_benchmark branch_s_review cnv_report` under all three active
+gap2m configs. Forced materialization refreshed the V2 classifier and
+benchmark outputs.
+
+Materialized result after the filter-action contract:
+
+- Y1-Y8: candidates 97; truth preserved 10/10; FN=0; hard-suppressed truth=0;
+  filter-suppressed candidates=0.
+- H1-H16: candidates 105; truth preserved 10/10; FN=0; hard-suppressed
+  truth=0; filter-suppressed candidates=0.
+- 2026-06-15: candidates 165; no locked truth; status `skipped_no_truth`;
+  filter-suppressed candidates=0.
+
+Remote output files include `v2_filter_action`, `top_v2_filter_action`, and
+`v2_filter_suppressed_count`.
+
 ### Branch S
 
 Branch S is not final SCA, but it must not be omitted from report development.
@@ -278,7 +328,11 @@ A, Branch B, Branch S, background source, and limitations explicitly.
    `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT` as benign or background-compatible.
 7. B-side signal context and length tiers are review/disposition context only;
    do not convert them into hard filters without a locked-truth ablation.
-8. Upgrade Branch S toward review-reportable output with controlled negative/ref
+8. The V2 filter-action fields are now materialized and truth-preserving under
+   locked Y/H truth. Do not treat this as FP/review-burden reduction yet. Only
+   `suppress_workflow_contract_risk` can count as a hard suppression action in
+   the current contract.
+9. Upgrade Branch S toward review-reportable output with controlled negative/ref
    FP burden; final SCA promotion remains a separate truth gate.
-9. Generate the next P6/report package only after the fixed A/B/S contracts are
+10. Generate the next P6/report package only after the fixed A/B/S contracts are
    represented in workflow outputs.

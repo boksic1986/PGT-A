@@ -29,8 +29,15 @@ V2_CLASSIFIER_COLUMNS = [
     "v2_b_signal_context_label",
     "v2_b_signal_context_reason",
     "v2_disposition",
+    "v2_filter_version",
+    "v2_filter_action",
+    "v2_filter_reason",
+    "v2_filter_scope",
+    "v2_filter_hard_suppression_allowed",
     "v2_final_report_impact",
 ]
+
+V2_FILTER_VERSION = "branch_b_v2_truth_safe_filter_v1"
 
 
 def parse_args():
@@ -352,6 +359,64 @@ def candidate_disposition(candidate_class, tier, background_label, length_label,
     return "review_candidate"
 
 
+def candidate_filter_payload(candidate_class, tier, background_label, clean_label, disposition):
+    if candidate_class == "V2_NO_CALL_CONTRACT_RISK" or "REF_CONTRACT_RISK" in tier:
+        return {
+            "v2_filter_version": V2_FILTER_VERSION,
+            "v2_filter_action": "suppress_workflow_contract_risk",
+            "v2_filter_reason": "same_chrom_ref_leakage_contract_risk",
+            "v2_filter_scope": "workflow_contract_only",
+            "v2_filter_hard_suppression_allowed": 1,
+        }
+    if candidate_class == "V2_SEX_CHROMOSOME_REVIEW":
+        return {
+            "v2_filter_version": V2_FILTER_VERSION,
+            "v2_filter_action": "route_to_branch_s_review",
+            "v2_filter_reason": "sex_chromosome_branch_s_review",
+            "v2_filter_scope": "branch_s_review",
+            "v2_filter_hard_suppression_allowed": 0,
+        }
+    if clean_label == "LOW_CLEAN_SUPPORT_HIGH_RISK" or disposition == "technical_risk_review":
+        return {
+            "v2_filter_version": V2_FILTER_VERSION,
+            "v2_filter_action": "downgrade_to_technical_risk_review",
+            "v2_filter_reason": "low_clean_support_or_technical_risk",
+            "v2_filter_scope": "truth_safe_review_filter",
+            "v2_filter_hard_suppression_allowed": 0,
+        }
+    if disposition == "report_candidate":
+        return {
+            "v2_filter_version": V2_FILTER_VERSION,
+            "v2_filter_action": "keep_report_candidate",
+            "v2_filter_reason": "positive_support_report_tier",
+            "v2_filter_scope": "truth_safe_report_filter",
+            "v2_filter_hard_suppression_allowed": 0,
+        }
+    if disposition == "background_unknown_review" or background_label.startswith(("UNKNOWN_BACKGROUND", "NO_")):
+        return {
+            "v2_filter_version": V2_FILTER_VERSION,
+            "v2_filter_action": "keep_background_unknown_review",
+            "v2_filter_reason": "background_unknown_truth_safe_review",
+            "v2_filter_scope": "truth_safe_review_filter",
+            "v2_filter_hard_suppression_allowed": 0,
+        }
+    if "BACKGROUND_COMPATIBLE" in tier:
+        return {
+            "v2_filter_version": V2_FILTER_VERSION,
+            "v2_filter_action": "keep_background_compatible_review",
+            "v2_filter_reason": "background_context_compatible_review_only",
+            "v2_filter_scope": "truth_safe_review_filter",
+            "v2_filter_hard_suppression_allowed": 0,
+        }
+    return {
+        "v2_filter_version": V2_FILTER_VERSION,
+        "v2_filter_action": "keep_review_candidate",
+        "v2_filter_reason": "truth_safe_review_default",
+        "v2_filter_scope": "truth_safe_review_filter",
+        "v2_filter_hard_suppression_allowed": 0,
+    }
+
+
 def candidate_context_payload(row, tier, gate, priority, candidate_class, action, reason):
     signal_label, signal_reason = branch_b_direction_support_label(row)
     background_label, background_reason = background_context_label(row)
@@ -359,6 +424,8 @@ def candidate_context_payload(row, tier, gate, priority, candidate_class, action
     length_label = length_tier(row)
     clean_label = clean_support_label(row)
     gc_label = gc_rc_context_label(row)
+    disposition = candidate_disposition(candidate_class, tier, background_label, length_label, clean_label)
+    filter_payload = candidate_filter_payload(candidate_class, tier, background_label, clean_label, disposition)
     return {
         "v2_candidate_class": candidate_class,
         "v2_classifier_action": action,
@@ -376,7 +443,8 @@ def candidate_context_payload(row, tier, gate, priority, candidate_class, action
         "v2_direction_support_reason": signal_reason,
         "v2_b_signal_context_label": signal_label,
         "v2_b_signal_context_reason": signal_reason,
-        "v2_disposition": candidate_disposition(candidate_class, tier, background_label, length_label, clean_label),
+        "v2_disposition": disposition,
+        **filter_payload,
     }
 
 
@@ -503,6 +571,16 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         if "v2_disposition" in classified_df.columns
         else {}
     )
+    filter_action_counts = (
+        classified_df["v2_filter_action"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_filter_action" in classified_df.columns
+        else {}
+    )
+    filter_hard_suppression_allowed_count = (
+        int(pd.to_numeric(classified_df["v2_filter_hard_suppression_allowed"], errors="coerce").fillna(0).sum())
+        if "v2_filter_hard_suppression_allowed" in classified_df.columns
+        else 0
+    )
     return {
         "sample_id": str(sample_id),
         "version": str(version),
@@ -520,6 +598,10 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         "disposition_counts": {
             str(key): int(value) for key, value in disposition_counts.items()
         },
+        "filter_action_counts": {
+            str(key): int(value) for key, value in filter_action_counts.items()
+        },
+        "filter_hard_suppression_allowed_count": filter_hard_suppression_allowed_count,
         "direction_support_label_counts": {
             str(key): int(value) for key, value in direction_support_label_counts.items()
         },

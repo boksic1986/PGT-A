@@ -60,14 +60,22 @@ Immediate execution order:
 11. Current first-round dispositions are `background_unknown_review` and
    `sca_branch_s_review` in the materialized cohorts. This preserves truth but
    does not yet reduce FP/review burden enough for final report promotion.
-12. The next Branch B V2 refinement should use the new disposition/context
-   fields to design truth-safe burden stratification. Do not convert background
-   context, B-side signal context, or length tier into a hard filter without a
-   locked-truth ablation.
-13. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+12. Branch B V2 now has an explicit truth-safe filter-action contract that has
+   passed remote unit tests, dry-runs, and targeted materialization. The
+   classifier emits `v2_filter_action`,
+   `v2_filter_reason`, `v2_filter_scope`, and
+   `v2_filter_hard_suppression_allowed`; the benchmark records filter actions
+   in truth metrics and counts hard-suppressed candidates. Current materialized
+   Y1-Y8/H1-H16 truth remains 10/10 with FN=0 and hard-suppressed truth=0.
+13. The next Branch B V2 refinement should use the new disposition/context and
+   filter-action fields to reduce burden cautiously. Do not convert background
+   context, B-side signal context, length tier, GC/RC attenuation, or low clean
+   support into a hard filter without locked-truth ablation. Current hard
+   suppression is limited to workflow/reference contract risk.
+14. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-14. Generate the next P6/report package from workflow outputs after fixed Branch
+15. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 
