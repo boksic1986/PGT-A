@@ -789,3 +789,276 @@ def test_v2_summary_reports_burden_reduction_counts_and_tag_counts():
     assert summary["gc_rc_context_label_counts"]["GC_RC_ATTENUATED_SEVERE"] == 1
     assert summary["burden_evidence_tag_counts"]["[CNVpro-inspired] length_tier=review_only_ge1mb"] == 1
     assert summary["burden_evidence_tag_counts"]["[CNVseq-asset] sex_homology_PAR_annotation_branch_s_context"] == 1
+
+
+def test_report_layer_filters_only_combined_technical_risk_not_single_indicators():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "S1",
+                "candidate_id": "background_unknown_only",
+                "chrom": "chr1",
+                "start": 1_000_000,
+                "end": 4_000_000,
+                "state": "gain",
+                "a_abs_zscore": 6.5,
+                "same_direction_fraction": 0.90,
+                "clean_bin_fraction": 0.80,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+            },
+            {
+                "sample_id": "S1",
+                "candidate_id": "b_discordance_only",
+                "chrom": "chr2",
+                "start": 1_000_000,
+                "end": 4_000_000,
+                "state": "gain",
+                "a_abs_zscore": 6.5,
+                "same_direction_fraction": 0.20,
+                "corrected_amplitude": -2.4,
+                "clean_bin_fraction": 0.80,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+            },
+            {
+                "sample_id": "S1",
+                "candidate_id": "gc_attenuation_only",
+                "chrom": "chr3",
+                "start": 1_000_000,
+                "end": 4_000_000,
+                "state": "loss",
+                "a_abs_zscore": 6.5,
+                "same_direction_fraction": 0.90,
+                "attenuation_ratio": 0.35,
+                "clean_bin_fraction": 0.80,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+            },
+            {
+                "sample_id": "S1",
+                "candidate_id": "short_length_only",
+                "chrom": "chr4",
+                "start": 1_000_000,
+                "end": 1_800_000,
+                "state": "gain",
+                "a_abs_zscore": 6.5,
+                "same_direction_fraction": 0.90,
+                "clean_bin_fraction": 0.80,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+            },
+        ]
+    )
+
+    classified = classify_branch_b_v2_candidates(frame).set_index("candidate_id")
+
+    assert set(classified["v2_report_layer_class"]) == {"internal_review_event"}
+    assert set(classified["v2_report_visibility"]) == {"internal_review"}
+    assert "filtered_event" not in set(classified["v2_report_layer_class"])
+
+
+def test_report_layer_combined_technical_risk_filters_to_audit_only():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "JZ26125843-56-56",
+                "candidate_id": "combined_risk_chr16_loss",
+                "chrom": "chr16",
+                "start": 500_000,
+                "end": 1_800_000,
+                "state": "loss",
+                "a_abs_zscore": 6.1,
+                "same_direction_fraction": 0.10,
+                "corrected_amplitude": 2.6,
+                "attenuation_ratio": 0.35,
+                "clean_bin_fraction": 0.10,
+                "high_risk_bin_fraction": 0.85,
+                "hard_region_fraction": 0.70,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_report_layer_class"] == "filtered_event"
+    assert row["v2_report_visibility"] == "audit_only"
+    assert row["v2_filter_action"] == "filter_report_layer_combined_technical_risk"
+    assert row["v2_filter_hard_suppression_allowed"] == 0
+    assert "short_or_focal" in row["v2_report_filter_rule_tags"]
+    assert "low_clean_high_risk" in row["v2_report_filter_rule_tags"]
+    assert "b_signal_not_supportive" in row["v2_report_filter_rule_tags"]
+    assert "gc_rc_attenuated" in row["v2_report_filter_rule_tags"]
+
+
+def test_report_layer_filters_sensitive_b_unsupported_gc_attenuated_candidate():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "JZ26125843-56-56",
+                "candidate_id": "sensitive_b_unsupported_gc_attenuated",
+                "chrom": "chr17",
+                "start": 2_250_001,
+                "end": 21_000_000,
+                "state": "loss",
+                "a_abs_zscore": 6.2,
+                "same_direction_fraction": 0.20,
+                "corrected_amplitude": 0.20,
+                "attenuation_ratio": 0.35,
+                "clean_bin_fraction": 0.85,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_signal_strength_tier"] == "A_SENSITIVE_Z_5_TO_10"
+    assert row["v2_report_layer_class"] == "filtered_event"
+    assert row["v2_report_visibility"] == "audit_only"
+    assert row["v2_filter_action"] == "filter_report_layer_combined_technical_risk"
+    assert row["v2_filter_hard_suppression_allowed"] == 0
+    assert "b_signal_not_supportive" in row["v2_report_filter_rule_tags"]
+    assert "gc_rc_attenuated" in row["v2_report_filter_rule_tags"]
+
+
+def test_report_layer_promotes_strong_supported_autosomal_candidate_to_report_event():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "Y1",
+                "candidate_id": "Y1_chr21_loss",
+                "chrom": "chr21",
+                "start": 1_000_000,
+                "end": 42_000_000,
+                "state": "loss",
+                "a_abs_zscore": 112.0,
+                "same_direction_fraction": 0.92,
+                "attenuation_ratio": 0.72,
+                "clean_bin_fraction": 0.85,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_report_layer_class"] == "report_event"
+    assert row["v2_report_visibility"] == "final_report"
+    assert row["v2_report_filter_reason"] == "strong_a_supported_report_layer_event"
+
+
+def test_report_layer_strong_a_b_unsupported_gc_attenuated_stays_review_not_filtered():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "Y2",
+                "candidate_id": "Y2_chr14_gain",
+                "chrom": "chr14",
+                "start": 1,
+                "end": 107_000_000,
+                "state": "gain",
+                "a_abs_zscore": 94.8,
+                "same_direction_fraction": 0.15,
+                "corrected_amplitude": -0.29,
+                "attenuation_ratio": 0.72,
+                "clean_bin_fraction": 0.85,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_signal_strength_tier"] == "A_STRONG_Z_GE_10"
+    assert row["v2_report_layer_class"] == "internal_review_event"
+    assert row["v2_report_visibility"] == "internal_review"
+    assert row["v2_filter_action"] != "filter_report_layer_combined_technical_risk"
+
+
+def test_report_layer_keeps_h6_chr21_truth_sensitive_candidate_visible():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "H6",
+                "candidate_id": "H6_chr21_gain",
+                "chrom": "chr21",
+                "start": 20_700_000,
+                "end": 22_300_000,
+                "state": "gain",
+                "a_abs_zscore": 7.11,
+                "same_direction_fraction": 0.92,
+                "corrected_amplitude": 0.40,
+                "attenuation_ratio": 0.35,
+                "clean_bin_fraction": 0.85,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_report_layer_class"] == "internal_review_event"
+    assert row["v2_report_visibility"] == "internal_review"
+    assert row["v2_filter_action"] != "filter_report_layer_combined_technical_risk"
+
+
+def test_report_layer_matched_background_outlier_can_be_report_event():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "Y2",
+                "candidate_id": "Y2_chr21_gain",
+                "chrom": "chr21",
+                "start": 20_000_000,
+                "end": 42_000_000,
+                "state": "gain",
+                "a_abs_zscore": 15.0,
+                "same_direction_fraction": 0.95,
+                "corrected_amplitude": 5.1,
+                "clean_bin_fraction": 0.85,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "OK",
+                "matched_negative_abs_percentile": 0.995,
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_report_layer_class"] == "report_event"
+    assert row["v2_report_visibility"] == "final_report"
+
+
+def test_report_layer_routes_sex_chromosome_to_branch_s_event():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "H5",
+                "candidate_id": "H5_chrX_loss",
+                "chrom": "chrX",
+                "start": 1,
+                "end": 155_000_000,
+                "state": "loss",
+                "a_abs_zscore": 62.0,
+                "same_direction_fraction": 0.80,
+                "corrected_amplitude": -2.1,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_report_layer_class"] == "branch_s_event"
+    assert row["v2_report_visibility"] == "branch_s_report_section"

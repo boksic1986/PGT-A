@@ -39,11 +39,18 @@ V2_CLASSIFIER_COLUMNS = [
     "v2_burden_reduction_action",
     "v2_burden_reduction_reason",
     "v2_burden_evidence_tags",
+    "v2_report_layer_version",
+    "v2_report_layer_class",
+    "v2_report_visibility",
+    "v2_report_filter_reason",
+    "v2_report_filter_rule_tags",
+    "v2_report_filter_evidence_count",
     "v2_final_report_impact",
 ]
 
 V2_FILTER_VERSION = "branch_b_v2_truth_safe_filter_v1"
 V2_BURDEN_REDUCTION_VERSION = "branch_b_v2_burden_stratification_v1"
+V2_REPORT_LAYER_VERSION = "branch_b_v2_report_layer_filter_v1"
 
 
 def parse_args():
@@ -428,6 +435,119 @@ def candidate_filter_payload(candidate_class, tier, background_label, clean_labe
     }
 
 
+def report_layer_rule_tags(row, length_label, clean_label, gc_label, b_signal_label):
+    tags = []
+    if length_label in {"focal_high_risk_lt1mb", "review_only_ge1mb"}:
+        tags.append("short_or_focal")
+    if clean_label == "LOW_CLEAN_SUPPORT_HIGH_RISK":
+        tags.append("low_clean_high_risk")
+    if b_signal_label in {
+        "A_ANCHORED_WEAK_B_SIGNAL",
+        "B_SIGNAL_DISCORDANT_WITH_A_DIRECTION",
+        "NO_POSITIVE_A_SIGNAL",
+    }:
+        tags.append("b_signal_not_supportive")
+    if gc_label in {"GC_RC_ATTENUATED", "GC_RC_ATTENUATED_SEVERE"}:
+        tags.append("gc_rc_attenuated")
+    return tags
+
+
+def is_strong_a_signal(row):
+    a_abs_zscore = safe_float(row.get("a_abs_zscore", math.nan), default=math.nan)
+    return math.isfinite(a_abs_zscore) and a_abs_zscore >= 10.0
+
+
+def is_sensitive_a_signal(row):
+    a_abs_zscore = safe_float(row.get("a_abs_zscore", math.nan), default=math.nan)
+    return math.isfinite(a_abs_zscore) and 5.0 <= a_abs_zscore < 10.0
+
+
+def is_autosomal_chromosome(row):
+    chrom = clean_text(row.get("chrom", ""))
+    if chrom.startswith("chr"):
+        chrom = chrom[3:]
+    return chrom.isdigit() and 1 <= int(chrom) <= 22
+
+
+def report_layer_payload(row, candidate_class, disposition, length_label, clean_label, gc_label, b_signal_label):
+    if candidate_class == "V2_SEX_CHROMOSOME_REVIEW":
+        return {
+            "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
+            "v2_report_layer_class": "branch_s_event",
+            "v2_report_visibility": "branch_s_report_section",
+            "v2_report_filter_reason": "sex_chromosome_event_routed_to_branch_s",
+            "v2_report_filter_rule_tags": "branch_s_route",
+            "v2_report_filter_evidence_count": 1,
+        }
+
+    if candidate_class == "V2_NO_CALL_CONTRACT_RISK":
+        return {
+            "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
+            "v2_report_layer_class": "filtered_event",
+            "v2_report_visibility": "audit_only",
+            "v2_report_filter_reason": "workflow_reference_contract_risk",
+            "v2_report_filter_rule_tags": "workflow_reference_contract_risk",
+            "v2_report_filter_evidence_count": 1,
+        }
+
+    tags = report_layer_rule_tags(row, length_label, clean_label, gc_label, b_signal_label)
+    strong_a_signal = is_strong_a_signal(row)
+    report_layer_ready = (
+        is_autosomal_chromosome(row)
+        and strong_a_signal
+        and b_signal_label == "B_SIGNAL_SUPPORTED_A_DIRECTION"
+        and length_label in {"large_ge10mb", "broad_review_ge4mb", "reportable_candidate_ge2mb"}
+        and clean_label == "CLEAN_SUPPORT_AVAILABLE"
+    )
+    if report_layer_ready:
+        return {
+            "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
+            "v2_report_layer_class": "report_event",
+            "v2_report_visibility": "final_report",
+            "v2_report_filter_reason": "strong_a_supported_report_layer_event",
+            "v2_report_filter_rule_tags": "strong_a_signal;b_signal_supported;reportable_length;clean_support",
+            "v2_report_filter_evidence_count": 4,
+        }
+
+    combined_filter = (
+        not strong_a_signal
+        and {"b_signal_not_supportive", "gc_rc_attenuated"}.issubset(tags)
+        and (
+            is_sensitive_a_signal(row)
+            or "short_or_focal" in tags
+            or "low_clean_high_risk" in tags
+        )
+    )
+    if combined_filter:
+        return {
+            "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
+            "v2_report_layer_class": "filtered_event",
+            "v2_report_visibility": "audit_only",
+            "v2_report_filter_reason": "combined_sensitive_or_short_b_signal_gc_rc",
+            "v2_report_filter_rule_tags": ";".join(tags),
+            "v2_report_filter_evidence_count": len(tags),
+        }
+
+    if disposition == "report_candidate":
+        return {
+            "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
+            "v2_report_layer_class": "report_event",
+            "v2_report_visibility": "final_report",
+            "v2_report_filter_reason": "positive_support_with_report_layer_requirements",
+            "v2_report_filter_rule_tags": "report_layer_pass",
+            "v2_report_filter_evidence_count": 0,
+        }
+
+    return {
+        "v2_report_layer_version": V2_REPORT_LAYER_VERSION,
+        "v2_report_layer_class": "internal_review_event",
+        "v2_report_visibility": "internal_review",
+        "v2_report_filter_reason": "retained_for_internal_review",
+        "v2_report_filter_rule_tags": ";".join(tags) if tags else "review_retained",
+        "v2_report_filter_evidence_count": len(tags),
+    }
+
+
 def burden_evidence_tags(row, length_label, clean_label, gc_label):
     tags = [f"[CNVpro-inspired] length_tier={length_label}"]
     if is_acrocentric_chromosome_candidate(row):
@@ -497,6 +617,33 @@ def candidate_context_payload(row, tier, gate, priority, candidate_class, action
     filter_payload = candidate_filter_payload(candidate_class, tier, background_label, clean_label, disposition)
     burden_payload = burden_reduction_payload(candidate_class, background_label, clean_label, disposition)
     evidence_tags = burden_evidence_tags(row, length_label, clean_label, gc_label)
+    report_payload = report_layer_payload(
+        row,
+        candidate_class,
+        disposition,
+        length_label,
+        clean_label,
+        gc_label,
+        signal_label,
+    )
+    if report_payload["v2_report_layer_class"] == "filtered_event" and not report_payload[
+        "v2_report_filter_rule_tags"
+    ].startswith("workflow_reference_contract_risk"):
+        filter_payload = {
+            "v2_filter_version": V2_FILTER_VERSION,
+            "v2_filter_action": "filter_report_layer_combined_technical_risk",
+            "v2_filter_reason": report_payload["v2_report_filter_reason"],
+            "v2_filter_scope": "report_layer_filter",
+            "v2_filter_hard_suppression_allowed": 0,
+        }
+    elif report_payload["v2_report_layer_class"] == "report_event":
+        filter_payload = {
+            "v2_filter_version": V2_FILTER_VERSION,
+            "v2_filter_action": "keep_report_layer_event",
+            "v2_filter_reason": report_payload["v2_report_filter_reason"],
+            "v2_filter_scope": "report_layer_filter",
+            "v2_filter_hard_suppression_allowed": 0,
+        }
     return {
         "v2_candidate_class": candidate_class,
         "v2_classifier_action": action,
@@ -518,6 +665,7 @@ def candidate_context_payload(row, tier, gate, priority, candidate_class, action
         **filter_payload,
         **burden_payload,
         "v2_burden_evidence_tags": evidence_tags,
+        **report_payload,
     }
 
 

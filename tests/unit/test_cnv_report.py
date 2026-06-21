@@ -287,6 +287,10 @@ class CnvReportRankingTest(unittest.TestCase):
                     [
                         "sample_id",
                         "candidate_count",
+                        "v2_report_event_count",
+                        "v2_internal_review_event_count",
+                        "v2_filtered_event_count",
+                        "v2_branch_s_event_count",
                         "v2_report_candidate_burden_count",
                         "v2_review_candidate_burden_count",
                         "v2_background_unknown_review_burden_count",
@@ -295,7 +299,7 @@ class CnvReportRankingTest(unittest.TestCase):
                     ]
                 )
                 + "\n"
-                + "\t".join(["S1", "5", "1", "3", "2", "1", "1"])
+                + "\t".join(["S1", "5", "1", "2", "1", "1", "1", "3", "2", "1", "1"])
                 + "\n",
                 encoding="utf-8",
             )
@@ -307,6 +311,10 @@ class CnvReportRankingTest(unittest.TestCase):
                   "reference_id": "h_r0_shadow_ref_20260619",
                   "sample_count": 1,
                   "candidate_count": 5,
+                  "v2_report_event_count": 1,
+                  "v2_internal_review_event_count": 2,
+                  "v2_filtered_event_count": 1,
+                  "v2_branch_s_event_count": 1,
                   "v2_report_candidate_burden_count": 1,
                   "v2_review_candidate_burden_count": 3,
                   "v2_background_unknown_review_burden_count": 2,
@@ -329,7 +337,15 @@ class CnvReportRankingTest(unittest.TestCase):
         self.assertEqual(v2_contract["branch_b_v2_burden_status"], "ready")
         self.assertEqual(v2_contract["branch_b_v2_legacy_fields_used"], False)
         self.assertEqual(v2_contract["branch_b_v2_final_impact"], "development_review_only")
+        self.assertEqual(v2_contract["branch_b_v2_report_event_count"], 1)
+        self.assertEqual(v2_contract["branch_b_v2_internal_review_event_count"], 2)
+        self.assertEqual(v2_contract["branch_b_v2_filtered_event_count"], 1)
+        self.assertEqual(v2_contract["branch_b_v2_branch_s_event_count"], 1)
         self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_report_candidate_count"]), 1)
+        self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_report_event_count"]), 1)
+        self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_internal_review_event_count"]), 2)
+        self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_filtered_event_count"]), 1)
+        self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_branch_s_event_count"]), 1)
         self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_background_unknown_review_count"]), 2)
         self.assertEqual(int(v2_df.iloc[0]["branch_b_v2_branch_s_review_count"]), 1)
 
@@ -348,6 +364,10 @@ class CnvReportRankingTest(unittest.TestCase):
                 "branch_b_v2_branch_s_review_count": 1,
                 "branch_b_v2_technical_risk_review_count": 0,
                 "branch_b_v2_report_candidate_count": 0,
+                "branch_b_v2_report_event_count": 1,
+                "branch_b_v2_internal_review_event_count": 2,
+                "branch_b_v2_filtered_event_count": 3,
+                "branch_b_v2_branch_s_event_count": 1,
                 "branch_b_v2_final_impact": "development_review_only",
                 "branch_b_v2_legacy_fields_used": False,
                 "qc_status": "PASS",
@@ -357,12 +377,39 @@ class CnvReportRankingTest(unittest.TestCase):
 
         conclusion = format_technical_conclusion(row)
 
+        self.assertIn("Legacy/current-code Branch B kept 0 events", conclusion)
         self.assertIn("Bv2_burden_status=ready", conclusion)
         self.assertIn("Bv2_background_unknown_review=2", conclusion)
         self.assertIn("Bv2_branch_s_review=1", conclusion)
         self.assertIn("Bv2_report_candidate=0", conclusion)
+        self.assertIn("Bv2_report_event=1", conclusion)
+        self.assertIn("Bv2_internal_review_event=2", conclusion)
+        self.assertIn("Bv2_filtered_event=3", conclusion)
+        self.assertIn("Bv2_branch_s_event=1", conclusion)
         self.assertIn("Bv2_final_impact=development_review_only", conclusion)
         self.assertIn("Bv2_legacy_fields_used=False", conclusion)
+
+    def test_biological_conclusion_prefers_v2_report_layer_over_legacy_branch_b_top_event(self):
+        row = pd.Series(
+            {
+                "branch_b_top_event": "legacy chr16:1-5000000 gain [review/high]",
+                "branch_b_v2_burden_status": "ready",
+                "branch_b_v2_report_event_count": 2,
+                "branch_b_v2_internal_review_event_count": 3,
+                "branch_b_v2_filtered_event_count": 4,
+                "branch_b_v2_branch_s_event_count": 1,
+                "branch_b_v2_final_impact": "development_review_only",
+            }
+        )
+
+        conclusion = format_biological_candidate_conclusion(row)
+
+        self.assertIn("Branch B V2 report-layer", conclusion)
+        self.assertIn("report_events=2", conclusion)
+        self.assertIn("internal_review_events=3", conclusion)
+        self.assertIn("filtered_events=4", conclusion)
+        self.assertIn("branch_s_events=1", conclusion)
+        self.assertNotIn("legacy chr16", conclusion)
 
     def test_technical_conclusion_marks_p6_review_development_context(self):
         row = pd.Series(

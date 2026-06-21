@@ -282,6 +282,8 @@ rule branch_b_v2_benchmark:
             + [
                 CNV_B_V2_BENCHMARK_TRUTH_METRICS,
                 CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY,
+                CNV_B_V2_BENCHMARK_FILTERED_EVENTS,
+                CNV_B_V2_BENCHMARK_FILTERED_EVENTS_JSON,
                 CNV_B_V2_BENCHMARK_SUMMARY,
             ]
         ) if CNV_ENABLED and CNV_POSTPROCESS_ENABLE_BRANCH_B else []

@@ -119,6 +119,74 @@ Current Branch B V2 report-contract integration:
   - 2026-06-15 V2 benchmark status is `skipped_no_truth`, so it remains
     burden/context only.
 
+Current Branch B V2 report-layer filtering:
+
+- Current report:
+  `docs/reports/branch_b_v2_report_layer_filter_2026-06-21.md`.
+- This loop is the first Branch B V2 step that performs actual report-layer
+  filtering rather than display-only burden stratification.
+- New V2 report-layer classes are `report_event`, `internal_review_event`,
+  `filtered_event`, and `branch_s_event`.
+- `filtered_event` rows are removed from report/internal-review main flow and
+  retained only in `filtered_events.tsv/json` audit ledgers.
+- The initial non-contract filter requires combination evidence:
+  non-strong A signal, B-side non-support, GC/RC attenuation, and sensitive,
+  short/focal, or low-clean/high-risk context. Single indicators remain
+  insufficient for filtering.
+- Strong A signals with B/GC disagreement are retained as internal review, not
+  filtered. H6 chr21 remains protected as internal review.
+- `cnv_report` now prefers V2 report-layer counts in
+  `biological_candidate_conclusion` when V2 summaries are present. Legacy/current-code
+  Branch B top events are labeled as legacy context and are not the main
+  biological conclusion.
+- Remote validation completed on `ssh fengxian`:
+  - `tests/unit/test_branch_b_v2_classifier.py`,
+    `tests/unit/test_branch_b_v2_benchmark.py`,
+    `tests/unit/test_cnv_report.py`, and
+    `tests/unit/test_branch_ab_phase12_workflow_contract.py`: `66 passed in
+    1.15s`.
+  - Snakemake dry-runs passed for `branch_b_v2_benchmark branch_s_review
+    cnv_report` under all three active gap2m configs.
+  - Forced materialization completed for Y1-Y8, H1-H16, and 2026-06-15.
+- Materialized report-layer result:
+  - Y1-Y8: candidates=97, truth preserved 10/10, FN=0,
+    report-layer filtered truth=0, report=21, internal_review=50,
+    filtered=13, Branch S=13.
+  - H1-H16: candidates=105, truth preserved 10/10, FN=0,
+    report-layer filtered truth=0, H6 chr21 retained, report=6,
+    internal_review=49, filtered=8, Branch S=42.
+  - 2026-06-15: candidates=165, no locked truth, report=52,
+    internal_review=76, filtered=23, Branch S=14.
+- This is still `development_review_only`; it is not production promotion
+  because 2026-06-15 has no truth labels, Branch S is not final, and the active
+  reference remains shadow.
+
+G1-G8 current-scheme validation has also been materialized under the same
+active reference and explicit gap2m Branch A overlay:
+
+- Current report:
+  `docs/reports/branch_b_v2_g1_g8_validation_2026-06-21.md`.
+- Existing BAMs from
+  `/data/project/CNV/PGT-A/g_reseq_qc_20260504/mapping/G*.sorted.bam` were
+  reused; no BWA remapping was performed.
+- WisecondorX convert/predict, Branch A, Branch B V2, Branch S, benchmark, and
+  report were rerun in the remote mirror.
+- Materialized result:
+  - candidates=75;
+  - locked truth events=10;
+  - truth preserved 10/10;
+  - FN=0;
+  - report-layer filtered truth=0;
+  - report=15;
+  - internal_review=40;
+  - filtered audit-only=7;
+  - Branch S=13.
+- G1-G8 supports the current sensitivity/preservation gate. It does not promote
+  the shadow reference, Branch B V2, or Branch S to production-final status.
+- G2 remains the main G-batch burden outlier with 28 candidates, 6 report
+  events, 16 internal-review events, 3 filtered audit-only events, and 3
+  Branch S events.
+
 ## 2026-06-21 Branch A Burden Optimization Phase 1
 
 Current report:

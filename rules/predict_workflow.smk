@@ -845,6 +845,8 @@ if CNV_ENABLED:
                 output:
                     truth_metrics=CNV_B_V2_BENCHMARK_TRUTH_METRICS,
                     sample_summary=CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY,
+                    filtered_events=CNV_B_V2_BENCHMARK_FILTERED_EVENTS,
+                    filtered_events_json=CNV_B_V2_BENCHMARK_FILTERED_EVENTS_JSON,
                     summary=CNV_B_V2_BENCHMARK_SUMMARY
                 log:
                     project_path("logs", "cnv", "branch_b_v2_benchmark.log")
@@ -861,6 +863,8 @@ if CNV_ENABLED:
                         "--reference-id", CNV_REFERENCE_ID,
                         "--output-truth-metrics", output.truth_metrics,
                         "--output-sample-summary", output.sample_summary,
+                        "--output-filtered-events", output.filtered_events,
+                        "--output-filtered-events-json", output.filtered_events_json,
                         "--output-summary", output.summary,
                     ]
                     if input.truth:

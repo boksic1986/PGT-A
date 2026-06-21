@@ -314,3 +314,148 @@ def test_v2_benchmark_outputs_sample_burden_reduction_counts(tmp_path: Path):
         "route_to_branch_s_review": 1,
         "stratify_background_unknown_review": 1,
     }
+
+
+def test_v2_benchmark_report_layer_counts_and_filtered_event_ledger(tmp_path: Path):
+    classification = tmp_path / "S1.candidate_classification.tsv"
+    sample_summary = tmp_path / "sample_summary.tsv"
+    summary = tmp_path / "summary.json"
+    filtered_events = tmp_path / "filtered_events.tsv"
+    filtered_events_json = tmp_path / "filtered_events.json"
+
+    pd.DataFrame(
+        [
+            {
+                "sample_id": "S1",
+                "candidate_id": "S1.report",
+                "chrom": "chr21",
+                "start": 20_000_000,
+                "end": 42_000_000,
+                "state": "gain",
+                "v2_report_layer_class": "report_event",
+                "v2_report_visibility": "final_report",
+                "v2_burden_reduction_tier": "report_event",
+                "v2_filter_action": "keep_report_event",
+            },
+            {
+                "sample_id": "S1",
+                "candidate_id": "S1.review",
+                "chrom": "chr6",
+                "start": 1_000_000,
+                "end": 5_000_000,
+                "state": "gain",
+                "v2_report_layer_class": "internal_review_event",
+                "v2_report_visibility": "internal_review",
+                "v2_burden_reduction_tier": "internal_review_event",
+                "v2_filter_action": "keep_internal_review_event",
+            },
+            {
+                "sample_id": "S1",
+                "candidate_id": "S1.filtered",
+                "chrom": "chr16",
+                "start": 500_000,
+                "end": 1_800_000,
+                "state": "loss",
+                "v2_report_layer_class": "filtered_event",
+                "v2_report_visibility": "audit_only",
+                "v2_burden_reduction_tier": "filtered_event",
+                "v2_filter_action": "filter_report_layer_combined_technical_risk",
+                "v2_report_filter_rule_tags": "short_or_focal;low_clean_high_risk;b_signal_not_supportive;gc_rc_attenuated",
+            },
+            {
+                "sample_id": "S1",
+                "candidate_id": "S1.branch_s",
+                "chrom": "chrX",
+                "start": 1,
+                "end": 155_000_000,
+                "state": "loss",
+                "v2_report_layer_class": "branch_s_event",
+                "v2_report_visibility": "branch_s_report_section",
+                "v2_burden_reduction_tier": "branch_s_event",
+                "v2_filter_action": "route_to_branch_s_review",
+            },
+        ]
+    ).to_csv(classification, sep="\t", index=False)
+
+    _, written_sample_summary, payload = build_v2_benchmark(
+        classification_paths=[str(classification)],
+        truth_tsv="",
+        sample_ids=["S1"],
+        reference_id="h_r0_shadow_ref_20260619",
+        output_truth_metrics=str(tmp_path / "truth_metrics.tsv"),
+        output_sample_summary=str(sample_summary),
+        output_summary=str(summary),
+        output_filtered_events=str(filtered_events),
+        output_filtered_events_json=str(filtered_events_json),
+    )
+
+    row = written_sample_summary.iloc[0]
+    assert row["v2_report_event_count"] == 1
+    assert row["v2_internal_review_event_count"] == 1
+    assert row["v2_filtered_event_count"] == 1
+    assert row["v2_branch_s_event_count"] == 1
+    assert payload["v2_report_event_count"] == 1
+    assert payload["v2_internal_review_event_count"] == 1
+    assert payload["v2_filtered_event_count"] == 1
+    assert payload["v2_branch_s_event_count"] == 1
+
+    filtered_df = pd.read_csv(filtered_events, sep="\t")
+    assert filtered_df["candidate_id"].tolist() == ["S1.filtered"]
+    filtered_payload = json.loads(filtered_events_json.read_text(encoding="utf-8"))
+    assert filtered_payload["filtered_event_count"] == 1
+    assert filtered_payload["filtered_event_rule_counts"] == {
+        "b_signal_not_supportive": 1,
+        "gc_rc_attenuated": 1,
+        "low_clean_high_risk": 1,
+        "short_or_focal": 1,
+    }
+
+
+def test_v2_report_layer_filtered_truth_overlap_counts_as_fn(tmp_path: Path):
+    classification = tmp_path / "H6.candidate_classification.tsv"
+    truth = tmp_path / "truth.tsv"
+
+    pd.DataFrame(
+        [
+            {
+                "sample_id": "H6",
+                "candidate_id": "H6.filtered",
+                "chrom": "chr21",
+                "start": 20_000_000,
+                "end": 23_000_000,
+                "state": "gain",
+                "a_abs_zscore": 7.11,
+                "v2_candidate_class": "V2_POSITIVE_SUPPORT_REVIEW",
+                "v2_report_layer_class": "filtered_event",
+                "v2_report_visibility": "audit_only",
+                "v2_filter_action": "filter_report_layer_combined_technical_risk",
+                "v2_burden_reduction_tier": "filtered_event",
+            }
+        ]
+    ).to_csv(classification, sep="\t", index=False)
+    pd.DataFrame(
+        [
+            {
+                "sample_id": "H6",
+                "chrom": "chr21",
+                "start": 20_700_000,
+                "end": 22_300_000,
+                "expected_state": "gain",
+            }
+        ]
+    ).to_csv(truth, sep="\t", index=False)
+
+    _, _, payload = build_v2_benchmark(
+        classification_paths=[str(classification)],
+        truth_tsv=str(truth),
+        sample_ids=["H6"],
+        reference_id="h_r0_shadow_ref_20260619",
+        output_truth_metrics=str(tmp_path / "truth_metrics.tsv"),
+        output_sample_summary=str(tmp_path / "sample_summary.tsv"),
+        output_summary=str(tmp_path / "summary.json"),
+    )
+
+    assert payload["truth_event_count"] == 1
+    assert payload["truth_preserved_count"] == 0
+    assert payload["FN_count"] == 1
+    assert payload["truth_report_layer_filtered_count"] == 1
