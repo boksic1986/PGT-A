@@ -48,13 +48,18 @@ Immediate execution order:
    and materialized. `v2_direction_support_label` and
    `v2_direction_support_reason` are review evidence only; they do not change
    candidate class, action, hard-suppression behavior, or final report impact.
-9. The next Branch B V2 refinement should target the unresolved
-   `UNKNOWN_BACKGROUND + NO_NULL_SUPPORT` burden with truth-safe background or
-   evidence contracts. Do not convert direction support into a hard filter.
-10. Upgrade Branch S toward `review_reportable_with_limitations`: visible
+9. The unresolved `UNKNOWN_BACKGROUND + NO_NULL_SUPPORT` burden is now
+   explicit in Branch B V2 outputs through `v2_background_context_label`,
+   `v2_background_context_reason`, and `background_context_label_counts`.
+   These fields are review context only and must not be interpreted as benign,
+   background-compatible, or final-reportable evidence.
+10. The next Branch B V2 refinement should use these explicit background
+   context labels to design truth-safe burden stratification. Do not convert
+   background context or direction support into a hard filter.
+11. Upgrade Branch S toward `review_reportable_with_limitations`: visible
    SCA/sex-chromosome report section, controlled ref/negative-like FP burden,
    explicit uncertainty, and no final SCA promotion without locked truth.
-11. Generate the next P6/report package from workflow outputs after fixed Branch
+12. Generate the next P6/report package from workflow outputs after fixed Branch
    A/B/S contracts are represented. The report should expose evidence levels and
    limitations rather than silently treating unknown evidence as benign.
 
@@ -103,6 +108,9 @@ Minimum next implementation plan:
 - Do not implement a Branch B direction-support hard filter. Direction support
   is now present in workflow outputs as a review label only and preserves
   truth-overlap candidates and H6 chr21 under the materialized gap2m benchmark.
+- Do not treat `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT` as benign. It now appears
+  as explicit V2 review context and marks missing matched-negative plus missing
+  calibration-null support.
 - Continue excluding `final_disposition`, `branch_b_keep_event`, legacy artifact
   status, and legacy kept counts from V2 decision and metric computation.
 - Refine Branch B V2 evidence/disposition so it can reduce FP/review burden

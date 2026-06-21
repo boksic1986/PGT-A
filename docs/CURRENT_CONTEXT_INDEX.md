@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-21_1042_branch_b_v2_direction_support_label_handoff.md`
+2. `docs/handoff/2026-06-21_1103_branch_b_v2_background_context_label_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,12 +23,12 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-21_1042_branch_b_v2_direction_support_label_handoff.md
+active_handoff: docs/handoff/2026-06-21_1103_branch_b_v2_background_context_label_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_gap2m_direction_support_review_label_materialized_truth_preserved
+branch_b_status: v2_gap2m_background_context_review_label_materialized_truth_preserved
 branch_s_status: review_reportable_with_limitations
 report_status: final_delivery_target_after_a_b_strengthening
 
@@ -42,6 +42,7 @@ report_status: final_delivery_target_after_a_b_strengthening
 - `docs/reports/branch_b_v2_sex_route_refinement_2026-06-21.md`
 - `docs/reports/branch_b_v2_autosomal_burden_audit_2026-06-21.md`
 - `docs/reports/branch_b_v2_direction_support_label_2026-06-21.md`
+- `docs/reports/branch_b_v2_background_context_label_2026-06-21.md`
 - `docs/reports/branch_b_v2_reference_background_and_sca_design_2026-06-20.md`
 - `docs/reports/branch_s_p5_report_boundary_2026-06-20.md`
 - `docs/reports/p6_report_package_contract_2026-06-20.md`
@@ -171,6 +172,24 @@ Truth preservation remains unchanged after materialization:
 - H6 chr21 remains `V2_POSITIVE_SUPPORT_REVIEW`,
   `B_DIRECTION_SUPPORTED`, `none_shadow_only`.
 
+The unresolved background limitation is now explicit in workflow outputs as
+review context. The classifier emits `v2_background_context_label` and
+`v2_background_context_reason`, with `background_context_label_counts` in the
+summary JSON. This does not change class/action/final impact.
+
+Materialized background-context counts:
+
+- Y1-Y8: 97 rows; `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT=86`,
+  `SHADOW_BACKGROUND_NO_NULL_SUPPORT=11`.
+- H1-H16: 105 rows; `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT=69`,
+  `SHADOW_BACKGROUND_NO_NULL_SUPPORT=36`.
+- 2026-06-15: 165 rows; `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT=155`,
+  `SHADOW_BACKGROUND_NO_NULL_SUPPORT=10`.
+
+H6 chr21 remains `V2_POSITIVE_SUPPORT_REVIEW`,
+`UNKNOWN_BACKGROUND_NO_NULL_SUPPORT`, `B_DIRECTION_SUPPORTED`,
+`none_shadow_only`.
+
 ### Branch S
 
 Branch S is not final SCA, but it must not be omitted from report development.
@@ -220,7 +239,9 @@ A, Branch B, Branch S, background source, and limitations explicitly.
    no-FN/no-hard-suppression benchmark.
 5. Direction support is now materialized as a review label only; do not turn it
    into a hard filter, final benign/artifact call, or universal demotion.
-6. Upgrade Branch S toward review-reportable output with controlled negative/ref
+6. Background context is now materialized as a review label only; do not treat
+   `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT` as benign or background-compatible.
+7. Upgrade Branch S toward review-reportable output with controlled negative/ref
    FP burden; final SCA promotion remains a separate truth gate.
-7. Generate the next P6/report package only after the fixed A/B/S contracts are
+8. Generate the next P6/report package only after the fixed A/B/S contracts are
    represented in workflow outputs.

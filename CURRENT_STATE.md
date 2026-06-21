@@ -256,7 +256,6 @@ The label contract is explicitly non-final:
 
 Remote materialization under the explicit gap2m overlay produced:
 
-- Y1-Y8: 97 rows; `B_DIRECTION_SUPPORTED=74`,
 - Y1-Y8: 97 rows; `B_DIRECTION_SUPPORTED=66`,
   `A_ONLY_WEAK_B_DIRECTION=20`, `B_DIRECTION_CONFLICT=11`.
 - H1-H16: 105 rows; `B_DIRECTION_SUPPORTED=68`,
@@ -299,6 +298,58 @@ Important interpretation:
 - This is an evidence-label improvement, not a final classifier promotion.
 - The main unresolved Branch B V2 condition remains
   `UNKNOWN_BACKGROUND + NO_NULL_SUPPORT`.
+- The 2026-06-15 cohort remains burden/context only because it has no locked
+  truth table.
+
+## 2026-06-21 Branch B V2 Background Context Review Label
+
+Current report:
+`docs/reports/branch_b_v2_background_context_label_2026-06-21.md`.
+
+This loop made the remaining background limitation explicit in Branch B V2
+classifier outputs:
+
+- `v2_background_context_label`;
+- `v2_background_context_reason`;
+- `background_context_label_counts` in classifier summaries.
+
+The labels are review context only. They do not change:
+
+- WisecondorX predict;
+- Branch A candidate discovery;
+- `v2_candidate_class`;
+- `v2_classifier_action`;
+- `v2_evidence_tier`;
+- `v2_direction_support_label`;
+- `v2_final_report_impact`;
+- Branch S status;
+- report-release status.
+
+Remote materialization under the explicit gap2m overlay produced:
+
+- Y1-Y8: 97 rows; `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT=86`,
+  `SHADOW_BACKGROUND_NO_NULL_SUPPORT=11`.
+- H1-H16: 105 rows; `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT=69`,
+  `SHADOW_BACKGROUND_NO_NULL_SUPPORT=36`.
+- 2026-06-15: 165 rows; `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT=155`,
+  `SHADOW_BACKGROUND_NO_NULL_SUPPORT=10`.
+
+Truth preservation remains unchanged:
+
+- Y1-Y8: truth preserved 10/10, FN=0, hard-suppressed truth=0.
+- H1-H16: truth preserved 10/10, FN=0, hard-suppressed truth=0.
+- H6 chr21 remains `V2_POSITIVE_SUPPORT_REVIEW`,
+  `v2_background_context_label=UNKNOWN_BACKGROUND_NO_NULL_SUPPORT`,
+  `v2_direction_support_label=B_DIRECTION_SUPPORTED`,
+  `v2_final_report_impact=none_shadow_only`, and
+  `a_abs_zscore=7.113507302991461`.
+
+Important interpretation:
+
+- `UNKNOWN_BACKGROUND_NO_NULL_SUPPORT` means background evidence is not
+  informative; it must not be interpreted as benign or background-compatible.
+- This is not FP reduction yet. It is a safer contract for the next
+  truth-safe burden stratification step.
 - The 2026-06-15 cohort remains burden/context only because it has no locked
   truth table.
 

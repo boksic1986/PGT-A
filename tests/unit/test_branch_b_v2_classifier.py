@@ -438,3 +438,95 @@ def test_direction_conflict_label_takes_priority_over_fraction_support():
     assert row["v2_candidate_class"] == "V2_NO_CALL_CONTRACT_RISK"
     assert row["v2_direction_support_label"] == "B_DIRECTION_CONFLICT"
     assert row["v2_final_report_impact"] == "none_shadow_only"
+
+
+def test_unknown_background_no_null_support_is_explicit_review_context_not_filter():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "H6",
+                "candidate_id": "H6_chr21_gain",
+                "chrom": "chr21",
+                "state": "gain",
+                "a_abs_zscore": 7.11,
+                "same_direction_fraction": 0.92,
+                "corrected_amplitude": 0.40,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_classifier_action"] == "V2_REVIEW_POSITIVE_SUPPORT"
+    assert row["v2_final_report_impact"] == "none_shadow_only"
+    assert row["v2_background_context_label"] == "UNKNOWN_BACKGROUND_NO_NULL_SUPPORT"
+    assert row["v2_background_context_reason"] == "no_matched_negative_and_no_calibration_null"
+
+
+def test_shadow_background_no_null_support_is_limited_context_only():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "Y2",
+                "candidate_id": "Y2_chr21_gain",
+                "chrom": "chr21",
+                "state": "gain",
+                "a_abs_zscore": 15.0,
+                "same_direction_fraction": 0.95,
+                "corrected_amplitude": 5.1,
+                "matched_negative_background_status": "SHADOW_BACKGROUND",
+                "matched_negative_abs_percentile": 0.995,
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            }
+        ]
+    )
+
+    row = classify_branch_b_v2_candidates(frame).iloc[0]
+
+    assert row["v2_candidate_class"] == "V2_POSITIVE_SUPPORT_REVIEW"
+    assert row["v2_evidence_gate"] == "SHADOW_BACKGROUND_CONTEXT"
+    assert row["v2_final_report_impact"] == "none_shadow_only"
+    assert row["v2_background_context_label"] == "SHADOW_BACKGROUND_NO_NULL_SUPPORT"
+    assert row["v2_background_context_reason"] == "shadow_background_context_only_no_calibration_null"
+
+
+def test_v2_summary_reports_background_context_label_counts():
+    classified = classify_branch_b_v2_candidates(
+        pd.DataFrame(
+            [
+                {
+                    "sample_id": "H6",
+                    "candidate_id": "H6_chr21_gain",
+                    "chrom": "chr21",
+                    "state": "gain",
+                    "a_abs_zscore": 7.11,
+                    "same_direction_fraction": 0.92,
+                    "corrected_amplitude": 0.40,
+                    "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                    "calibration_null_status": "NO_NULL_SUPPORT",
+                },
+                {
+                    "sample_id": "Y2",
+                    "candidate_id": "Y2_chr21_gain",
+                    "chrom": "chr21",
+                    "state": "gain",
+                    "a_abs_zscore": 15.0,
+                    "same_direction_fraction": 0.95,
+                    "corrected_amplitude": 5.1,
+                    "matched_negative_background_status": "SHADOW_BACKGROUND",
+                    "matched_negative_abs_percentile": 0.995,
+                    "calibration_null_status": "NO_NULL_SUPPORT",
+                },
+            ]
+        )
+    )
+
+    summary = summarize_v2_classification("mixed", classified)
+
+    assert summary["background_context_label_counts"] == {
+        "SHADOW_BACKGROUND_NO_NULL_SUPPORT": 1,
+        "UNKNOWN_BACKGROUND_NO_NULL_SUPPORT": 1,
+    }

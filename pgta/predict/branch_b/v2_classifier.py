@@ -18,6 +18,8 @@ V2_CLASSIFIER_COLUMNS = [
     "v2_evidence_tier",
     "v2_evidence_gate",
     "v2_review_priority",
+    "v2_background_context_label",
+    "v2_background_context_reason",
     "v2_direction_support_label",
     "v2_direction_support_reason",
     "v2_final_report_impact",
@@ -61,6 +63,10 @@ def normalized_disposition(row):
 
 def matched_background_status(row):
     return clean_text(row.get("matched_negative_background_status", ""), default="").upper()
+
+
+def calibration_null_status(row):
+    return clean_text(row.get("calibration_null_status", ""), default="").upper()
 
 
 def has_unknown_matched_negative_background(row):
@@ -117,6 +123,41 @@ def branch_b_direction_support_label(row):
     return "NO_POSITIVE_SUPPORT", "no_positive_support_to_compare_direction"
 
 
+def background_context_label(row):
+    background_status = matched_background_status(row)
+    null_status = calibration_null_status(row)
+
+    if background_status == "OK":
+        percentile = matched_negative_percentile(row)
+        if math.isfinite(percentile):
+            return "MATCHED_NEGATIVE_BACKGROUND_INFORMATIVE", "matched_negative_percentile_available"
+        return "MATCHED_NEGATIVE_BACKGROUND_WITHOUT_PERCENTILE", "matched_negative_without_percentile"
+
+    if background_status == "SHADOW_BACKGROUND":
+        if null_status == "NO_NULL_SUPPORT":
+            return "SHADOW_BACKGROUND_NO_NULL_SUPPORT", "shadow_background_context_only_no_calibration_null"
+        if null_status == "LIMITED_NULL_SUPPORT":
+            return "SHADOW_BACKGROUND_LIMITED_NULL_SUPPORT", "shadow_background_context_only_limited_calibration_null"
+        return "SHADOW_BACKGROUND_CONTEXT_ONLY", "shadow_background_context_only"
+
+    if has_unknown_matched_negative_background(row):
+        if null_status == "NO_NULL_SUPPORT":
+            return "UNKNOWN_BACKGROUND_NO_NULL_SUPPORT", "no_matched_negative_and_no_calibration_null"
+        if null_status == "LIMITED_NULL_SUPPORT":
+            return "UNKNOWN_BACKGROUND_LIMITED_NULL_SUPPORT", "no_matched_negative_limited_calibration_null"
+        if null_status == "OK":
+            return "UNKNOWN_BACKGROUND_CALIBRATION_NULL_AVAILABLE", "no_matched_negative_but_calibration_null_available"
+        return "UNKNOWN_BACKGROUND_CONTEXT_MISSING", "no_matched_negative_context"
+
+    if null_status == "NO_NULL_SUPPORT":
+        return "NO_MATCHED_BACKGROUND_NO_NULL_SUPPORT", "no_background_status_and_no_calibration_null"
+    if null_status == "LIMITED_NULL_SUPPORT":
+        return "NO_MATCHED_BACKGROUND_LIMITED_NULL_SUPPORT", "no_background_status_limited_calibration_null"
+    if null_status == "OK":
+        return "CALIBRATION_NULL_ONLY", "calibration_null_available_without_matched_negative"
+    return "NO_BACKGROUND_CONTEXT", "no_background_or_calibration_context"
+
+
 def has_direction_conflict(row):
     direction = state_direction(row.get("state", ""))
     if direction == 0.0:
@@ -152,7 +193,7 @@ def has_technical_review_risk(row):
     refmap_status = clean_text(row.get("refmap_status", "")).upper()
     if refmap_status in {"LOW_REF_BINS_HARD_RISK", "LOW_REF_BINS_REVIEW", "LOW_REFBIN_BURDEN"}:
         return True
-    calibration_status = clean_text(row.get("calibration_null_status", "")).upper()
+    calibration_status = calibration_null_status(row)
     if calibration_status in {"NO_NULL_SUPPORT", "LIMITED_NULL_SUPPORT"}:
         return True
     hard_region_fraction = safe_float(row.get("hard_region_fraction", math.nan), default=math.nan)
@@ -215,6 +256,7 @@ def classify_evidence_tier(row):
 def classify_candidate_row(row):
     tier, gate, priority = classify_evidence_tier(row)
     direction_label, direction_reason = branch_b_direction_support_label(row)
+    background_label, background_reason = background_context_label(row)
 
     if is_sex_chromosome_candidate(row):
         return {
@@ -224,6 +266,8 @@ def classify_candidate_row(row):
             "v2_evidence_tier": tier,
             "v2_evidence_gate": gate,
             "v2_review_priority": priority,
+            "v2_background_context_label": background_label,
+            "v2_background_context_reason": background_reason,
             "v2_direction_support_label": direction_label,
             "v2_direction_support_reason": direction_reason,
         }
@@ -235,6 +279,8 @@ def classify_candidate_row(row):
             "v2_evidence_tier": tier,
             "v2_evidence_gate": gate,
             "v2_review_priority": priority,
+            "v2_background_context_label": background_label,
+            "v2_background_context_reason": background_reason,
             "v2_direction_support_label": direction_label,
             "v2_direction_support_reason": direction_reason,
         }
@@ -246,6 +292,8 @@ def classify_candidate_row(row):
             "v2_evidence_tier": tier,
             "v2_evidence_gate": gate,
             "v2_review_priority": priority,
+            "v2_background_context_label": background_label,
+            "v2_background_context_reason": background_reason,
             "v2_direction_support_label": direction_label,
             "v2_direction_support_reason": direction_reason,
         }
@@ -257,6 +305,8 @@ def classify_candidate_row(row):
             "v2_evidence_tier": tier,
             "v2_evidence_gate": gate,
             "v2_review_priority": priority,
+            "v2_background_context_label": background_label,
+            "v2_background_context_reason": background_reason,
             "v2_direction_support_label": direction_label,
             "v2_direction_support_reason": direction_reason,
         }
@@ -268,6 +318,8 @@ def classify_candidate_row(row):
             "v2_evidence_tier": tier,
             "v2_evidence_gate": gate,
             "v2_review_priority": priority,
+            "v2_background_context_label": background_label,
+            "v2_background_context_reason": background_reason,
             "v2_direction_support_label": direction_label,
             "v2_direction_support_reason": direction_reason,
         }
@@ -278,6 +330,8 @@ def classify_candidate_row(row):
         "v2_evidence_tier": tier,
         "v2_evidence_gate": gate,
         "v2_review_priority": priority,
+        "v2_background_context_label": background_label,
+        "v2_background_context_reason": background_reason,
         "v2_direction_support_label": direction_label,
         "v2_direction_support_reason": direction_reason,
     }
@@ -327,6 +381,11 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         if "v2_direction_support_label" in classified_df.columns
         else {}
     )
+    background_context_label_counts = (
+        classified_df["v2_background_context_label"].fillna("UNKNOWN").astype(str).value_counts().sort_index().to_dict()
+        if "v2_background_context_label" in classified_df.columns
+        else {}
+    )
     return {
         "sample_id": str(sample_id),
         "version": str(version),
@@ -335,6 +394,9 @@ def summarize_v2_classification(sample_id, classified_df, version="branch_ab_v2"
         "action_counts": {str(key): int(value) for key, value in action_counts.items()},
         "evidence_tier_counts": {str(key): int(value) for key, value in evidence_tier_counts.items()},
         "review_priority_counts": {str(key): int(value) for key, value in review_priority_counts.items()},
+        "background_context_label_counts": {
+            str(key): int(value) for key, value in background_context_label_counts.items()
+        },
         "direction_support_label_counts": {
             str(key): int(value) for key, value in direction_support_label_counts.items()
         },
