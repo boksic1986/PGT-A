@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md`
+2. `docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,19 +23,21 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md
-previous_handoff: docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md
+active_handoff: docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md
+previous_handoff: docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_visibility_materialized_development_only
-branch_s_status: sex_aware_branch_s_overlay_not_final
-report_status: branch_a_ref_z_and_sex_aware_cn_plots_materialized_development_only
+branch_s_status: sex_aware_branch_s_support_visible_not_final
+report_status: plot_event_support_ref_z_consistent_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/plot_event_support_ref_z_consistency_2026-06-22.md`
+- `docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md`
 - `docs/reports/branch_a_ref_z_plot_sex_chrom_cn_trend_2026-06-22.md`
 - `docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md`
 - `docs/reports/sex_aware_cn_z_plot_branch_s_overlay_2026-06-22.md`
@@ -89,6 +91,38 @@ report_status: branch_a_ref_z_and_sex_aware_cn_plots_materialized_development_on
 - `docs/reports/branch_ab_v2_rnd_constraints_2026-06-18.md`
 
 ## Current Module State
+
+### Plot Event Support Ref-Z Consistency
+
+The active support-table contract is documented in
+`docs/reports/plot_event_support_ref_z_consistency_2026-06-22.md`.
+
+This loop supersedes the misleading support-table interpretation from
+`docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md`.
+`median_calibrated_z` is retained as a deprecated compatibility/audit column;
+it is not the main support metric.
+
+The active support metric for z review is:
+
+`same_direction_median_display_ref_z`
+
+with companion fields:
+
+- `same_direction_ref_z_bin_count`
+- `same_direction_ref_z_fraction`
+- `median_raw_branch_a_ref_z`
+- `median_display_ref_z`
+- `median_residual_calibrated_z`
+
+Autosomal bins use autosomal neutral-background-centered `display_ref_z` for
+plot readability. chrX/chrY use raw `branch_a_ref_z` as `display_ref_z`, because
+using autosomal centering on sex chromosomes can flip Branch S X-loss direction
+when the autosomal background is shifted.
+
+`plot_event_support.tsv` now includes Branch S rows. G3/G5 chrX X-loss rows are
+present and marked `Z_DIRECTION_SUPPORTED` after materialization. This remains a
+visualization/support-ledger change only; it does not change Branch B V2
+filtering or Branch S classification.
 
 ### Branch A Ref-Z Plot And Sex-Chrom CN Trend
 

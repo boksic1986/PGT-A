@@ -1,5 +1,58 @@
 # PLANS.md
 
+## 2026-06-22 Plot Event Support Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md`.
+
+Current report:
+`docs/reports/plot_event_support_ref_z_consistency_2026-06-22.md`.
+
+The active `plot_event_support.tsv` now matches the z/CN plot contract:
+
+- z plot points use `display_ref_z`;
+- autosomes are visually centered by autosomal neutral background;
+- chrX/chrY keep raw `branch_a_ref_z` as display ref-z to avoid flipping Branch
+  S direction;
+- z event support uses `same_direction_median_display_ref_z`, not whole-event
+  median;
+- residual `calibrated_z` is audit-only via `median_residual_calibrated_z`;
+- Branch S rows are included in the same support TSV.
+
+Current outputs:
+
+- G1-G8:
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins.tsv`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins_cn.tsv`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_event_support.tsv`
+- 2026-06-15:
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins.tsv`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_event_support.tsv`
+
+Immediate next steps:
+
+1. Review G1-G8 first because it has locked truth. Use
+   `same_direction_median_display_ref_z` and
+   `same_direction_ref_z_fraction` for event support, not deprecated
+   `median_calibrated_z`.
+2. Confirm G3/G5 X-loss with z plot, CN plot, Branch S summary/scores/evidence,
+   and `plot_event_support.tsv`.
+3. Treat CN support as secondary because current CN ratio remains weaker/mixed
+   for some sex-chrom events; do not promote Branch S from this visualization
+   loop alone.
+4. Use 0615 only for burden/context review. It has no truth and must not be
+   used to derive thresholds.
+5. If report-event reduction resumes, candidate-level rules must be benchmarked
+   against Y1-Y8, H1-H6, and G1-G8 with FN=0, H6 chr21 visible, and G2 truth
+   not filtered.
+6. If SCA report finalization is needed, design a separate Branch S truth gate
+   instead of relying on plot support alone.
+
 ## 2026-06-22 Branch A Ref-Z Plot Review Next Gate
 
 Current handoff:

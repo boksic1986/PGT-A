@@ -117,8 +117,11 @@ def test_build_cnv_plot_svg_uses_branch_a_ref_z_and_writes_plot_bins(tmp_path):
             "z",
             "report_state",
             "branch_a_ref_z",
+            "display_ref_z",
             "residual_calibrated_z",
             "z_source",
+            "display_z_source",
+            "autosomal_neutral_ref_z_median",
             "ref_z_scale",
             "ref_z_scale_source",
         ]
@@ -134,9 +137,9 @@ def test_build_cnv_plot_svg_uses_branch_a_ref_z_and_writes_plot_bins(tmp_path):
     assert pd.isna(del_bins["z"].iloc[1])
     assert del_bins["z_source"].iloc[1] == "ref_z_unavailable_masked_or_structure_gap"
     assert 9.9 not in plot_bins["z"].tolist()
-    assert "branch_a_ref_z" in svg
-    assert "Q75" in svg
-    assert "Q25" in svg
+    assert "same-direction median display_ref_z" in svg
+    assert "Q75" not in svg
+    assert "Q25" not in svg
     assert "report z trend" not in svg
     assert "median z" not in svg
     assert "smooth z trend" not in svg
@@ -159,7 +162,7 @@ def test_build_cnv_plot_svg_uses_branch_a_ref_z_and_writes_plot_bins(tmp_path):
     assert "del" in svg
 
 
-def test_ref_z_event_trend_uses_direction_quantile_without_filling_merge_gap(tmp_path):
+def test_ref_z_event_trend_uses_same_direction_median_without_filling_merge_gap(tmp_path):
     bins = pd.DataFrame(
         {
             "chrom": ["chr1"] * 6,
@@ -204,11 +207,78 @@ def test_ref_z_event_trend_uses_direction_quantile_without_filling_merge_gap(tmp
     assert plot_bins.loc[plot_bins["start"].isin([2_000_000, 3_000_000]), "z"].tolist() == pytest.approx([0.0, 0.0])
     svg = output_svg.read_text(encoding="utf-8")
     assert svg.count('class="report-ref-z-trend"') == 1
-    assert "Q75 branch_a_ref_z" in svg
-    assert "valid bins=6" in svg
+    assert "same-direction median display_ref_z" in svg
+    assert "same-direction bins=2; valid bins=6" in svg
+    assert "Q75 branch_a_ref_z" not in svg
     assert "a_zscore=31.000" in svg
     assert "report z trend" not in svg
     assert "neutral bin" in svg
+
+
+def test_display_ref_z_recenters_neutral_background_and_support_uses_same_direction_median(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1"] * 8,
+            "bin_index": list(range(8)),
+            "start": [idx * 1_000_000 for idx in range(8)],
+            "end": [(idx + 1) * 1_000_000 for idx in range(8)],
+            "calibrated_z": [0.0] * 8,
+            "normalized_signal": [_norm_signal(value) for value in [90, 90, 140, 140, 90, 90, 90, 90]],
+        }
+    )
+    ref_bins = _ref_bins(
+        [("chr1", idx, idx * 1_000_000, (idx + 1) * 1_000_000, 100, 0.05) for idx in range(8)]
+    )
+    events = pd.DataFrame(
+        {
+            "sample_id": ["Y1"],
+            "chrom": ["chr1"],
+            "start": [2_000_000],
+            "end": [6_000_000],
+            "state": ["gain"],
+            "v2_report_layer_class": ["report_event"],
+            "v2_report_visibility": ["report_strong_event"],
+            "a_zscore": [28.0],
+            "copy_number_estimate": [2.4],
+        }
+    )
+    output_bins = tmp_path / "Y1.plot_bins.tsv"
+    output_svg = tmp_path / "Y1.final_cnv.svg"
+    support_tsv = tmp_path / "Y1.plot_event_support.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="Y1",
+        bins_df=bins,
+        branch_b_events_df=events,
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=output_bins,
+        output_copy_number_svg=tmp_path / "Y1.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=tmp_path / "Y1.plot_bins_cn.tsv",
+        output_copy_number_event_support_tsv=support_tsv,
+    )
+
+    plot_bins = pd.read_csv(output_bins, sep="\t")
+    support = pd.read_csv(support_tsv, sep="\t")
+    neutral_bins = plot_bins.loc[plot_bins["report_state"].eq("neutral")]
+    event_bins = plot_bins.loc[plot_bins["report_state"].eq("dup")].sort_values("start")
+    row = support.iloc[0]
+
+    assert set(["display_ref_z", "autosomal_neutral_ref_z_median", "display_z_source"]).issubset(plot_bins.columns)
+    assert neutral_bins["display_ref_z"].median() == pytest.approx(0.0, abs=1e-6)
+    assert event_bins["branch_a_ref_z"].iloc[2] == pytest.approx(_ref_z(90, ref_mad=0.05), abs=1e-6)
+    assert event_bins["display_ref_z"].iloc[2] == pytest.approx(0.0, abs=1e-6)
+    assert event_bins["z"].tolist() == pytest.approx(event_bins["display_ref_z"].tolist(), abs=1e-6)
+    assert row["event_layer"] == "autosomal_report"
+    assert row["valid_bin_count"] == 4
+    assert row["same_direction_ref_z_bin_count"] == 2
+    assert row["near_zero_ref_z_bin_count"] == 2
+    assert row["same_direction_median_display_ref_z"] == pytest.approx(event_bins["display_ref_z"].iloc[:2].median(), abs=1e-6)
+    assert row["median_raw_branch_a_ref_z"] != pytest.approx(row["same_direction_median_display_ref_z"], abs=1e-3)
+    svg = output_svg.read_text(encoding="utf-8")
+    assert "same-direction median display_ref_z" in svg
+    assert "Q75 branch_a_ref_z" not in svg
 
 
 def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path):
@@ -601,6 +671,10 @@ def test_copy_number_event_support_counts_use_ratio_cn_not_z(tmp_path):
     assert row["cn_same_direction_fraction"] == pytest.approx(1.0, abs=0.001)
     assert row["cn_direction_consistency_status"] == "CN_DIRECTION_SUPPORTED"
     assert row["z_support_bin_count"] == 3
+    assert row["same_direction_cn_bin_count"] == 3
+    assert "median_residual_calibrated_z" in support.columns
+    assert "median_raw_branch_a_ref_z" in support.columns
+    assert "same_direction_median_display_ref_z" in support.columns
 
 
 def test_build_cnv_plot_svg_requires_ref_stability_for_ref_z_without_fallback(tmp_path):
@@ -927,6 +1001,7 @@ def test_branch_s_report_review_event_is_overlaid_in_combined_genome_plot(tmp_pa
     output_svg = tmp_path / "G3.final_cnv.svg"
     output_cn_svg = tmp_path / "G3.final_cnv_cn.svg"
     output_cn_bins = tmp_path / "G3.plot_bins_cn.tsv"
+    output_event_support = tmp_path / "G3.plot_event_support.tsv"
 
     build_cnv_plot_svg(
         sample_id="G3",
@@ -942,13 +1017,116 @@ def test_branch_s_report_review_event_is_overlaid_in_combined_genome_plot(tmp_pa
         output_bins_tsv=tmp_path / "G3.plot_bins.tsv",
         output_copy_number_svg=output_cn_svg,
         output_copy_number_bins_tsv=output_cn_bins,
+        output_copy_number_event_support_tsv=output_event_support,
     )
 
     svg = output_svg.read_text(encoding="utf-8")
     cn_svg = output_cn_svg.read_text(encoding="utf-8")
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    support = pd.read_csv(output_event_support, sep="\t")
     assert 'class="branch-s-review-region"' in svg
     assert 'class="branch-s-cn-region"' in cn_svg
     assert 'class="branch-s-cn-trend"' in cn_svg
     assert "event-level score=24.160" in svg
     assert set(cn_bins["event_layer"]) == {"branch_s_review"}
+    assert len(support) == 1
+    row = support.iloc[0]
+    assert row["event_layer"] == "branch_s_review"
+    assert row["branch_s_state"] == "X_LOSS"
+    assert row["sex_call"] == "XX"
+    assert row["sex_chrom_region_class"] == "X_NONPAR"
+    assert row["expected_copy_number"] == pytest.approx(2.0)
+    assert row["same_direction_ref_z_bin_count"] == 3
+    assert row["support_interpretation_status"] == "Z_DIRECTION_SUPPORTED"
+
+
+def test_branch_s_ref_z_support_is_not_flipped_by_autosomal_centering(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chr1", "chr1", "chrX", "chrX", "chrX"],
+            "bin_index": [0, 1, 2, 0, 1, 2],
+            "start": [0, 1_000_000, 2_000_000, 0, 1_000_000, 2_000_000],
+            "end": [1_000_000, 2_000_000, 3_000_000, 1_000_000, 2_000_000, 3_000_000],
+            "calibrated_z": [-0.1, -0.2, -0.1, -0.1, -0.2, -0.1],
+            "normalized_signal": [
+                _norm_signal(90),
+                _norm_signal(91),
+                _norm_signal(89),
+                _norm_signal(85),
+                _norm_signal(84),
+                _norm_signal(86),
+            ],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chr1", 1, 1_000_000, 2_000_000, 100),
+            ("chr1", 2, 2_000_000, 3_000_000, 100),
+            ("chrX", 0, 0, 1_000_000, 100),
+            ("chrX", 1, 1_000_000, 2_000_000, 100),
+            ("chrX", 2, 2_000_000, 3_000_000, 100),
+        ]
+    )
+    gender = pd.DataFrame({"sample_id": ["G5"], "sex_call": ["XX"], "predict_gender": ["F"]})
+    branch_s_summary = pd.DataFrame(
+        {
+            "sample_id": ["G5"],
+            "sex_call": ["XX"],
+            "sca_candidate_state": ["X_LOSS"],
+            "sca_report_layer_class": ["sca_report_review_event"],
+            "sca_report_layer_reason": ["sca_review_weak_report_visible_with_branch_a_support"],
+        }
+    )
+    branch_s_scores = pd.DataFrame(
+        {
+            "sample_id": ["G5"],
+            "sca_state": ["X_LOSS"],
+            "state_score": [31.0],
+            "state_score_reason": ["branch_a_candidate_zscore_sex_call_compatible_review"],
+        }
+    )
+    branch_s_evidence = pd.DataFrame(
+        {
+            "sample_id": ["G5"],
+            "region_class": ["X_NONPAR"],
+            "chrom": ["chrX"],
+            "start": [0],
+            "end": [3_000_000],
+            "bin_count": [3],
+            "median_calibrated_z": [-0.1],
+        }
+    )
+    output_event_support = tmp_path / "G5.plot_event_support.tsv"
+    output_bins = tmp_path / "G5.plot_bins.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="G5",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        gender_df=gender,
+        branch_s_summary_df=branch_s_summary,
+        branch_s_scores_df=branch_s_scores,
+        branch_s_evidence_df=branch_s_evidence,
+        ref_bins_df=ref_bins,
+        output_svg=tmp_path / "G5.final_cnv.svg",
+        output_bins_tsv=output_bins,
+        output_copy_number_svg=tmp_path / "G5.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=tmp_path / "G5.plot_bins_cn.tsv",
+        output_copy_number_event_support_tsv=output_event_support,
+    )
+
+    plot_bins = pd.read_csv(output_bins, sep="\t")
+    autosome_bins = plot_bins[plot_bins["chrom"] == "chr1"]
+    x_bins = plot_bins[plot_bins["chrom"] == "chrX"]
+    assert autosome_bins["display_ref_z"].median() == pytest.approx(0.0)
+    assert (x_bins["display_ref_z"] == x_bins["branch_a_ref_z"]).all()
+    assert set(x_bins["display_z_source"]) == {"branch_a_ref_z_sex_chrom_raw_no_autosome_centering"}
+
+    support = pd.read_csv(output_event_support, sep="\t")
+    row = support.iloc[0]
+    assert row["event_layer"] == "branch_s_review"
+    assert row["branch_s_state"] == "X_LOSS"
+    assert row["same_direction_ref_z_bin_count"] == 3
+    assert row["support_interpretation_status"] == "Z_DIRECTION_SUPPORTED"

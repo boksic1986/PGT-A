@@ -1,5 +1,80 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Plot Event Support Ref-Z Consistency
+
+Current handoff:
+`docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md`.
+
+Current report:
+`docs/reports/plot_event_support_ref_z_consistency_2026-06-22.md`.
+
+This loop fixes the support table semantics for the active Branch A ref-z plots.
+It updates only visualization/support ledger outputs. It does not modify Branch
+A, Branch B V2 filtering, Branch S classifier, reference, mapping, report-event
+classification, or TP/FN/FP metrics.
+
+Active support contract:
+
+- `plot_bins.tsv` z/display signal remains `display_ref_z`.
+- Autosomal `display_ref_z` is centered by autosomal non-event/non-gap neutral
+  background so whole-genome plots are visually readable.
+- Sex chromosomes keep raw `branch_a_ref_z` for `display_ref_z`; autosomal
+  background centering is not applied to chrX/chrY because it can flip Branch S
+  X-loss direction when the autosomal background is shifted.
+- `plot_event_support.tsv` now includes Branch S rows with
+  `event_layer=branch_s_review`.
+- `median_calibrated_z` is retained only as a deprecated compatibility column
+  and now mirrors residual calibrated-z audit semantics.
+- Main z support fields are:
+  - `median_raw_branch_a_ref_z`
+  - `median_display_ref_z`
+  - `same_direction_median_display_ref_z`
+  - `same_direction_ref_z_bin_count`
+  - `same_direction_ref_z_fraction`
+  - `median_residual_calibrated_z`
+- Whole-event median remains background context only. Same-direction bins carry
+  the review signal so tolerated 2Mb merge gaps do not dilute event support to
+  zero.
+
+Remote validation:
+
+- Initial regression test failed before the sex-chrom display fix, confirming
+  autosomal centering could flip Branch S X-loss support.
+- Remote pytest:
+  `tests/unit/test_branch_b_plot.py`,
+  `tests/unit/test_branch_s_shadow.py`,
+  `tests/unit/test_cnv_report.py`, and
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`: `60 passed in
+  2.57s`.
+- G1-G8 dry-run for `cnv_branch_s_shadow cnv_branch_ab_plot cnv_report`
+  parsed successfully and did not request mapping/reference rebuild.
+- 0615 dry-run for `cnv_branch_s_shadow cnv_branch_ab_plot cnv_report` parsed
+  successfully and did not request mapping/reference rebuild.
+- G1-G8 materialization completed: `20 of 20 steps (100%) done`.
+- 0615 materialization completed: `14 of 14 steps (100%) done`.
+
+Materialized acceptance:
+
+- G1-G8: 8/8 z SVG, 8/8 CN SVG, 8/8 z TSV, 8/8 CN TSV, 8/8 support TSV.
+- 0615: 5/5 z SVG, 5/5 CN SVG, 5/5 z TSV, 5/5 CN TSV, 5/5 support TSV.
+- `G3.plot_event_support.tsv` and `G5.plot_event_support.tsv` contain chrX
+  Branch S X-loss rows.
+- G3 X-loss support: `same_direction_ref_z_bin_count=170`,
+  `same_direction_ref_z_fraction=0.977011`, `Z_DIRECTION_SUPPORTED`.
+- G5 X-loss support: `same_direction_ref_z_bin_count=169`,
+  `same_direction_ref_z_fraction=0.971264`, `Z_DIRECTION_SUPPORTED`.
+
+Local synced outputs:
+
+- `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+Boundary:
+
+- This is a visualization/support-ledger correction only.
+- It does not add a new filter rule and does not change any Branch B V2 or
+  Branch S decision.
+
 ## 2026-06-22 Branch A Ref-Z Plot And Sex-Chrom CN Trend
 
 Current handoff:

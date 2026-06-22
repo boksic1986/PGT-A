@@ -29,6 +29,7 @@ CN_COPY_NUMBER_MIN = 0.0
 CN_COPY_NUMBER_MAX = 4.0
 CN_LOG2R_PSEUDOCOUNT = 1e-3
 CN_BIN_COPY_NUMBER_SOURCE = "normalized_signal_ref_median_log2r_autosome_centered"
+REF_Z_NEAR_ZERO_THRESHOLD = 0.5
 HG19_CENTROMERES = {
     "chr1": (121_535_434, 124_535_434),
     "chr2": (92_326_171, 95_326_171),
@@ -413,6 +414,64 @@ def annotate_report_states(bins_df, final_events):
             & frame["report_state"].eq("neutral")
         )
         frame.loc[mask, "report_state"] = str(row.report_state)
+    return frame
+
+
+def event_interval_mask(frame, events_df):
+    mask = pd.Series(False, index=frame.index)
+    if events_df is None or events_df.empty:
+        return mask
+    for row in events_df.itertuples(index=False):
+        row_dict = row._asdict()
+        chrom = normalize_chrom(row_dict.get("chrom", ""))
+        if not chrom:
+            continue
+        try:
+            start = int(row_dict.get("start"))
+            end = int(row_dict.get("end"))
+        except (TypeError, ValueError):
+            continue
+        mask = mask | (
+            frame["chrom"].astype(str).eq(chrom)
+            & frame["end"].astype(int).gt(start)
+            & frame["start"].astype(int).lt(end)
+        )
+    return mask
+
+
+def annotate_display_ref_z_bins(bins_df, final_events=None, branch_s_events=None):
+    frame = bins_df.copy()
+    raw_z = pd.to_numeric(frame.get("branch_a_ref_z", pd.Series(np.nan, index=frame.index)), errors="coerce")
+    structure_or_hard = structural_gap_mask(frame) | hard_mask_series(frame)
+    event_mask = event_interval_mask(frame, final_events) | event_interval_mask(frame, branch_s_events)
+    background_mask = (
+        frame["chrom"].isin(AUTOSOME_ORDER)
+        & ~structure_or_hard
+        & ~event_mask
+        & np.isfinite(raw_z)
+    )
+    background_values = raw_z.loc[background_mask].dropna()
+    if background_values.empty:
+        background_median = 0.0
+        background_count = 0
+        display_source = "branch_a_ref_z_no_autosomal_neutral_centering_available"
+    else:
+        background_median = float(background_values.median())
+        background_count = int(background_values.shape[0])
+        display_source = "branch_a_ref_z_autosomal_neutral_centered"
+    frame["autosomal_neutral_ref_z_median"] = background_median
+    frame["autosomal_neutral_ref_z_bin_count"] = background_count
+    frame["display_ref_z"] = np.nan
+    valid = np.isfinite(raw_z)
+    autosome_valid = valid & frame["chrom"].isin(AUTOSOME_ORDER)
+    sex_chrom_valid = valid & ~frame["chrom"].isin(AUTOSOME_ORDER)
+    frame.loc[autosome_valid, "display_ref_z"] = raw_z.loc[autosome_valid] - background_median
+    frame.loc[sex_chrom_valid, "display_ref_z"] = raw_z.loc[sex_chrom_valid]
+    frame["display_z_source"] = "display_ref_z_unavailable"
+    frame.loc[autosome_valid, "display_z_source"] = display_source
+    frame.loc[sex_chrom_valid, "display_z_source"] = "branch_a_ref_z_sex_chrom_raw_no_autosome_centering"
+    frame["z"] = frame["display_ref_z"]
+    frame["plot_signal"] = pd.to_numeric(frame["z"], errors="coerce").clip(lower=-12.0, upper=12.0)
     return frame
 
 
@@ -816,20 +875,20 @@ def render_report_event_trend_lines(bins_df, final_events, layout, total_span, l
         ].copy()
         if event_bins.empty:
             continue
-        valid_z = pd.to_numeric(event_bins.get("branch_a_ref_z", pd.Series(np.nan, index=event_bins.index)), errors="coerce")
+        valid_z = pd.to_numeric(event_bins.get("display_ref_z", pd.Series(np.nan, index=event_bins.index)), errors="coerce")
         valid_z = valid_z[np.isfinite(valid_z)]
         if valid_z.empty:
             continue
         state = str(row_dict.get("report_state", "")).lower()
         if state == "dup":
-            quantile = 0.75
-            quantile_label = "Q75"
+            same_direction_z = valid_z[valid_z.gt(0.0)]
         elif state == "del":
-            quantile = 0.25
-            quantile_label = "Q25"
+            same_direction_z = valid_z[valid_z.lt(0.0)]
         else:
             continue
-        trend_value = float(valid_z.quantile(quantile))
+        if same_direction_z.empty:
+            continue
+        trend_value = float(same_direction_z.median())
         x1 = scale_x(genome_position(chrom, int(row_dict.get("start")), layout), total_span, left, plot_width)
         x2 = scale_x(genome_position(chrom, int(row_dict.get("end")), layout), total_span, left, plot_width)
         if x2 <= x1:
@@ -841,14 +900,67 @@ def render_report_event_trend_lines(bins_df, final_events, layout, total_span, l
         )
         score_text = f"; a_zscore={score:.3f}" if score is not None else ""
         label = (
-            f"branch_a_ref_z {quantile_label} {row_dict.get('report_state')} "
+            f"same-direction median display_ref_z {row_dict.get('report_state')} "
             f"{chrom}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}; "
-            f"{quantile_label} branch_a_ref_z={trend_value:.3f}; "
-            f"valid bins={len(valid_z)}{score_text}"
+            f"same-direction median display_ref_z={trend_value:.3f}; "
+            f"same-direction bins={len(same_direction_z)}; valid bins={len(valid_z)}{score_text}"
         )
         chunks.append(
             f'<line class="report-ref-z-trend" x1="{x1:.2f}" y1="{y:.2f}" '
             f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{TREND_COLOR}" '
+            f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
+            f"<title>{html.escape(label)}</title></line>"
+        )
+    return chunks
+
+
+def render_branch_s_ref_z_trend_lines(bins_df, branch_s_events, layout, total_span, left, plot_width, mid_y, half_h):
+    chunks = []
+    if branch_s_events is None or branch_s_events.empty:
+        return chunks
+    for row in branch_s_events.itertuples(index=False):
+        row_dict = row._asdict()
+        chrom = str(row_dict.get("chrom", ""))
+        if chrom not in layout:
+            continue
+        event_bins = bins_df[
+            bins_df["chrom"].astype(str).eq(chrom)
+            & bins_df["end"].astype(int).gt(int(row_dict.get("start")))
+            & bins_df["start"].astype(int).lt(int(row_dict.get("end")))
+        ].copy()
+        if event_bins.empty:
+            continue
+        valid_z = pd.to_numeric(event_bins.get("display_ref_z", pd.Series(np.nan, index=event_bins.index)), errors="coerce")
+        valid_z = valid_z[np.isfinite(valid_z)]
+        if valid_z.empty:
+            continue
+        state = str(row_dict.get("report_state", "")).lower()
+        if state == "dup":
+            same_direction_z = valid_z[valid_z.gt(0.0)]
+        elif state == "del":
+            same_direction_z = valid_z[valid_z.lt(0.0)]
+        else:
+            continue
+        if same_direction_z.empty:
+            continue
+        trend_value = float(same_direction_z.median())
+        x1 = scale_x(genome_position(chrom, int(row_dict.get("start")), layout), total_span, left, plot_width)
+        x2 = scale_x(genome_position(chrom, int(row_dict.get("end")), layout), total_span, left, plot_width)
+        if x2 <= x1:
+            continue
+        y = scale_y(trend_value, mid_y, half_h)
+        score = first_finite_value(row_dict, ("branch_s_score", "state_score", "a_zscore"))
+        score_text = f"; event-level score={score:.3f}" if score is not None else ""
+        label = (
+            f"Branch S same-direction median display_ref_z {row_dict.get('branch_s_state')} "
+            f"{chrom}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}; "
+            f"same-direction median display_ref_z={trend_value:.3f}; "
+            f"same-direction bins={len(same_direction_z)}; valid bins={len(valid_z)}{score_text}"
+        )
+        color = REPORT_STATE_COLOR.get(state, TREND_COLOR)
+        chunks.append(
+            f'<line class="branch-s-ref-z-trend" x1="{x1:.2f}" y1="{y:.2f}" '
+            f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{color}" '
             f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
             f"<title>{html.escape(label)}</title></line>"
         )
@@ -1051,7 +1163,7 @@ def z_support_mask(values, state):
     return pd.Series(False, index=values.index)
 
 
-def summarize_copy_number_event_support(cn_bins, final_events):
+def summarize_copy_number_event_support(cn_bins, final_events, branch_s_events=None, sex_call=""):
     columns = [
         "sample_id",
         "chrom",
@@ -1059,44 +1171,97 @@ def summarize_copy_number_event_support(cn_bins, final_events):
         "end",
         "state",
         "event_report_state",
+        "event_layer",
+        "branch_s_state",
+        "sex_call",
+        "sex_chrom_region_class",
+        "expected_copy_number",
         "valid_bin_count",
         "cn_support_bin_count",
+        "same_direction_cn_bin_count",
         "cn_same_direction_fraction",
         "median_bin_cn",
         "mean_bin_cn",
         "median_log2r",
         "median_calibrated_z",
+        "median_calibrated_z_status",
+        "median_residual_calibrated_z",
+        "median_raw_branch_a_ref_z",
+        "median_display_ref_z",
+        "same_direction_median_display_ref_z",
+        "same_direction_ref_z_bin_count",
+        "same_direction_ref_z_fraction",
+        "opposite_direction_ref_z_bin_count",
+        "near_zero_ref_z_bin_count",
         "z_support_bin_count",
+        "structure_gap_bin_count",
         "centromere_gap_bin_count",
         "cn_direction_consistency_status",
+        "support_interpretation_status",
     ]
-    if final_events.empty:
+    event_frames = []
+    if final_events is not None and not final_events.empty:
+        autosomal = final_events.copy()
+        autosomal["event_layer"] = autosomal.get("event_layer", "autosomal_report")
+        autosomal["event_layer"] = autosomal["event_layer"].replace("", "autosomal_report").fillna("autosomal_report")
+        event_frames.append(autosomal)
+    if branch_s_events is not None and not branch_s_events.empty:
+        branch_s = branch_s_events.copy()
+        branch_s["event_layer"] = "branch_s_review"
+        event_frames.append(branch_s)
+    if not event_frames:
         return pd.DataFrame(columns=columns)
+    events = pd.concat(event_frames, ignore_index=True, sort=False)
     rows = []
-    for event in final_events.itertuples(index=False):
+    for event in events.itertuples(index=False):
         row = event._asdict()
         chrom = str(row.get("chrom", ""))
         start = int(row.get("start"))
         end = int(row.get("end"))
         state = str(row.get("report_state", ""))
+        event_layer = str(row.get("event_layer", "") or "autosomal_report")
         event_bins = cn_bins[
             cn_bins["chrom"].astype(str).eq(chrom)
             & cn_bins["end"].astype(int).gt(start)
             & cn_bins["start"].astype(int).lt(end)
         ].copy()
         gap_count = int(event_bins.get("is_structure_gap_blank", pd.Series(False, index=event_bins.index)).astype(bool).sum())
-        valid = event_bins[
-            ~event_bins.get("is_structure_gap_blank", pd.Series(False, index=event_bins.index)).astype(bool)
-            & pd.to_numeric(event_bins["copy_number"], errors="coerce").notna()
-        ].copy()
+        non_gap = event_bins[~event_bins.get("is_structure_gap_blank", pd.Series(False, index=event_bins.index)).astype(bool)].copy()
+        valid = non_gap[pd.to_numeric(non_gap["copy_number"], errors="coerce").notna()].copy()
         cn_values = pd.to_numeric(valid["copy_number"], errors="coerce")
         log2r_values = pd.to_numeric(valid.get("log2r", pd.Series(dtype=float)), errors="coerce")
-        z_values = pd.to_numeric(valid.get("z", pd.Series(dtype=float)), errors="coerce")
+        residual_z_values = pd.to_numeric(non_gap.get("residual_calibrated_z", pd.Series(dtype=float)), errors="coerce")
+        raw_ref_z_values = pd.to_numeric(non_gap.get("branch_a_ref_z", pd.Series(dtype=float)), errors="coerce")
+        display_ref_z_values = pd.to_numeric(non_gap.get("display_ref_z", pd.Series(dtype=float)), errors="coerce")
+        display_ref_z_values = display_ref_z_values[np.isfinite(display_ref_z_values)]
+        raw_ref_z_values = raw_ref_z_values[np.isfinite(raw_ref_z_values)]
+        residual_z_values = residual_z_values[np.isfinite(residual_z_values)]
         cn_support = cn_support_mask(cn_values, state)
-        z_support = z_support_mask(z_values, state)
         valid_count = int(cn_values.notna().sum())
         support_count = int(cn_support.fillna(False).sum())
         support_fraction = float(support_count / valid_count) if valid_count else np.nan
+        if state == "dup":
+            same_direction_z = display_ref_z_values[display_ref_z_values.gt(0.0)]
+            opposite_direction_z = display_ref_z_values[display_ref_z_values.lt(0.0)]
+        elif state == "del":
+            same_direction_z = display_ref_z_values[display_ref_z_values.lt(0.0)]
+            opposite_direction_z = display_ref_z_values[display_ref_z_values.gt(0.0)]
+        else:
+            same_direction_z = pd.Series(dtype=float)
+            opposite_direction_z = pd.Series(dtype=float)
+        z_valid_count = int(display_ref_z_values.notna().sum())
+        z_support_count = int(same_direction_z.shape[0])
+        z_support_fraction = float(z_support_count / z_valid_count) if z_valid_count else np.nan
+        near_zero_count = int(display_ref_z_values.abs().le(REF_Z_NEAR_ZERO_THRESHOLD).sum()) if z_valid_count else 0
+        opposite_count = int(opposite_direction_z.shape[0])
+        if z_valid_count == 0:
+            support_status = "Z_NO_VALID_BINS"
+        elif z_support_fraction >= 0.50:
+            support_status = "Z_DIRECTION_SUPPORTED"
+        elif z_support_count > 0:
+            support_status = "Z_DIRECTION_WEAK_OR_MIXED"
+        else:
+            support_status = "Z_DIRECTION_NOT_SUPPORTED"
         if valid_count == 0:
             consistency = "CN_NO_VALID_BINS"
         elif support_fraction >= 0.50:
@@ -1105,6 +1270,23 @@ def summarize_copy_number_event_support(cn_bins, final_events):
             consistency = "CN_DIRECTION_WEAK_OR_MIXED"
         else:
             consistency = "CN_DIRECTION_NOT_SUPPORTED"
+        expected_values = pd.to_numeric(non_gap.get("expected_copy_number", pd.Series(dtype=float)), errors="coerce")
+        expected_values = expected_values[np.isfinite(expected_values)]
+        if expected_values.notna().any():
+            expected_copy_number = float(expected_values.median())
+        else:
+            expected_copy_number = expected_copy_number_for_bin(chrom, sex_call)
+        region_class = ""
+        if event_layer == "branch_s_review":
+            region_class = str(row.get("sex_chrom_region_class", "") or sex_chrom_region_class(chrom))
+        elif normalize_chrom(chrom) in AUTOSOME_ORDER:
+            region_class = "AUTOSOME"
+        else:
+            region_class = sex_chrom_region_class(chrom)
+        median_residual = float(residual_z_values.median()) if residual_z_values.notna().any() else np.nan
+        median_raw_ref_z = float(raw_ref_z_values.median()) if raw_ref_z_values.notna().any() else np.nan
+        median_display_ref_z = float(display_ref_z_values.median()) if display_ref_z_values.notna().any() else np.nan
+        same_direction_median = float(same_direction_z.median()) if not same_direction_z.empty else np.nan
         rows.append(
             {
                 "sample_id": str(row.get("sample_id", "")),
@@ -1113,16 +1295,35 @@ def summarize_copy_number_event_support(cn_bins, final_events):
                 "end": end,
                 "state": str(row.get("state", "")),
                 "event_report_state": state,
+                "event_layer": event_layer,
+                "branch_s_state": str(row.get("branch_s_state", "")),
+                "sex_call": str(row.get("sex_call", "") or sex_call),
+                "sex_chrom_region_class": region_class,
+                "expected_copy_number": round(expected_copy_number, 6) if np.isfinite(expected_copy_number) else np.nan,
                 "valid_bin_count": valid_count,
                 "cn_support_bin_count": support_count,
+                "same_direction_cn_bin_count": support_count,
                 "cn_same_direction_fraction": round(support_fraction, 6) if np.isfinite(support_fraction) else np.nan,
                 "median_bin_cn": round(float(cn_values.median()), 6) if valid_count else np.nan,
                 "mean_bin_cn": round(float(cn_values.mean()), 6) if valid_count else np.nan,
                 "median_log2r": round(float(log2r_values.median()), 6) if log2r_values.notna().any() else np.nan,
-                "median_calibrated_z": round(float(z_values.median()), 6) if z_values.notna().any() else np.nan,
-                "z_support_bin_count": int(z_support.fillna(False).sum()),
+                "median_calibrated_z": round(median_residual, 6) if np.isfinite(median_residual) else np.nan,
+                "median_calibrated_z_status": "deprecated_use_median_residual_calibrated_z",
+                "median_residual_calibrated_z": round(median_residual, 6) if np.isfinite(median_residual) else np.nan,
+                "median_raw_branch_a_ref_z": round(median_raw_ref_z, 6) if np.isfinite(median_raw_ref_z) else np.nan,
+                "median_display_ref_z": round(median_display_ref_z, 6) if np.isfinite(median_display_ref_z) else np.nan,
+                "same_direction_median_display_ref_z": round(same_direction_median, 6)
+                if np.isfinite(same_direction_median)
+                else np.nan,
+                "same_direction_ref_z_bin_count": z_support_count,
+                "same_direction_ref_z_fraction": round(z_support_fraction, 6) if np.isfinite(z_support_fraction) else np.nan,
+                "opposite_direction_ref_z_bin_count": opposite_count,
+                "near_zero_ref_z_bin_count": near_zero_count,
+                "z_support_bin_count": z_support_count,
+                "structure_gap_bin_count": gap_count,
                 "centromere_gap_bin_count": gap_count,
                 "cn_direction_consistency_status": consistency,
+                "support_interpretation_status": support_status,
             }
         )
     return pd.DataFrame(rows, columns=columns)
@@ -1152,8 +1353,12 @@ def write_plot_bins_tsv(path_value, bins_df, layout):
         "genome_pos",
         "z",
         "branch_a_ref_z",
+        "display_ref_z",
         "residual_calibrated_z",
         "z_source",
+        "display_z_source",
+        "autosomal_neutral_ref_z_median",
+        "autosomal_neutral_ref_z_bin_count",
         "ref_z_scale",
         "ref_z_scale_source",
         "report_state",
@@ -1234,7 +1439,7 @@ def build_copy_number_plot_svg(
     write_copy_number_bins_tsv(output_bins_tsv, cn_bins, cn_layout)
     write_copy_number_event_support_tsv(
         output_event_support_tsv,
-        summarize_copy_number_event_support(cn_bins, final_events),
+        summarize_copy_number_event_support(cn_bins, final_events, branch_s_events=branch_s_events, sex_call=sex_call),
     )
 
     width = 2560
@@ -1402,6 +1607,7 @@ def build_cnv_plot_svg(
     )
     layout, total_span = build_chrom_layout(bins)
     bins = annotate_report_states(bins, final_events)
+    bins = annotate_display_ref_z_bins(bins, final_events=final_events, branch_s_events=branch_s_events)
     write_plot_bins_tsv(output_bins_tsv, bins, layout)
 
     width = 1280
@@ -1484,6 +1690,7 @@ def build_cnv_plot_svg(
         point_chunks.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="1.25" fill="{color}" opacity="{opacity:.2f}"/>')
     svg.extend(point_chunks)
     svg.extend(render_report_event_trend_lines(bins, final_events, layout, total_span, left, plot_width, mid_y, half_h))
+    svg.extend(render_branch_s_ref_z_trend_lines(bins, branch_s_events, layout, total_span, left, plot_width, mid_y, half_h))
 
     legend_x = left
     legend_y = height - 62
