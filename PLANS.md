@@ -1,5 +1,52 @@
 # PLANS.md
 
+## 2026-06-22 Sex-Aware chrY Robust Plot Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md`.
+
+Current report:
+`docs/reports/sex_aware_chry_robust_plot_truth_sync_2026-06-22.md`.
+
+The active plot outputs now separate sex-aware chrY display from ordinary CNV
+scatter:
+
+- XX chrY rows are retained in TSV but hidden from ordinary z/CN scatter.
+- XY chrY is shown as a neutral Y-presence guide from BAM sex evidence when the
+  chrY reference denominator is not interpretable.
+- z display uses `plot_z=clip(display_ref_z, -8, 8)` while preserving raw
+  `branch_a_ref_z` in TSV.
+- CN plots use light chromosome backgrounds and absent scatter for
+  structure/centromere gaps; grey gap blocks are no longer drawn.
+
+Current truth outputs:
+
+- Y1-Y8:
+  `D:\Pipeline\PGT-A\reports\truth_y1_y8_cnv_plots\`
+- H1-H6:
+  `D:\Pipeline\PGT-A\reports\truth_h1_h6_cnv_plots\`
+- G1-G8:
+  `D:\Pipeline\PGT-A\reports\truth_g1_g8_cnv_plots\`
+- 0615 context only:
+  `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+Immediate next steps:
+
+1. Review the synced truth plots sample by sample, starting with G1-G8 because
+   it has known SCA/truth examples and exposed the chrY display issue.
+2. For sex chromosomes, use Branch S rows in `plot_event_support.tsv`, CN
+   plots, and z plots together. Do not infer chrY CNV from the neutral
+   Y-presence guide.
+3. Treat `plot_z` clipping as display-only. Use TSV `branch_a_ref_z` for raw
+   audit when an extreme point needs explanation.
+4. Keep 0615 as burden/context only; do not use it to derive thresholds or
+   claim TP/FN/FP.
+5. If report-event reduction resumes, design candidate-level Branch B V2
+   evidence rules and benchmark them against Y1-Y8, H1-H6, and G1-G8 with
+   FN=0, H6 chr21 visible, and G2 truth not filtered.
+6. If final SCA reporting is needed, design a separate Branch S truth gate.
+   Current Branch S remains review/development-only.
+
 ## 2026-06-22 Plot Event Support Review Next Gate
 
 Current handoff:

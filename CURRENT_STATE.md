@@ -1,5 +1,73 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Sex-Aware chrY Robust Plot And Truth Sync
+
+Current handoff:
+`docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md`.
+
+Current report:
+`docs/reports/sex_aware_chry_robust_plot_truth_sync_2026-06-22.md`.
+
+This loop fixes plot display and plot support ledgers only. It does not modify
+Branch A, Branch B V2 filtering, Branch S classification, reference, mapping,
+report-event classification, or TP/FN/FP definitions.
+
+Active plot contract:
+
+- `branch_a_ref_z` remains the raw ref-normalized z audit value.
+- `plot_z` is the SVG display value clipped to `[-8, 8]`; clipped bins are
+  marked with `z_plot_clipped=true`.
+- XX chrY rows remain in TSV but ordinary chrY z/CN scatter is hidden with
+  `chrY_display_mode=xx_absent_expected_hidden`.
+- XY chrY uses a neutral Y-presence guide based on BAM sex evidence instead of
+  raw chrY ref-z or ratio-CN when the chrY reference denominator is not
+  interpretable.
+- CN plots no longer draw grey structure-gap background blocks; structural and
+  centromere gaps are represented by absent scatter points.
+- The z SVG legend no longer includes `event ref-z trend`.
+
+Remote validation:
+
+- Remote pytest:
+  `tests/unit/test_branch_b_plot.py`,
+  `tests/unit/test_cnv_report.py`,
+  `tests/unit/test_branch_s_shadow.py`, and
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`: `63 passed in
+  2.63s`.
+- Y1-Y8, H1-H16, G1-G8, and 0615 context dry-runs for
+  `cnv_branch_s_shadow cnv_branch_ab_plot cnv_report` parsed successfully and
+  did not request mapping/reference rebuild.
+- Y1-Y8, H1-H16, G1-G8, and 0615 context plot/report outputs were
+  materialized on `fengxian`.
+
+Materialized acceptance:
+
+- Y1-Y8: 8/8 z SVG, 8/8 CN SVG, 8/8 z TSV, 8/8 CN TSV, 8/8 support TSV.
+- H1-H16: 16/16 z SVG, 16/16 CN SVG, 16/16 z TSV, 16/16 CN TSV, 16/16 support
+  TSV; H1-H6 are the locked truth subset.
+- G1-G8: 8/8 z SVG, 8/8 CN SVG, 8/8 z TSV, 8/8 CN TSV, 8/8 support TSV.
+- 0615 context: 5/5 z SVG, 5/5 CN SVG, 5/5 z TSV, 5/5 CN TSV, 5/5 support
+  TSV.
+- Y1-Y8, H1-H6, and G1-G8 truth preserved counts are all `10/10`.
+- H6 chr21 gain remains visible as `report_weak_event`.
+- G3/G5 chrX X-loss Branch S support rows remain visible and
+  `Z_DIRECTION_SUPPORTED`.
+- XX samples no longer display ordinary chrY abnormal points; XY samples show a
+  neutral Y-presence guide.
+
+Local synced outputs:
+
+- `D:\Pipeline\PGT-A\reports\truth_y1_y8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\truth_h1_h6_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\truth_g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\` context only
+
+Boundary:
+
+- chrY guide is not a chrY CNV caller.
+- `plot_z` clipping is display-only and does not enter filtering/calling.
+- 0615 remains burden/context only.
+
 ## 2026-06-22 Plot Event Support Ref-Z Consistency
 
 Current handoff:

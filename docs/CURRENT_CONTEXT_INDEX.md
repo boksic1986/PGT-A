@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md`
+2. `docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,19 +23,21 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md
-previous_handoff: docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md
+active_handoff: docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md
+previous_handoff: docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_visibility_materialized_development_only
 branch_s_status: sex_aware_branch_s_support_visible_not_final
-report_status: plot_event_support_ref_z_consistent_development_only
+report_status: sex_aware_chry_robust_plot_truth_synced_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/sex_aware_chry_robust_plot_truth_sync_2026-06-22.md`
+- `docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md`
 - `docs/reports/plot_event_support_ref_z_consistency_2026-06-22.md`
 - `docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md`
 - `docs/reports/branch_a_ref_z_plot_sex_chrom_cn_trend_2026-06-22.md`
@@ -91,6 +93,53 @@ report_status: plot_event_support_ref_z_consistent_development_only
 - `docs/reports/branch_ab_v2_rnd_constraints_2026-06-18.md`
 
 ## Current Module State
+
+### Sex-Aware chrY Robust Plot And Truth Sync
+
+The active plot contract is documented in
+`docs/reports/sex_aware_chry_robust_plot_truth_sync_2026-06-22.md`.
+
+This loop updates only CNV plot display and plot support ledgers. It does not
+modify Branch A, Branch B V2 filtering, Branch S classification, reference,
+mapping, report-event classification, or TP/FN/FP definitions.
+
+Current plot contract:
+
+- `plot_bins.tsv` retains raw `branch_a_ref_z` for audit.
+- `plot_z` is the SVG display value clipped to `[-8, 8]`, with
+  `z_plot_clipped=true` for display-only clipping.
+- XX chrY rows remain in TSV but ordinary z/CN scatter is hidden with
+  `chrY_display_mode=xx_absent_expected_hidden`.
+- XY chrY uses a neutral Y-presence guide from BAM sex evidence instead of raw
+  chrY ref-z or ratio-CN, with display modes
+  `xy_y_presence_guide_not_ref_z` and
+  `xy_y_presence_guide_not_ratio_cn`.
+- CN plots no longer draw grey structure-gap background blocks; structure and
+  centromere gaps are represented by absent scatter points.
+- The z SVG legend no longer includes `event ref-z trend`.
+
+Remote validation on `fengxian`:
+
+- Pytest for `test_branch_b_plot.py`, `test_cnv_report.py`,
+  `test_branch_s_shadow.py`, and
+  `test_branch_ab_phase12_workflow_contract.py`: `63 passed in 2.63s`.
+- Y1-Y8, H1-H16, G1-G8, and 0615 context dry-runs for
+  `cnv_branch_s_shadow cnv_branch_ab_plot cnv_report` succeeded without
+  requesting mapping/reference rebuild.
+- Y1-Y8, H1-H16, G1-G8, and 0615 context plot/report outputs were
+  materialized on the remote mirror.
+
+Truth/context sync:
+
+- Y1-Y8 truth preserved: `10/10`.
+- H1-H6 truth preserved: `10/10`.
+- G1-G8 truth preserved: `10/10`.
+- Local synced truth outputs:
+  `D:\Pipeline\PGT-A\reports\truth_y1_y8_cnv_plots\`,
+  `D:\Pipeline\PGT-A\reports\truth_h1_h6_cnv_plots\`, and
+  `D:\Pipeline\PGT-A\reports\truth_g1_g8_cnv_plots\`.
+- 0615 remains context only and is synced under
+  `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`.
 
 ### Plot Event Support Ref-Z Consistency
 

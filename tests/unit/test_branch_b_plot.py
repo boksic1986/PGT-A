@@ -143,6 +143,7 @@ def test_build_cnv_plot_svg_uses_branch_a_ref_z_and_writes_plot_bins(tmp_path):
     assert "report z trend" not in svg
     assert "median z" not in svg
     assert "smooth z trend" not in svg
+    assert "event ref-z trend" not in svg
     assert "<polyline" not in svg
     assert svg.count('class="report-ref-z-trend"') == 2
     assert "Branch B" not in svg
@@ -153,7 +154,7 @@ def test_build_cnv_plot_svg_uses_branch_a_ref_z_and_writes_plot_bins(tmp_path):
     assert "rejected" not in svg
     assert "mask" not in svg.lower()
     assert "chr1" in svg
-    assert '<circle cx="' in svg
+    assert 'class="z-bin-scatter"' in svg
     assert re.search(r'<circle[^>]+fill="#64748b"', svg)
     assert re.search(r'<circle[^>]+fill="#facc15"', svg)
     assert re.search(r'<circle[^>]+fill="#2563eb"', svg)
@@ -281,7 +282,7 @@ def test_display_ref_z_recenters_neutral_background_and_support_uses_same_direct
     assert "Q75 branch_a_ref_z" not in svg
 
 
-def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path):
+def test_copy_number_plot_v2_leaves_structure_gaps_blank_and_uses_50mb_ticks(tmp_path):
     starts = [idx * 1_000_000 for idx in range(60)]
     bins = pd.DataFrame(
         {
@@ -328,10 +329,8 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
     gap_row = cn_bins.loc[cn_bins["start"].eq(30_000_000)].iloc[0]
 
-    assert 'class="structure-gap-blank"' in cn_svg
-    assert re.search(r'<rect[^>]+class="structure-gap-blank"[^>]+fill="#cbd5e1"', cn_svg)
-    assert 'class="structure-gap-blank" x="' in cn_svg
-    assert cn_svg.count('class="structure-gap-blank"') == 1
+    assert 'class="structure-gap-blank"' not in cn_svg
+    assert 'fill="#cbd5e1"' not in cn_svg
     assert 'fill="#0f172a" opacity="0.96"' not in cn_svg
     assert "50Mb" in cn_svg
     assert cn_svg.count('class="cn-bin-scatter"') == 59
@@ -347,8 +346,7 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
     }
     assert cn_bins.loc[~cn_bins["copy_number_source"].eq("structure_gap_blank"), "copy_number"].nunique() > 1
     assert "#1d4ed8" in cn_svg
-    assert 'class="chrom-background"' not in cn_svg
-    assert 'fill="#f8fafc"' not in cn_svg
+    assert 'class="chrom-background"' in cn_svg
 
 
 def test_copy_number_plot_recenters_ratio_cn_to_autosomal_median(tmp_path):
@@ -450,7 +448,7 @@ def test_copy_number_plot_uses_hg19_centromere_fallback_without_telomere_gap_sha
     telomere_like_row = cn_bins.loc[cn_bins["start"].eq(0)].iloc[0]
     centromere_row = cn_bins.loc[cn_bins["start"].eq(121_500_000)].iloc[0]
 
-    assert cn_svg.count('class="structure-gap-blank"') == 1
+    assert 'class="structure-gap-blank"' not in cn_svg
     assert telomere_like_row["copy_number_source"] != "structure_gap_blank"
     assert centromere_row["copy_number_source"] == "structure_gap_blank"
     assert cn_svg.count('class="cn-bin-scatter"') == 2
@@ -808,6 +806,169 @@ def test_copy_number_scatter_does_not_turn_xx_absent_chry_into_deletion(tmp_path
     assert chr_y["cn_scatter_state_sex_aware"] == "neutral"
     assert chr_y["report_state"] == "neutral"
     assert chr_y["copy_number_interpretation_status"] == "sex_aware_absent_expected"
+    assert chr_y["chrY_display_mode"] == "xx_absent_expected_hidden"
+    assert pd.isna(chr_y["copy_number"])
+
+
+def test_xx_chry_is_hidden_from_standard_z_and_cn_scatter(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chrY"],
+            "bin_index": [0, 0],
+            "start": [0, 0],
+            "end": [1_000_000, 1_000_000],
+            "calibrated_z": [0.0, 6.0],
+            "normalized_signal": [_norm_signal(100), _norm_signal(40)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chrY", 0, 0, 1_000_000, 5),
+        ]
+    )
+    gender = pd.DataFrame(
+        {
+            "sample_id": ["XX1"],
+            "sex_call": ["XX"],
+            "predict_gender": ["F"],
+            "bam_y_relative_depth": [0.01],
+            "bam_y_to_x_ratio": [0.02],
+            "bam_inferred_sex": ["XX"],
+        }
+    )
+    output_bins = tmp_path / "XX1.plot_bins.tsv"
+    output_cn_bins = tmp_path / "XX1.plot_bins_cn.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="XX1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        gender_df=gender,
+        ref_bins_df=ref_bins,
+        output_svg=tmp_path / "XX1.final_cnv.svg",
+        output_bins_tsv=output_bins,
+        output_copy_number_svg=tmp_path / "XX1.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    plot_bins = pd.read_csv(output_bins, sep="\t")
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    z_chr_y = plot_bins.loc[plot_bins["chrom"].eq("chrY")].iloc[0]
+    cn_chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")].iloc[0]
+
+    assert z_chr_y["z_display_mode"] == "xx_absent_expected_hidden"
+    assert z_chr_y["chrY_display_mode"] == "xx_absent_expected_hidden"
+    assert pd.isna(z_chr_y["z"])
+    assert pd.isna(z_chr_y["plot_z"])
+    assert np.isfinite(z_chr_y["branch_a_ref_z"])
+    assert cn_chr_y["chrY_display_mode"] == "xx_absent_expected_hidden"
+    assert cn_chr_y["copy_number_interpretation_status"] == "sex_aware_absent_expected"
+    assert pd.isna(cn_chr_y["copy_number"])
+
+
+def test_xy_chry_uses_y_presence_guide_instead_of_raw_ref_z_gain(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chrY"],
+            "bin_index": [0, 0],
+            "start": [0, 0],
+            "end": [1_000_000, 1_000_000],
+            "calibrated_z": [0.0, 12.0],
+            "normalized_signal": [_norm_signal(100), _norm_signal(50)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chrY", 0, 0, 1_000_000, 0),
+        ]
+    )
+    gender = pd.DataFrame(
+        {
+            "sample_id": ["XY1"],
+            "sex_call": ["XY"],
+            "predict_gender": ["M"],
+            "bam_y_relative_depth": [0.32],
+            "bam_y_to_x_ratio": [0.53],
+            "bam_inferred_sex": ["XY"],
+        }
+    )
+    output_svg = tmp_path / "XY1.final_cnv.svg"
+    output_bins = tmp_path / "XY1.plot_bins.tsv"
+    output_cn_svg = tmp_path / "XY1.final_cnv_cn.svg"
+    output_cn_bins = tmp_path / "XY1.plot_bins_cn.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="XY1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        gender_df=gender,
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=output_bins,
+        output_copy_number_svg=output_cn_svg,
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    plot_bins = pd.read_csv(output_bins, sep="\t")
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    z_chr_y = plot_bins.loc[plot_bins["chrom"].eq("chrY")].iloc[0]
+    cn_chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")].iloc[0]
+    z_svg = output_svg.read_text(encoding="utf-8")
+    cn_svg = output_cn_svg.read_text(encoding="utf-8")
+
+    assert z_chr_y["z_display_mode"] == "xy_y_presence_guide_not_ref_z"
+    assert z_chr_y["chrY_display_mode"] == "xy_y_presence_guide_not_ref_z"
+    assert z_chr_y["z"] == pytest.approx(0.0)
+    assert z_chr_y["plot_z"] == pytest.approx(0.0)
+    assert z_chr_y["z_source"] == "xy_y_presence_guide_from_bam_depth"
+    assert cn_chr_y["copy_number"] == pytest.approx(1.0)
+    assert cn_chr_y["copy_number_interpretation_status"] == "xy_y_presence_guide_not_ratio_cn"
+    assert cn_chr_y["copy_number_source"] == "xy_y_presence_guide_from_bam_depth"
+    assert cn_chr_y["cn_scatter_state_sex_aware"] == "neutral"
+    assert 'class="z-bin-scatter chry-presence-guide"' in z_svg
+    assert 'class="cn-bin-scatter chry-presence-guide"' in cn_svg
+
+
+def test_ref_z_plot_clips_extreme_display_values_but_keeps_raw_ref_z(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chr1"],
+            "bin_index": [0, 1],
+            "start": [0, 1_000_000],
+            "end": [1_000_000, 2_000_000],
+            "calibrated_z": [0.0, 0.0],
+            "normalized_signal": [_norm_signal(100), _norm_signal(300)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100, 0.01),
+            ("chr1", 1, 1_000_000, 2_000_000, 100, 0.01),
+        ]
+    )
+    output_svg = tmp_path / "Y1.final_cnv.svg"
+    output_bins = tmp_path / "Y1.plot_bins.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="Y1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=output_bins,
+    )
+
+    plot_bins = pd.read_csv(output_bins, sep="\t")
+    extreme = plot_bins.loc[plot_bins["start"].eq(1_000_000)].iloc[0]
+    assert extreme["branch_a_ref_z"] > 8.0
+    assert extreme["plot_z"] == pytest.approx(8.0)
+    assert bool(extreme["z_plot_clipped"]) is True
+    assert 'data-z-plot-clipped="true"' in output_svg.read_text(encoding="utf-8")
 
 
 def test_copy_number_scatter_marks_chry_zero_ref_as_not_interpretable(tmp_path):
@@ -827,8 +988,18 @@ def test_copy_number_scatter_marks_chry_zero_ref_as_not_interpretable(tmp_path):
             ("chrY", 0, 0, 1_000_000, 0),
         ]
     )
-    gender = pd.DataFrame({"sample_id": ["XY1"], "sex_call": ["XY"], "predict_gender": ["M"]})
+    gender = pd.DataFrame(
+        {
+            "sample_id": ["XY1"],
+            "sex_call": ["XY"],
+            "predict_gender": ["M"],
+            "bam_y_relative_depth": [0.32],
+            "bam_y_to_x_ratio": [0.53],
+            "bam_inferred_sex": ["XY"],
+        }
+    )
     output_cn_bins = tmp_path / "XY1.plot_bins_cn.tsv"
+    output_cn_svg = tmp_path / "XY1.final_cnv_cn.svg"
 
     build_cnv_plot_svg(
         sample_id="XY1",
@@ -839,16 +1010,20 @@ def test_copy_number_scatter_marks_chry_zero_ref_as_not_interpretable(tmp_path):
         ref_bins_df=ref_bins,
         output_svg=tmp_path / "XY1.final_cnv.svg",
         output_bins_tsv=tmp_path / "XY1.plot_bins.tsv",
-        output_copy_number_svg=tmp_path / "XY1.final_cnv_cn.svg",
+        output_copy_number_svg=output_cn_svg,
         output_copy_number_bins_tsv=output_cn_bins,
     )
 
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    cn_svg = output_cn_svg.read_text(encoding="utf-8")
     chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")].iloc[0]
-    assert pd.isna(chr_y["copy_number"])
+    assert chr_y["copy_number"] == pytest.approx(1.0)
     assert chr_y["cn_scatter_state_sex_aware"] == "neutral"
     assert chr_y["report_state"] == "neutral"
-    assert chr_y["copy_number_interpretation_status"] == "sex_chrom_ref_ratio_not_interpretable"
+    assert chr_y["copy_number_interpretation_status"] == "xy_y_presence_guide_not_ratio_cn"
+    assert chr_y["copy_number_source"] == "xy_y_presence_guide_from_bam_depth"
+    assert chr_y["chrY_display_mode"] == "xy_y_presence_guide_not_ratio_cn"
+    assert 'class="cn-bin-scatter chry-presence-guide"' in cn_svg
 
 
 def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp_path):
@@ -870,7 +1045,16 @@ def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp
             ("chrY", 2, 2_000_000, 3_000_000, 5),
         ]
     )
-    gender = pd.DataFrame({"sample_id": ["XY1"], "sex_call": ["XY"], "predict_gender": ["M"]})
+    gender = pd.DataFrame(
+        {
+            "sample_id": ["XY1"],
+            "sex_call": ["XY"],
+            "predict_gender": ["M"],
+            "bam_y_relative_depth": [0.31],
+            "bam_y_to_x_ratio": [0.52],
+            "bam_inferred_sex": ["XY"],
+        }
+    )
     output_cn_bins = tmp_path / "XY1.plot_bins_cn.tsv"
 
     build_cnv_plot_svg(
@@ -888,9 +1072,11 @@ def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp
 
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
     chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")]
-    assert chr_y["copy_number"].isna().all()
+    assert chr_y["copy_number"].tolist() == pytest.approx([1.0, 1.0, 1.0])
     assert set(chr_y["cn_scatter_state_sex_aware"]) == {"neutral"}
-    assert set(chr_y["copy_number_interpretation_status"]) == {"sex_chrom_ref_ratio_not_interpretable"}
+    assert set(chr_y["copy_number_interpretation_status"]) == {"xy_y_presence_guide_not_ratio_cn"}
+    assert set(chr_y["copy_number_source"]) == {"xy_y_presence_guide_from_bam_depth"}
+    assert set(chr_y["chrY_display_mode"]) == {"xy_y_presence_guide_not_ratio_cn"}
 
 
 def test_branch_s_cn_trend_skips_uninterpretable_chry_reference(tmp_path):
