@@ -83,6 +83,7 @@ def parse_args():
     parser.add_argument("--output-copy-number-svg", default="")
     parser.add_argument("--output-copy-number-bins-tsv", default="")
     parser.add_argument("--output-copy-number-event-support-tsv", default="")
+    parser.add_argument("--output-event-manifest-tsv", default="")
     parser.add_argument("--max-points", type=int, default=8000)
     parser.add_argument("--log", default="")
     return parser.parse_args()
@@ -518,6 +519,206 @@ def combine_plot_events(*frames):
     return pd.concat(payloads, ignore_index=True, sort=False)
 
 
+def ensure_event_identity(frame, sample_id=""):
+    if frame is None or frame.empty:
+        return pd.DataFrame()
+    result = frame.copy()
+    if "sample_id" not in result.columns:
+        result["sample_id"] = sample_id
+    result["sample_id"] = result["sample_id"].fillna(sample_id).astype(str)
+    if "event_id" not in result.columns:
+        result["event_id"] = ""
+    if "candidate_id" not in result.columns:
+        result["candidate_id"] = ""
+    fallback_ids = []
+    for idx, row in result.reset_index(drop=True).iterrows():
+        fallback = (
+            f"{row.get('sample_id', sample_id)}_{row.get('chrom', '')}_"
+            f"{int(row.get('start', 0))}_{int(row.get('end', 0))}_"
+            f"{row.get('report_state', row.get('state', ''))}_{idx}"
+        )
+        event_id = str(row.get("event_id", "") or row.get("candidate_id", "") or fallback)
+        fallback_ids.append(event_id)
+    result["event_id"] = fallback_ids
+    candidate = result["candidate_id"].fillna("").astype(str)
+    result["candidate_id"] = np.where(candidate.ne(""), candidate, result["event_id"])
+    return result
+
+
+def interval_is_structure_gap_only(bins_df, chrom, start, end):
+    overlap = bins_df[
+        bins_df["chrom"].astype(str).eq(str(chrom))
+        & bins_df["end"].astype(int).gt(int(start))
+        & bins_df["start"].astype(int).lt(int(end))
+    ].copy()
+    if overlap.empty:
+        return True
+    return bool(structural_gap_mask(overlap).all())
+
+
+def merge_manifest_events_across_structure_gaps(events_df, bins_df):
+    if events_df is None or events_df.empty:
+        return pd.DataFrame()
+    frame = events_df.copy()
+    frame["start"] = pd.to_numeric(frame["start"], errors="coerce")
+    frame["end"] = pd.to_numeric(frame["end"], errors="coerce")
+    frame = frame.dropna(subset=["start", "end"]).copy()
+    frame["start"] = frame["start"].astype(int)
+    frame["end"] = frame["end"].astype(int)
+    frame = frame.sort_values(
+        ["sample_id", "chrom", "event_layer", "report_state", "start", "end"],
+        key=lambda series: series.map(chrom_sort_key) if series.name == "chrom" else series,
+    ).copy()
+    merged = []
+    for _, row in frame.iterrows():
+        row_dict = row.to_dict()
+        row_dict["merged_source_event_ids"] = str(row_dict.get("event_id", ""))
+        if not merged:
+            merged.append(row_dict)
+            continue
+        previous = merged[-1]
+        same_group = (
+            str(previous.get("sample_id", "")) == str(row_dict.get("sample_id", ""))
+            and str(previous.get("chrom", "")) == str(row_dict.get("chrom", ""))
+            and str(previous.get("event_layer", "")) == str(row_dict.get("event_layer", ""))
+            and str(previous.get("report_state", "")) == str(row_dict.get("report_state", ""))
+            and str(previous.get("state", "")) == str(row_dict.get("state", ""))
+        )
+        gap_only = False
+        if same_group and int(row_dict["start"]) >= int(previous["end"]):
+            gap_only = interval_is_structure_gap_only(
+                bins_df,
+                row_dict.get("chrom", ""),
+                int(previous["end"]),
+                int(row_dict["start"]),
+            )
+        if same_group and gap_only:
+            previous["end"] = max(int(previous["end"]), int(row_dict["end"]))
+            previous["merged_source_event_ids"] = (
+                f"{previous.get('merged_source_event_ids', previous.get('event_id', ''))};"
+                f"{row_dict.get('event_id', '')}"
+            )
+            for column in ("a_zscore", "a_abs_zscore", "priority_score"):
+                if column in row_dict:
+                    old_value = pd.to_numeric(pd.Series([previous.get(column)]), errors="coerce").iloc[0]
+                    new_value = pd.to_numeric(pd.Series([row_dict.get(column)]), errors="coerce").iloc[0]
+                    if np.isfinite(new_value) and (not np.isfinite(old_value) or abs(new_value) > abs(old_value)):
+                        previous[column] = row_dict.get(column)
+        else:
+            merged.append(row_dict)
+    return pd.DataFrame(merged)
+
+
+def build_plot_event_manifest(final_events, review_events, branch_s_events, bins_df, sample_id=""):
+    frames = []
+    if final_events is not None and not final_events.empty:
+        frame = final_events.copy()
+        frame["event_layer"] = "autosomal_report"
+        frame["plot_layer_class"] = "report_event"
+        frame["plot_visibility"] = "final_report_plot"
+        frame["plot_visibility_reason"] = "v2_report_event"
+        frames.append(frame)
+    if review_events is not None and not review_events.empty:
+        frame = review_events.copy()
+        frame["event_layer"] = "internal_review_event"
+        frame["plot_layer_class"] = "internal_review_event"
+        frame["plot_visibility"] = "review_plot_only"
+        frame["plot_visibility_reason"] = "v2_internal_review_event"
+        frames.append(frame)
+    if branch_s_events is not None and not branch_s_events.empty:
+        frame = branch_s_events.copy()
+        frame["event_layer"] = "branch_s_review"
+        frame["plot_layer_class"] = "branch_s_event"
+        frame["plot_visibility"] = "final_report_plot"
+        frame["plot_visibility_reason"] = "branch_s_review_event"
+        frames.append(frame)
+    manifest = combine_plot_events(*frames)
+    if manifest.empty:
+        return manifest
+    manifest = ensure_event_identity(manifest, sample_id=sample_id)
+    manifest["chrom"] = manifest["chrom"].map(normalize_chrom)
+    manifest["report_state"] = manifest["report_state"].fillna("").astype(str)
+    manifest = manifest[manifest["report_state"].isin({"dup", "del"})].copy()
+    manifest = merge_manifest_events_across_structure_gaps(manifest, bins_df)
+    manifest["plot_support_class"] = "not_evaluated"
+    return manifest
+
+
+def classify_plot_support(row):
+    z_status = str(row.get("support_interpretation_status", ""))
+    cn_status = str(row.get("cn_direction_consistency_status", ""))
+    if z_status == "Z_DIRECTION_SUPPORTED" and cn_status == "CN_DIRECTION_SUPPORTED":
+        return "Z_AND_CN_SUPPORTED"
+    if z_status == "Z_DIRECTION_SUPPORTED" and cn_status == "CN_DIRECTION_NOT_SUPPORTED":
+        return "Z_SUPPORTED_CN_NOT_SUPPORTED"
+    if z_status == "Z_DIRECTION_SUPPORTED":
+        return "Z_SUPPORTED_CN_WEAK"
+    return "Z_AND_CN_NOT_SUPPORTED"
+
+
+def apply_plot_support_visibility(manifest, support_df):
+    if manifest is None or manifest.empty:
+        return pd.DataFrame(), support_df
+    result = manifest.copy()
+    if support_df is None or support_df.empty:
+        return result, support_df
+    support = support_df.copy()
+    support["plot_support_class"] = support.apply(classify_plot_support, axis=1)
+    support_keyed = support.set_index("event_id", drop=False)
+    result = result.copy()
+    result["plot_support_class"] = result["event_id"].map(support_keyed["plot_support_class"]).fillna(
+        result.get("plot_support_class", "not_evaluated")
+    )
+    low_confidence = (
+        result["event_layer"].astype(str).eq("autosomal_report")
+        & result["plot_support_class"].astype(str).eq("Z_SUPPORTED_CN_NOT_SUPPORTED")
+        & result["plot_visibility"].astype(str).eq("final_report_plot")
+    )
+    result.loc[low_confidence, "plot_layer_class"] = "internal_review_event_candidate"
+    result.loc[low_confidence, "plot_visibility"] = "review_plot_only"
+    result.loc[low_confidence, "plot_visibility_reason"] = "z_supported_cn_not_supported_plot_ablation"
+    visibility_map = result.set_index("event_id", drop=False)
+    for column in (
+        "candidate_id",
+        "plot_layer_class",
+        "plot_visibility",
+        "plot_visibility_reason",
+        "plot_support_class",
+        "merged_source_event_ids",
+    ):
+        if column in visibility_map.columns:
+            support[column] = support["event_id"].map(visibility_map[column])
+    return result, support
+
+
+def write_plot_event_manifest_tsv(path_value, manifest):
+    if not path_value:
+        return
+    path = Path(path_value)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    columns = [
+        "event_id",
+        "candidate_id",
+        "sample_id",
+        "chrom",
+        "start",
+        "end",
+        "state",
+        "report_state",
+        "event_layer",
+        "plot_layer_class",
+        "plot_visibility",
+        "plot_visibility_reason",
+        "plot_support_class",
+        "merged_source_event_ids",
+    ]
+    output = manifest.copy() if manifest is not None else pd.DataFrame()
+    for column in columns:
+        if column not in output.columns:
+            output[column] = ""
+    output[columns].to_csv(path, sep="\t", index=False)
+
+
 def annotate_report_states(bins_df, final_events):
     frame = bins_df.copy()
     frame["report_state"] = "neutral"
@@ -939,7 +1140,7 @@ def annotate_copy_number_bins(
     frame.loc[frame["is_structure_gap_blank"], "copy_number_source"] = "structure_gap_blank"
     event_frames = []
     if final_events is not None and not final_events.empty:
-        event_frames.append(final_events.assign(event_layer="autosomal_report"))
+        event_frames.append(final_events.copy())
     if branch_s_events is not None and not branch_s_events.empty:
         event_frames.append(branch_s_events)
     if not event_frames:
@@ -974,7 +1175,16 @@ def structural_gap_mask(bins_df):
         if column in bins_df.columns:
             centromere_columns_seen = True
             centromere_mask = centromere_mask | boolean_like_series(bins_df[column])
+    for column in ("is_structure_gap_blank", "is_gap_bin"):
+        if column in bins_df.columns:
+            centromere_columns_seen = True
+            centromere_mask = centromere_mask | boolean_like_series(bins_df[column])
     for column in ("centromere_overlap_fraction", "centromere_fraction", "centromere_bin_fraction"):
+        if column in bins_df.columns:
+            centromere_columns_seen = True
+            overlap = pd.to_numeric(bins_df[column], errors="coerce").fillna(0.0)
+            centromere_mask = centromere_mask | overlap.ge(0.5)
+    for column in ("structure_gap_overlap_fraction",):
         if column in bins_df.columns:
             centromere_columns_seen = True
             overlap = pd.to_numeric(bins_df[column], errors="coerce").fillna(0.0)
@@ -1060,6 +1270,49 @@ def render_event_region(row, layout, total_span, left, plot_width, y, height, co
     )
 
 
+def event_bin_chunks(bins_df, row_dict):
+    chrom = str(row_dict.get("chrom", ""))
+    if not chrom:
+        return []
+    event_bins = bins_df[
+        bins_df["chrom"].astype(str).eq(chrom)
+        & bins_df["end"].astype(int).gt(int(row_dict.get("start")))
+        & bins_df["start"].astype(int).lt(int(row_dict.get("end")))
+    ].copy()
+    if event_bins.empty:
+        return []
+    event_bins = event_bins[~structural_gap_mask(event_bins)].copy()
+    if event_bins.empty:
+        return []
+    event_bins = event_bins.sort_values(["chrom", "start"]).copy()
+    chunks = []
+    current = []
+    previous_end = None
+    for bin_row in event_bins.itertuples(index=False):
+        if previous_end is not None and int(bin_row.start) > int(previous_end):
+            if current:
+                chunks.append(current)
+            current = []
+        current.append(bin_row)
+        previous_end = int(bin_row.end)
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def render_event_region_chunks(row, bins_df, layout, total_span, left, plot_width, y, height, color, label, class_name=""):
+    chunks = []
+    row_dict = dict(row)
+    for chunk in event_bin_chunks(bins_df, row_dict):
+        chunk_row = row_dict.copy()
+        chunk_row["start"] = int(chunk[0].start)
+        chunk_row["end"] = int(chunk[-1].end)
+        chunks.append(
+            render_event_region(chunk_row, layout, total_span, left, plot_width, y, height, color, label, class_name)
+        )
+    return chunks
+
+
 def render_report_event_trend_lines(bins_df, final_events, layout, total_span, left, plot_width, mid_y, half_h):
     chunks = []
     if final_events.empty:
@@ -1069,52 +1322,50 @@ def render_report_event_trend_lines(bins_df, final_events, layout, total_span, l
         chrom = str(row_dict.get("chrom", ""))
         if chrom not in layout:
             continue
-        event_bins = bins_df[
-            bins_df["chrom"].astype(str).eq(chrom)
-            & bins_df["end"].astype(int).gt(int(row_dict.get("start")))
-            & bins_df["start"].astype(int).lt(int(row_dict.get("end")))
-        ].copy()
-        if event_bins.empty:
-            continue
-        valid_z = pd.to_numeric(event_bins.get("display_ref_z", pd.Series(np.nan, index=event_bins.index)), errors="coerce")
-        valid_z = valid_z[np.isfinite(valid_z)]
-        if valid_z.empty:
-            continue
         state = str(row_dict.get("report_state", "")).lower()
-        if state == "dup":
-            same_direction_z = valid_z[valid_z.gt(0.0)]
-        elif state == "del":
-            same_direction_z = valid_z[valid_z.lt(0.0)]
-        else:
-            continue
-        if same_direction_z.empty:
-            continue
-        trend_value = float(same_direction_z.median())
-        x1 = scale_x(genome_position(chrom, int(row_dict.get("start")), layout), total_span, left, plot_width)
-        x2 = scale_x(genome_position(chrom, int(row_dict.get("end")), layout), total_span, left, plot_width)
-        if x2 <= x1:
-            continue
-        y = scale_y(trend_value, mid_y, half_h)
-        score = first_finite_value(
-            row_dict,
-            ("a_zscore", "branch_a_zscore", "a_abs_zscore", "max_abs_zscore", "priority_score"),
-        )
-        score_text = f"; a_zscore={score:.3f}" if score is not None else ""
         event_layer = str(row_dict.get("event_layer", "autosomal_report") or "autosomal_report")
         line_class = "internal-review-ref-z-trend" if event_layer == "internal_review_event" else "report-ref-z-trend"
-        label = (
-            f"same-direction median display_ref_z {row_dict.get('report_state')} "
-            f"{chrom}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}; "
-            f"plot_event_layer={event_layer}; "
-            f"same-direction median display_ref_z={trend_value:.3f}; "
-            f"same-direction bins={len(same_direction_z)}; valid bins={len(valid_z)}{score_text}"
-        )
-        chunks.append(
-            f'<line class="{line_class}" x1="{x1:.2f}" y1="{y:.2f}" '
-            f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{TREND_COLOR}" '
-            f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
-            f"<title>{html.escape(label)}</title></line>"
-        )
+        for chunk in event_bin_chunks(bins_df, row_dict):
+            chunk_df = pd.DataFrame([item._asdict() for item in chunk])
+            valid_z = pd.to_numeric(
+                chunk_df.get("display_ref_z", pd.Series(np.nan, index=chunk_df.index)),
+                errors="coerce",
+            )
+            valid_z = valid_z[np.isfinite(valid_z)]
+            if valid_z.empty:
+                continue
+            if state == "dup":
+                same_direction_z = valid_z[valid_z.gt(0.0)]
+            elif state == "del":
+                same_direction_z = valid_z[valid_z.lt(0.0)]
+            else:
+                continue
+            if same_direction_z.empty:
+                continue
+            trend_value = float(same_direction_z.median())
+            x1 = scale_x(genome_position(chrom, int(chunk[0].start), layout), total_span, left, plot_width)
+            x2 = scale_x(genome_position(chrom, int(chunk[-1].end), layout), total_span, left, plot_width)
+            if x2 <= x1:
+                continue
+            y = scale_y(trend_value, mid_y, half_h)
+            score = first_finite_value(
+                row_dict,
+                ("a_zscore", "branch_a_zscore", "a_abs_zscore", "max_abs_zscore", "priority_score"),
+            )
+            score_text = f"; a_zscore={score:.3f}" if score is not None else ""
+            label = (
+                f"same-direction median display_ref_z {row_dict.get('report_state')} "
+                f"{chrom}:{int(chunk[0].start)}-{int(chunk[-1].end)}; "
+                f"plot_event_layer={event_layer}; "
+                f"same-direction median display_ref_z={trend_value:.3f}; "
+                f"same-direction bins={len(same_direction_z)}; valid bins={len(valid_z)}{score_text}"
+            )
+            chunks.append(
+                f'<line class="{line_class}" x1="{x1:.2f}" y1="{y:.2f}" '
+                f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{TREND_COLOR}" '
+                f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
+                f"<title>{html.escape(label)}</title></line>"
+            )
     return chunks
 
 
@@ -1371,6 +1622,8 @@ def z_support_mask(values, state):
 
 def summarize_copy_number_event_support(cn_bins, final_events, branch_s_events=None, sex_call=""):
     columns = [
+        "event_id",
+        "candidate_id",
         "sample_id",
         "chrom",
         "start",
@@ -1378,6 +1631,11 @@ def summarize_copy_number_event_support(cn_bins, final_events, branch_s_events=N
         "state",
         "event_report_state",
         "event_layer",
+        "plot_layer_class",
+        "plot_visibility",
+        "plot_visibility_reason",
+        "plot_support_class",
+        "merged_source_event_ids",
         "branch_s_state",
         "sex_call",
         "sex_chrom_region_class",
@@ -1435,6 +1693,8 @@ def summarize_copy_number_event_support(cn_bins, final_events, branch_s_events=N
         non_gap = event_bins[~event_bins.get("is_structure_gap_blank", pd.Series(False, index=event_bins.index)).astype(bool)].copy()
         valid = non_gap[pd.to_numeric(non_gap["copy_number"], errors="coerce").notna()].copy()
         cn_values = pd.to_numeric(valid["copy_number"], errors="coerce")
+        raw_ratio_values = pd.to_numeric(valid.get("raw_ratio", pd.Series(dtype=float)), errors="coerce")
+        raw_cn_values = 2.0 * raw_ratio_values
         log2r_values = pd.to_numeric(valid.get("log2r", pd.Series(dtype=float)), errors="coerce")
         residual_z_values = pd.to_numeric(non_gap.get("residual_calibrated_z", pd.Series(dtype=float)), errors="coerce")
         raw_ref_z_values = pd.to_numeric(non_gap.get("branch_a_ref_z", pd.Series(dtype=float)), errors="coerce")
@@ -1443,8 +1703,16 @@ def summarize_copy_number_event_support(cn_bins, final_events, branch_s_events=N
         raw_ref_z_values = raw_ref_z_values[np.isfinite(raw_ref_z_values)]
         residual_z_values = residual_z_values[np.isfinite(residual_z_values)]
         cn_support = cn_support_mask(cn_values, state)
+        raw_cn_support = cn_support_mask(raw_cn_values, state)
+        try:
+            event_cn_value, _event_cn_source = event_copy_number(row)
+        except ValueError:
+            event_cn_value = np.nan
+        event_cn_series = pd.Series([event_cn_value], dtype=float)
+        event_cn_support = bool(cn_support_mask(event_cn_series, state).fillna(False).iloc[0])
         valid_count = int(cn_values.notna().sum())
         support_count = int(cn_support.fillna(False).sum())
+        raw_support_count = int(raw_cn_support.fillna(False).sum())
         support_fraction = float(support_count / valid_count) if valid_count else np.nan
         if state == "dup":
             same_direction_z = display_ref_z_values[display_ref_z_values.gt(0.0)]
@@ -1469,10 +1737,10 @@ def summarize_copy_number_event_support(cn_bins, final_events, branch_s_events=N
         else:
             support_status = "Z_DIRECTION_NOT_SUPPORTED"
         if valid_count == 0:
-            consistency = "CN_NO_VALID_BINS"
-        elif support_fraction >= 0.50:
+            consistency = "CN_DIRECTION_SUPPORTED" if event_cn_support else "CN_NO_VALID_BINS"
+        elif support_fraction >= 0.50 or event_cn_support:
             consistency = "CN_DIRECTION_SUPPORTED"
-        elif support_count > 0:
+        elif support_count > 0 or raw_support_count > 0:
             consistency = "CN_DIRECTION_WEAK_OR_MIXED"
         else:
             consistency = "CN_DIRECTION_NOT_SUPPORTED"
@@ -1495,6 +1763,8 @@ def summarize_copy_number_event_support(cn_bins, final_events, branch_s_events=N
         same_direction_median = float(same_direction_z.median()) if not same_direction_z.empty else np.nan
         rows.append(
             {
+                "event_id": str(row.get("event_id", "")),
+                "candidate_id": str(row.get("candidate_id", row.get("event_id", ""))),
                 "sample_id": str(row.get("sample_id", "")),
                 "chrom": chrom,
                 "start": start,
@@ -1502,6 +1772,11 @@ def summarize_copy_number_event_support(cn_bins, final_events, branch_s_events=N
                 "state": str(row.get("state", "")),
                 "event_report_state": state,
                 "event_layer": event_layer,
+                "plot_layer_class": str(row.get("plot_layer_class", "")),
+                "plot_visibility": str(row.get("plot_visibility", "")),
+                "plot_visibility_reason": str(row.get("plot_visibility_reason", "")),
+                "plot_support_class": str(row.get("plot_support_class", "")),
+                "merged_source_event_ids": str(row.get("merged_source_event_ids", "")),
                 "branch_s_state": str(row.get("branch_s_state", "")),
                 "sex_call": str(row.get("sex_call", "") or sex_call),
                 "sex_chrom_region_class": region_class,
@@ -1648,6 +1923,8 @@ def build_copy_number_plot_svg(
     ref_bins_df=None,
     sex_call="",
     gender_info=None,
+    event_manifest_for_support=None,
+    precomputed_support_df=None,
     max_points=8000,
 ):
     cn_bins = annotate_copy_number_bins(
@@ -1660,10 +1937,14 @@ def build_copy_number_plot_svg(
     )
     cn_layout, cn_total_span = build_chrom_layout(cn_bins, gap_bp=PLOT_CHROM_GAP_BP)
     write_copy_number_bins_tsv(output_bins_tsv, cn_bins, cn_layout)
-    write_copy_number_event_support_tsv(
-        output_event_support_tsv,
-        summarize_copy_number_event_support(cn_bins, final_events, branch_s_events=branch_s_events, sex_call=sex_call),
-    )
+    if precomputed_support_df is not None:
+        write_copy_number_event_support_tsv(output_event_support_tsv, precomputed_support_df)
+    else:
+        support_events = event_manifest_for_support if event_manifest_for_support is not None else final_events
+        write_copy_number_event_support_tsv(
+            output_event_support_tsv,
+            summarize_copy_number_event_support(cn_bins, support_events, branch_s_events=branch_s_events, sex_call=sex_call),
+        )
 
     width = 2560
     height = 620
@@ -1715,30 +1996,10 @@ def build_copy_number_plot_svg(
         color = CN_REPORT_STATE_COLOR.get(str(row.get("report_state", "")), NEUTRAL_COLOR)
         event_layer = str(row.get("event_layer", "autosomal_report") or "autosomal_report")
         class_name = "internal-review-cn-region" if event_layer == "internal_review_event" else "report-cn-region"
-        region = render_event_region(
-            row,
-            cn_layout,
-            cn_total_span,
-            left,
-            plot_width,
-            signal_top,
-            signal_height,
-            color,
-            (
-                f"report CN region {row.get('report_state')} {row.get('chrom')}:"
-                f"{int(row.get('start'))}-{int(row.get('end'))}; plot_event_layer={event_layer}"
-            ),
-            class_name=class_name,
-        )
-        if region:
-            svg.append(region)
-    if branch_s_events is not None and not branch_s_events.empty:
-        for row in branch_s_events.to_dict("records"):
-            color = CN_REPORT_STATE_COLOR.get(str(row.get("report_state", "")), NEUTRAL_COLOR)
-            score = row.get("branch_s_score", np.nan)
-            score_text = f"; event-level score={float(score):.3f}" if np.isfinite(float(score)) else ""
-            region = render_event_region(
+        svg.extend(
+            render_event_region_chunks(
                 row,
+                cn_bins,
                 cn_layout,
                 cn_total_span,
                 left,
@@ -1747,14 +2008,36 @@ def build_copy_number_plot_svg(
                 signal_height,
                 color,
                 (
-                    f"Branch S review {row.get('branch_s_state')} "
-                    f"{row.get('chrom')}:{int(row.get('start'))}-{int(row.get('end'))}"
-                    f"{score_text}; not a bin-level CN value"
+                    f"report CN region {row.get('report_state')} {row.get('chrom')}:"
+                    f"{int(row.get('start'))}-{int(row.get('end'))}; plot_event_layer={event_layer}"
                 ),
-                class_name="branch-s-cn-region",
+                class_name=class_name,
             )
-            if region:
-                svg.append(region)
+        )
+    if branch_s_events is not None and not branch_s_events.empty:
+        for row in branch_s_events.to_dict("records"):
+            color = CN_REPORT_STATE_COLOR.get(str(row.get("report_state", "")), NEUTRAL_COLOR)
+            score = row.get("branch_s_score", np.nan)
+            score_text = f"; event-level score={float(score):.3f}" if np.isfinite(float(score)) else ""
+            svg.extend(
+                render_event_region_chunks(
+                    row,
+                    cn_bins,
+                    cn_layout,
+                    cn_total_span,
+                    left,
+                    plot_width,
+                    signal_top,
+                    signal_height,
+                    color,
+                    (
+                        f"Branch S review {row.get('branch_s_state')} "
+                        f"{row.get('chrom')}:{int(row.get('start'))}-{int(row.get('end'))}"
+                        f"{score_text}; not a bin-level CN value"
+                    ),
+                    class_name="branch-s-cn-region",
+                )
+            )
 
     plot_bins = downsample_bins(cn_bins, max_points=max_points)
     for row in plot_bins.itertuples(index=False):
@@ -1813,6 +2096,7 @@ def build_cnv_plot_svg(
     output_copy_number_svg="",
     output_copy_number_bins_tsv="",
     output_copy_number_event_support_tsv="",
+    output_event_manifest_tsv="",
     max_points=8000,
 ):
     sex_call = sample_sex_call(gender_df, branch_s_summary_df, sample_id=sample_id)
@@ -1821,22 +2105,55 @@ def build_cnv_plot_svg(
     bins = annotate_branch_a_ref_z_bins(bins, ref_bins_df, sex_call=sex_call)
     final_events = coerce_final_events(branch_b_events_df, sample_id=sample_id)
     review_events = coerce_internal_review_events(review_events_df, sample_id=sample_id)
-    plot_events = combine_plot_events(final_events, review_events)
     branch_s_events = coerce_branch_s_review_events(
         branch_s_summary_df,
         scores_df=branch_s_scores_df,
         evidence_df=branch_s_evidence_df,
         sample_id=sample_id,
     )
+    manifest = build_plot_event_manifest(final_events, review_events, branch_s_events, bins, sample_id=sample_id)
     layout, total_span = build_chrom_layout(bins, gap_bp=PLOT_CHROM_GAP_BP)
-    bins = annotate_report_states(bins, plot_events)
     bins = annotate_display_ref_z_bins(
         bins,
-        final_events=plot_events,
-        branch_s_events=branch_s_events,
+        final_events=manifest[manifest["event_layer"].astype(str).ne("branch_s_review")] if not manifest.empty else manifest,
+        branch_s_events=manifest[manifest["event_layer"].astype(str).eq("branch_s_review")] if not manifest.empty else manifest,
         sex_call=sex_call,
         gender_info=gender_info,
     )
+    support_df = pd.DataFrame()
+    if not manifest.empty:
+        support_cn_bins = annotate_copy_number_bins(
+            bins,
+            manifest,
+            branch_s_events=None,
+            ref_bins_df=ref_bins_df,
+            sex_call=sex_call,
+            gender_info=gender_info,
+        )
+        support_df = summarize_copy_number_event_support(
+            support_cn_bins,
+            manifest,
+            branch_s_events=None,
+            sex_call=sex_call,
+        )
+        manifest, support_df = apply_plot_support_visibility(manifest, support_df)
+    write_plot_event_manifest_tsv(output_event_manifest_tsv, manifest)
+    visible_manifest = (
+        manifest[manifest["plot_visibility"].astype(str).eq("final_report_plot")].copy()
+        if not manifest.empty
+        else pd.DataFrame()
+    )
+    plot_events = (
+        visible_manifest[visible_manifest["event_layer"].astype(str).ne("branch_s_review")].copy()
+        if not visible_manifest.empty
+        else pd.DataFrame()
+    )
+    branch_s_events = (
+        visible_manifest[visible_manifest["event_layer"].astype(str).eq("branch_s_review")].copy()
+        if not visible_manifest.empty
+        else pd.DataFrame()
+    )
+    bins = annotate_report_states(bins, plot_events)
     write_plot_bins_tsv(output_bins_tsv, bins, layout)
 
     width = 2560
@@ -1895,7 +2212,21 @@ def build_cnv_plot_svg(
             f"plot_event_layer={event_layer}"
         )
         class_name = "internal-review-region" if event_layer == "internal_review_event" else "report-region"
-        svg.append(render_event_region(row_dict, layout, total_span, left, plot_width, signal_top, signal_height, color, label, class_name=class_name))
+        svg.extend(
+            render_event_region_chunks(
+                row_dict,
+                bins,
+                layout,
+                total_span,
+                left,
+                plot_width,
+                signal_top,
+                signal_height,
+                color,
+                label,
+                class_name=class_name,
+            )
+        )
     if not branch_s_events.empty:
         for row in branch_s_events.to_dict("records"):
             color = REPORT_STATE_COLOR.get(str(row.get("report_state", "")), NEUTRAL_COLOR)
@@ -1906,9 +2237,10 @@ def build_cnv_plot_svg(
                 f"{row.get('chrom')}:{int(row.get('start'))}-{int(row.get('end'))}"
                 f"{score_text}; branch_a_ref_z points remain bin-level"
             )
-            svg.append(
-                render_event_region(
+            svg.extend(
+                render_event_region_chunks(
                     row,
+                    bins,
                     layout,
                     total_span,
                     left,
@@ -1971,6 +2303,8 @@ def build_cnv_plot_svg(
             ref_bins_df=ref_bins_df,
             sex_call=sex_call,
             gender_info=gender_info,
+            event_manifest_for_support=manifest,
+            precomputed_support_df=support_df,
             max_points=max_points,
         )
 
@@ -2003,6 +2337,7 @@ def main():
         output_copy_number_svg=args.output_copy_number_svg,
         output_copy_number_bins_tsv=args.output_copy_number_bins_tsv,
         output_copy_number_event_support_tsv=args.output_copy_number_event_support_tsv,
+        output_event_manifest_tsv=args.output_event_manifest_tsv,
         max_points=args.max_points,
     )
     logger.info(

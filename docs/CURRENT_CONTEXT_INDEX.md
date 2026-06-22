@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md`
+2. `docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,19 +23,21 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md
-previous_handoff: docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md
+active_handoff: docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md
+previous_handoff: docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_report_visibility_materialized_development_only
-branch_s_status: sex_specific_ref_visualization_support_visible_not_final
-report_status: sex_specific_ref_plot_truth_synced_development_only
+branch_b_status: v2_plot_manifest_low_confidence_ablation_development_only
+branch_s_status: branch_s_review_manifest_visible_not_final
+report_status: plot_event_manifest_low_confidence_ablation_materialized_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/plot_event_manifest_low_confidence_ablation_2026-06-22.md`
+- `docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md`
 - `docs/reports/sex_specific_ref_cnv_plot_2026-06-22.md`
 - `docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md`
 - `docs/reports/sex_aware_chry_robust_plot_truth_sync_2026-06-22.md`
@@ -95,6 +97,37 @@ report_status: sex_specific_ref_plot_truth_synced_development_only
 - `docs/reports/branch_ab_v2_rnd_constraints_2026-06-18.md`
 
 ## Current Module State
+
+### Plot Event Manifest And Low-Confidence Ablation
+
+The active plot/support contract is documented in
+`docs/reports/plot_event_manifest_low_confidence_ablation_2026-06-22.md`.
+
+This loop introduces `plot_event_manifest.tsv` as the single source of truth
+for z/CN plot overlays and `plot_event_support.tsv` event coordinates.
+Autosomal `report_event` rows with `Z_SUPPORTED_CN_NOT_SUPPORTED` are demoted
+only at plot visibility level to `internal_review_event_candidate` and
+`review_plot_only`. They remain in support/audit outputs. `CN_DIRECTION_WEAK_OR_MIXED`
+is not demoted, protecting weak/mosaic-sensitive truth candidates.
+
+Remote validation on `fengxian`:
+
+- pytest `test_branch_b_plot.py test_cnv_report.py
+  test_branch_ab_phase12_workflow_contract.py test_branch_s_shadow.py`:
+  `69 passed in 4.17s`.
+- Y/H/G/0615 active lowres/gap2m configs dry-run and materialization for
+  `branch_s_review cnv_report` succeeded.
+- Y, H, and G truth gates remain FN=0 with no hard-suppressed truth.
+
+Low-confidence autosomal report events demoted to review-only plot visibility:
+
+- Y: 1
+- H: 1
+- G: 0 report-layer events
+- 0615: 3 context-only events
+
+Boundary: this is not production filtering and does not alter Branch A/B/S
+caller decisions.
 
 ### Sex-Specific Ref CNV Plot And Review Overlay
 

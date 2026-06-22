@@ -1,5 +1,40 @@
 # PLANS.md
 
+## 2026-06-22 Plot Manifest Low-Confidence Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md`.
+
+Current report:
+`docs/reports/plot_event_manifest_low_confidence_ablation_2026-06-22.md`.
+
+Current status:
+
+- `plot_event_manifest.tsv` is now the single plot/support event-coordinate
+  contract.
+- Final z/CN plots only highlight `plot_visibility=final_report_plot`.
+- Autosomal report events with `Z_SUPPORTED_CN_NOT_SUPPORTED` are hidden from
+  final plot overlays and retained as `internal_review_event_candidate` in
+  manifest/support/audit outputs.
+- `CN_DIRECTION_WEAK_OR_MIXED` is not demoted.
+- Y/H/G truth gates remain FN=0.
+
+Immediate next steps:
+
+1. Review demoted events first:
+   - Y: 1
+   - H: 1
+   - 0615: 3 context-only
+   - G: 0 report-layer demotions
+2. Compare each demoted event against z plot, CN plot, and
+   `plot_event_support.tsv` before considering any report-table downgrade.
+3. Build a formal ablation table before changing report-event classification:
+   before/after report-event counts, internal review counts, truth overlap, H6
+   chr21, Y6 chr7, and G2 chr8 protection.
+4. Keep Branch S separate; do not mix sex-chromosome review rows into
+   autosomal CNV report-table decisions.
+5. Do not use 0615 to derive thresholds. It remains burden/context only.
+
 ## 2026-06-22 Sex-Specific Ref CNV Plot Review Next Gate
 
 Current handoff:

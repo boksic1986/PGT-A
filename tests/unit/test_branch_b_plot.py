@@ -1112,10 +1112,200 @@ def test_internal_review_event_is_drawn_in_review_plot_without_promoting_report_
 
     svg = output_svg.read_text(encoding="utf-8")
     support = pd.read_csv(support_tsv, sep="\t")
-    assert 'class="internal-review-region"' in svg
-    assert 'plot_event_layer=internal_review_event' in svg
+    assert 'class="internal-review-region"' not in svg
+    assert 'plot_event_layer=internal_review_event' not in svg
     assert "internal_review_event" in set(support["event_layer"])
     assert "autosomal_report" not in set(support["event_layer"])
+    assert set(support["plot_visibility"]) == {"review_plot_only"}
+
+
+def test_plot_event_manifest_drives_support_and_hides_z_supported_cn_not_supported_from_final_plot(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1"] * 8,
+            "bin_index": list(range(8)),
+            "start": [idx * 1_000_000 for idx in range(8)],
+            "end": [(idx + 1) * 1_000_000 for idx in range(8)],
+            "calibrated_z": [0.0] * 8,
+            "normalized_signal": [_norm_signal(value) for value in [100, 100, 110, 111, 110, 100, 100, 100]],
+        }
+    )
+    ref_bins = _ref_bins(
+        [("chr1", idx, idx * 1_000_000, (idx + 1) * 1_000_000, 100, 0.01) for idx in range(8)]
+    )
+    events = pd.DataFrame(
+        {
+            "event_id": ["G1_chr4_like"],
+            "sample_id": ["G1"],
+            "chrom": ["chr1"],
+            "start": [2_000_000],
+            "end": [5_000_000],
+            "state": ["gain"],
+            "v2_report_layer_class": ["report_event"],
+            "v2_report_visibility": ["report_strong_event"],
+            "copy_number_estimate": [2.05],
+            "a_zscore": [26.0],
+        }
+    )
+    output_svg = tmp_path / "G1.final_cnv.svg"
+    output_cn_svg = tmp_path / "G1.final_cnv_cn.svg"
+    support_tsv = tmp_path / "G1.plot_event_support.tsv"
+    manifest_tsv = tmp_path / "G1.plot_event_manifest.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="G1",
+        bins_df=bins,
+        branch_b_events_df=events,
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=tmp_path / "G1.plot_bins.tsv",
+        output_copy_number_svg=output_cn_svg,
+        output_copy_number_bins_tsv=tmp_path / "G1.plot_bins_cn.tsv",
+        output_copy_number_event_support_tsv=support_tsv,
+        output_event_manifest_tsv=manifest_tsv,
+    )
+
+    manifest = pd.read_csv(manifest_tsv, sep="\t")
+    support = pd.read_csv(support_tsv, sep="\t")
+    svg = output_svg.read_text(encoding="utf-8")
+    cn_svg = output_cn_svg.read_text(encoding="utf-8")
+
+    assert len(manifest) == 1
+    row = manifest.iloc[0]
+    assert row["event_id"] == "G1_chr4_like"
+    assert row["candidate_id"] == "G1_chr4_like"
+    assert row["event_layer"] == "autosomal_report"
+    assert row["plot_support_class"] == "Z_SUPPORTED_CN_NOT_SUPPORTED"
+    assert row["plot_layer_class"] == "internal_review_event_candidate"
+    assert row["plot_visibility"] == "review_plot_only"
+    assert row["plot_visibility_reason"] == "z_supported_cn_not_supported_plot_ablation"
+    support_row = support.iloc[0]
+    assert support_row["event_id"] == row["event_id"]
+    assert support_row["plot_support_class"] == "Z_SUPPORTED_CN_NOT_SUPPORTED"
+    assert support_row["plot_visibility"] == "review_plot_only"
+    assert support_row["support_interpretation_status"] == "Z_DIRECTION_SUPPORTED"
+    assert support_row["cn_direction_consistency_status"] == "CN_DIRECTION_NOT_SUPPORTED"
+    assert 'class="report-region"' not in svg
+    assert 'class="report-ref-z-trend"' not in svg
+    assert 'class="report-cn-region"' not in cn_svg
+    assert 'class="report-cn-trend"' not in cn_svg
+
+
+def test_cn_weak_or_mixed_truth_sensitive_event_stays_visible_in_final_plot(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr21"] * 6,
+            "bin_index": list(range(6)),
+            "start": [idx * 1_000_000 for idx in range(6)],
+            "end": [(idx + 1) * 1_000_000 for idx in range(6)],
+            "calibrated_z": [0.0] * 6,
+            "normalized_signal": [_norm_signal(value) for value in [100, 118, 108, 107, 100, 100]],
+        }
+    )
+    ref_bins = _ref_bins(
+        [("chr21", idx, idx * 1_000_000, (idx + 1) * 1_000_000, 100, 0.01) for idx in range(6)]
+    )
+    events = pd.DataFrame(
+        {
+            "event_id": ["H6_chr21_gain"],
+            "sample_id": ["H6"],
+            "chrom": ["chr21"],
+            "start": [1_000_000],
+            "end": [4_000_000],
+            "state": ["gain"],
+            "v2_report_layer_class": ["report_event"],
+            "v2_report_visibility": ["report_weak_event"],
+            "copy_number_estimate": [2.16],
+            "a_zscore": [7.11],
+        }
+    )
+    support_tsv = tmp_path / "H6.plot_event_support.tsv"
+    manifest_tsv = tmp_path / "H6.plot_event_manifest.tsv"
+    output_svg = tmp_path / "H6.final_cnv.svg"
+
+    build_cnv_plot_svg(
+        sample_id="H6",
+        bins_df=bins,
+        branch_b_events_df=events,
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=tmp_path / "H6.plot_bins.tsv",
+        output_copy_number_svg=tmp_path / "H6.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=tmp_path / "H6.plot_bins_cn.tsv",
+        output_copy_number_event_support_tsv=support_tsv,
+        output_event_manifest_tsv=manifest_tsv,
+    )
+
+    manifest = pd.read_csv(manifest_tsv, sep="\t")
+    support = pd.read_csv(support_tsv, sep="\t")
+    svg = output_svg.read_text(encoding="utf-8")
+
+    assert manifest.iloc[0]["plot_support_class"] == "Z_SUPPORTED_CN_WEAK"
+    assert manifest.iloc[0]["plot_visibility"] == "final_report_plot"
+    assert support.iloc[0]["cn_direction_consistency_status"] == "CN_DIRECTION_WEAK_OR_MIXED"
+    assert 'class="report-region"' in svg
+    assert 'class="report-ref-z-trend"' in svg
+
+
+def test_manifest_merges_same_direction_events_across_structure_gap_but_plot_lines_are_split(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1"] * 5,
+            "bin_index": list(range(5)),
+            "start": [idx * 1_000_000 for idx in range(5)],
+            "end": [(idx + 1) * 1_000_000 for idx in range(5)],
+            "calibrated_z": [0.0] * 5,
+            "normalized_signal": [_norm_signal(value) for value in [130, 131, 100, 132, 133]],
+            "is_near_centromere": [0, 0, 1, 0, 0],
+        }
+    )
+    ref_bins = _ref_bins(
+        [("chr1", idx, idx * 1_000_000, (idx + 1) * 1_000_000, 100, 0.02) for idx in range(5)]
+    )
+    events = pd.DataFrame(
+        {
+            "event_id": ["left_arm", "right_arm"],
+            "sample_id": ["S1", "S1"],
+            "chrom": ["chr1", "chr1"],
+            "start": [0, 3_000_000],
+            "end": [2_000_000, 5_000_000],
+            "state": ["gain", "gain"],
+            "v2_report_layer_class": ["report_event", "report_event"],
+            "v2_report_visibility": ["report_strong_event", "report_strong_event"],
+            "copy_number_estimate": [2.55, 2.55],
+            "a_zscore": [35.0, 34.0],
+        }
+    )
+    manifest_tsv = tmp_path / "S1.plot_event_manifest.tsv"
+    output_svg = tmp_path / "S1.final_cnv.svg"
+
+    build_cnv_plot_svg(
+        sample_id="S1",
+        bins_df=bins,
+        branch_b_events_df=events,
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=tmp_path / "S1.plot_bins.tsv",
+        output_copy_number_svg=tmp_path / "S1.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=tmp_path / "S1.plot_bins_cn.tsv",
+        output_copy_number_event_support_tsv=tmp_path / "S1.plot_event_support.tsv",
+        output_event_manifest_tsv=manifest_tsv,
+    )
+
+    manifest = pd.read_csv(manifest_tsv, sep="\t")
+    svg = output_svg.read_text(encoding="utf-8")
+
+    assert len(manifest) == 1
+    row = manifest.iloc[0]
+    assert row["start"] == 0
+    assert row["end"] == 5_000_000
+    assert row["merged_source_event_ids"] == "left_arm;right_arm"
+    assert row["plot_visibility"] == "final_report_plot"
+    assert svg.count('class="report-region"') == 2
+    assert svg.count('class="report-ref-z-trend"') == 2
 
 
 def test_copy_number_scatter_marks_chry_zero_ref_as_not_interpretable(tmp_path):

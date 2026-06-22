@@ -1,5 +1,59 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Plot Event Manifest And Low-Confidence Ablation
+
+Current handoff:
+`docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md`.
+
+Current report:
+`docs/reports/plot_event_manifest_low_confidence_ablation_2026-06-22.md`.
+
+This loop fixes plot/support/report-layer visibility only. It does not modify
+Branch A, Branch B V2 filtering, Branch S classification, reference, mapping,
+sex calling, report-event classification, or TP/FN/FP definitions.
+
+Active contract:
+
+- `plot_event_manifest.tsv` is now emitted per sample by `cnv_branch_ab_plot`.
+- `cnv_report_summary` depends on plot manifests, so report materialization
+  also materializes z/CN plot overlays and support-manifest contracts.
+- z/CN plot overlays and `plot_event_support.tsv` use common
+  `event_id/candidate_id/chrom/start/end/event_layer/plot_visibility`
+  coordinates.
+- Same-direction events can be one manifest/report row while plot overlays are
+  split around centromere/structure gaps.
+- `plot_support_class=Z_SUPPORTED_CN_NOT_SUPPORTED` on autosomal report events
+  is demoted only to `internal_review_event_candidate` and `review_plot_only`.
+- `CN_DIRECTION_WEAK_OR_MIXED` remains visible and is not demoted.
+
+Remote validation:
+
+- Remote pytest:
+  `tests/unit/test_branch_b_plot.py`,
+  `tests/unit/test_cnv_report.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
+  `tests/unit/test_branch_s_shadow.py`: `69 passed in 4.17s`.
+- Y/H/G/0615 active lowres/gap2m dry-runs for `branch_s_review cnv_report`
+  succeeded.
+- Y1-Y8, H1-H16, G1-G8, and 0615 plot/report outputs were materialized on
+  `fengxian`.
+
+Materialized acceptance:
+
+- Y truth: 10 events, FN=0, hard-suppressed truth=0.
+- H truth: 10 events, FN=0, hard-suppressed truth=0.
+- G truth: 10 events, FN=0, hard-suppressed truth=0.
+- 0615 remains context-only; no TP/FN/FP is computed.
+- Low-confidence autosomal report events demoted to review-only plot
+  visibility: Y=1, H=1, G=0 report-layer events, 0615=3.
+
+Remaining risk:
+
+- This is a visibility ablation, not production filtering. Demoted events
+  remain in manifest/support/audit outputs.
+- Truth labels may be incomplete, so this must not become a hard filter without
+  a separate locked-truth ablation table.
+
 ## 2026-06-22 Sex-Specific Ref CNV Plot And Review Overlay
 
 Current handoff:

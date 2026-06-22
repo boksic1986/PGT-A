@@ -723,7 +723,8 @@ if CNV_ENABLED:
                 bins_tsv=CNV_B_PLOT_BINS_TSV,
                 cn_svg=CNV_B_PLOT_CN_SVG,
                 cn_bins_tsv=CNV_B_PLOT_CN_BINS_TSV,
-                cn_event_support_tsv=CNV_B_PLOT_CN_EVENT_SUPPORT_TSV
+                cn_event_support_tsv=CNV_B_PLOT_CN_EVENT_SUPPORT_TSV,
+                event_manifest_tsv=CNV_B_PLOT_EVENT_MANIFEST_TSV
             log:
                 project_path("logs", "cnv", "{sample}.branch_ab_plot.log")
             threads: 1
@@ -745,6 +746,7 @@ if CNV_ENABLED:
                     "--output-copy-number-svg", output.cn_svg,
                     "--output-copy-number-bins-tsv", output.cn_bins_tsv,
                     "--output-copy-number-event-support-tsv", output.cn_event_support_tsv,
+                    "--output-event-manifest-tsv", output.event_manifest_tsv,
                     "--log", log[0],
                 ]
                 if input.a_branch:
@@ -1202,6 +1204,7 @@ if CNV_ENABLED:
                 ),
                 plots=(expand(CNV_B_PLOT_SVG, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 cn_plots=(expand(CNV_B_PLOT_CN_SVG, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
+                plot_manifests=(expand(CNV_B_PLOT_EVENT_MANIFEST_TSV, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 genders=(expand(CNV_GENDER_TSV, sample=SAMPLES) if PREDICT_BY_SEX_ENABLED else []),
                 qcs=expand(CNV_QC_TSV, sample=SAMPLES),
                 a_branch=(expand(CNV_A_ABERRATIONS_BED, sample=SAMPLES) if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
