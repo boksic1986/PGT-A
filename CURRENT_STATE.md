@@ -1,5 +1,70 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Copy Number CNV Plot V2
+
+Current handoff:
+`docs/handoff/2026-06-22_1100_copy_number_cnv_plot_v2_handoff.md`.
+
+Current report:
+`docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
+
+This loop updates only copy-number plot visualization. It does not modify
+Branch A, Branch B V2, Branch S, report-event classification, filtering,
+reference, mapping, or any threshold.
+
+CN V2 visualization contract:
+
+- z plot remains unchanged: `{sample}.final_cnv.svg` and
+  `{sample}.plot_bins.tsv`.
+- CN plot remains `{sample}.final_cnv_cn.svg`, with
+  `{sample}.plot_bins_cn.tsv`.
+- CN SVG width is now `2560` to improve chromosome readability.
+- CN plot uses a dark plotting background, wider chromosome gaps, and 50Mb
+  intra-chromosome ticks.
+- structural gap / centromere-telomere bins are blanked in the CN plot when
+  `is_gap_centromere_telomere` is true or
+  `gap_centromere_telomere_overlap_fraction >= 0.5`.
+- report CN trend remains a red horizontal event-level line and is split across
+  non-gap contiguous chunks.
+- CN scatter points are shown per bin:
+  - event outside: neutral baseline `CN=2`
+  - final dup event: dark blue
+  - final del event: red
+- CN scatter inside final report events uses an event-anchored proxy:
+  `2 + calibrated_z * (event_cn - 2) / median_event_z` when median z is
+  informative and direction-consistent.
+- if event median z is uninformative, event bins fall back to uniform event CN
+  and `copy_number_source=event_cn_uniform_median_z_uninformative`.
+- this proxy is for visual review only; it is not a bin-level CN caller and
+  must not be used for filtering or performance metrics.
+
+Remote validation:
+
+- TDD red run: `test_branch_b_plot.py` failed on old implementation for width,
+  structure-gap blank, and CN V2 behavior.
+- Remote pytest:
+  `tests/unit/test_branch_b_plot.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
+  `tests/unit/test_cnv_report.py`: `34 passed in 0.89s`.
+- 0615 dry-run planned only 5 `cnv_branch_ab_plot` jobs plus report/runtime
+  refresh; no mapping or reference rebuild jobs were requested.
+- 0615 materialization completed: `9 of 9 steps (100%) done`,
+  log `.snakemake/log/2026-06-22T105631.231123.snakemake.log`.
+
+Materialized 0615 acceptance:
+
+- 5/5 `.final_cnv_cn.svg` files exist.
+- 5/5 `.plot_bins_cn.tsv` files exist.
+- 5/5 CN SVGs are width `2560`, contain 50Mb ticks, structural gap blanks,
+  dark background, dup/del-only legend, no polyline, and red trend chunks.
+- CN TSVs contain 4144 rows each and 544 structural-gap blank bins each.
+- Report summary still links 5/5 samples to `.final_cnv_cn.svg`.
+
+Local synced path:
+
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+
 ## 2026-06-22 Copy Number CNV Plot Supplement
 
 Current handoff:

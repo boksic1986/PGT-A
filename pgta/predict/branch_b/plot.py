@@ -14,6 +14,7 @@ AUTOSOME_ORDER = {f"chr{index}": index for index in range(1, 23)}
 CHROM_ORDER = {**AUTOSOME_ORDER, "chrX": 23, "chrY": 24}
 STATE_COLOR = {"gain": "#facc15", "loss": "#2563eb", "neutral": "#64748b"}
 REPORT_STATE_COLOR = {"dup": "#facc15", "del": "#2563eb", "neutral": "#64748b"}
+CN_REPORT_STATE_COLOR = {"dup": "#1d4ed8", "del": "#ef4444", "neutral": "#64748b"}
 NEUTRAL_COLOR = "#64748b"
 TREND_COLOR = "#dc2626"
 
@@ -197,6 +198,9 @@ def annotate_copy_number_bins(bins_df, final_events):
     frame = bins_df.copy()
     frame["copy_number"] = 2.0
     frame["copy_number_source"] = "neutral_diploid_baseline"
+    frame["is_structure_gap_blank"] = structural_gap_mask(frame)
+    frame.loc[frame["is_structure_gap_blank"], "copy_number"] = np.nan
+    frame.loc[frame["is_structure_gap_blank"], "copy_number_source"] = "structure_gap_blank"
     if final_events.empty:
         return frame
     for row in final_events.itertuples(index=False):
@@ -206,25 +210,55 @@ def annotate_copy_number_bins(bins_df, final_events):
             frame["chrom"].astype(str).eq(str(row_dict["chrom"]))
             & frame["end"].astype(int).gt(int(row_dict["start"]))
             & frame["start"].astype(int).lt(int(row_dict["end"]))
+            & ~frame["is_structure_gap_blank"]
         )
+        event_bins = frame.loc[mask].copy()
+        if event_bins.empty:
+            continue
+        event_z = pd.to_numeric(event_bins["z"], errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
+        median_z = float(event_z.median()) if not event_z.empty else np.nan
+        state = str(row_dict["report_state"])
+        direction_ok = (state == "dup" and median_z > 0.0) or (state == "del" and median_z < 0.0)
         frame.loc[mask, "report_state"] = str(row_dict["report_state"])
-        frame.loc[mask, "copy_number"] = copy_number
-        frame.loc[mask, "copy_number_source"] = source
+        if np.isfinite(median_z) and abs(median_z) >= 0.25 and direction_ok:
+            scaled = 2.0 + (pd.to_numeric(frame.loc[mask, "z"], errors="coerce") * (copy_number - 2.0) / median_z)
+            frame.loc[mask, "copy_number"] = scaled.astype(float)
+            frame.loc[mask, "copy_number_source"] = "event_scaled_calibrated_z_proxy"
+        else:
+            frame.loc[mask, "copy_number"] = copy_number
+            frame.loc[mask, "copy_number_source"] = "event_cn_uniform_median_z_uninformative"
     return frame
 
 
-def build_chrom_layout(bins_df):
+def boolean_like_series(series):
+    text = series.fillna("").astype(str).str.strip().str.lower()
+    numeric = pd.to_numeric(series, errors="coerce").fillna(0.0)
+    return text.isin({"true", "t", "yes", "y"}) | numeric.gt(0.0)
+
+
+def structural_gap_mask(bins_df):
+    if bins_df.empty:
+        return pd.Series(dtype=bool, index=bins_df.index)
+    mask = pd.Series(False, index=bins_df.index)
+    if "is_gap_centromere_telomere" in bins_df.columns:
+        mask = mask | boolean_like_series(bins_df["is_gap_centromere_telomere"])
+    if "gap_centromere_telomere_overlap_fraction" in bins_df.columns:
+        overlap = pd.to_numeric(bins_df["gap_centromere_telomere_overlap_fraction"], errors="coerce").fillna(0.0)
+        mask = mask | overlap.ge(0.5)
+    return mask
+
+
+def build_chrom_layout(bins_df, gap_bp=2_000_000):
     layout = {}
     cursor = 0
-    gap = 2_000_000
     for chrom in sorted(bins_df["chrom"].unique(), key=chrom_sort_key):
         chrom_df = bins_df[bins_df["chrom"] == chrom]
         chrom_start = int(chrom_df["start"].min())
         chrom_end = int(chrom_df["end"].max())
         span = max(chrom_end - chrom_start, 1)
         layout[chrom] = {"offset": cursor, "start": chrom_start, "end": chrom_end, "span": span}
-        cursor += span + gap
-    return layout, max(cursor - gap, 1)
+        cursor += span + gap_bp
+    return layout, max(cursor - gap_bp, 1)
 
 
 def genome_position(chrom, pos, layout):
@@ -322,31 +356,48 @@ def render_report_event_cn_trend_lines(bins_df, final_events, layout, total_span
         chrom = str(row_dict.get("chrom", ""))
         if chrom not in layout:
             continue
+        trend_value, _source = event_copy_number(row_dict)
         event_bins = bins_df[
             bins_df["chrom"].astype(str).eq(chrom)
             & bins_df["end"].astype(int).gt(int(row_dict.get("start")))
             & bins_df["start"].astype(int).lt(int(row_dict.get("end")))
+            & ~bins_df.get("is_structure_gap_blank", pd.Series(False, index=bins_df.index)).astype(bool)
         ].copy()
         if event_bins.empty:
             continue
-        trend_value = float(event_bins["copy_number"].median())
-        x1 = scale_x(genome_position(chrom, int(row_dict.get("start")), layout), total_span, left, plot_width)
-        x2 = scale_x(genome_position(chrom, int(row_dict.get("end")), layout), total_span, left, plot_width)
-        if x2 <= x1:
-            continue
-        y = scale_copy_number_y(trend_value, mid_y, half_h)
-        label = (
-            f"report CN trend {row_dict.get('report_state')} "
-            f"{chrom}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}; "
-            f"median CN={trend_value:.3f}"
-        )
-        chunks.append(
-            f'<line class="report-cn-trend" x1="{x1:.2f}" y1="{y:.2f}" '
-            f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{TREND_COLOR}" '
-            f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
-            f"<title>{html.escape(label)}</title></line>"
-        )
+        event_bins = event_bins.sort_values(["chrom", "start"]).copy()
+        current = []
+        previous_end = None
+        for bin_row in event_bins.itertuples(index=False):
+            if previous_end is not None and int(bin_row.start) > int(previous_end):
+                chunks.extend(render_cn_trend_chunk(current, row_dict, trend_value, layout, total_span, left, plot_width, mid_y, half_h))
+                current = []
+            current.append(bin_row)
+            previous_end = int(bin_row.end)
+        chunks.extend(render_cn_trend_chunk(current, row_dict, trend_value, layout, total_span, left, plot_width, mid_y, half_h))
     return chunks
+
+
+def render_cn_trend_chunk(chunk_rows, row_dict, trend_value, layout, total_span, left, plot_width, mid_y, half_h):
+    if not chunk_rows:
+        return []
+    chrom = str(row_dict.get("chrom", ""))
+    x1 = scale_x(genome_position(chrom, int(chunk_rows[0].start), layout), total_span, left, plot_width)
+    x2 = scale_x(genome_position(chrom, int(chunk_rows[-1].end), layout), total_span, left, plot_width)
+    if x2 <= x1:
+        return []
+    y = scale_copy_number_y(trend_value, mid_y, half_h)
+    label = (
+        f"report CN trend {row_dict.get('report_state')} "
+        f"{chrom}:{int(chunk_rows[0].start)}-{int(chunk_rows[-1].end)}; "
+        f"event CN={trend_value:.3f}"
+    )
+    return [
+        f'<line class="report-cn-trend" x1="{x1:.2f}" y1="{y:.2f}" '
+        f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{TREND_COLOR}" '
+        f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
+        f"<title>{html.escape(label)}</title></line>"
+    ]
 
 
 def write_plot_bins_tsv(path_value, bins_df, layout):
@@ -381,12 +432,13 @@ def write_copy_number_bins_tsv(path_value, bins_df, layout):
 
 def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span, output_svg, output_bins_tsv="", max_points=8000):
     cn_bins = annotate_copy_number_bins(bins, final_events)
-    write_copy_number_bins_tsv(output_bins_tsv, cn_bins, layout)
+    cn_layout, cn_total_span = build_chrom_layout(cn_bins, gap_bp=5_000_000)
+    write_copy_number_bins_tsv(output_bins_tsv, cn_bins, cn_layout)
 
-    width = 1280
+    width = 2560
     height = 620
-    left = 70
-    right = 30
+    left = 82
+    right = 42
     top = 74
     plot_width = width - left - right
     signal_top = top + 72
@@ -398,52 +450,73 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         svg_text(24, 34, f"CNV final copy-number profile - {sample_id}", size=24, weight="bold"),
-        svg_text(24, 58, "Final reported dup/del regions over event-level copy number", size=13, fill="#475569"),
+        svg_text(24, 58, "Final reported dup/del regions over event-level copy-number proxy", size=13, fill="#475569"),
         svg_text(20, signal_top - 18, "Copy number", size=12, fill="#334155"),
+        f'<rect x="{left:.2f}" y="{signal_top:.2f}" width="{plot_width:.2f}" height="{signal_height:.2f}" fill="#1f2937"/>',
     ]
 
-    for idx, chrom in enumerate(sorted(layout, key=chrom_sort_key)):
-        item = layout[chrom]
-        x1 = scale_x(item["offset"], total_span, left, plot_width)
-        x2 = scale_x(item["offset"] + item["span"], total_span, left, plot_width)
-        fill = "#f8fafc" if idx % 2 == 0 else "#eef2f7"
+    for idx, chrom in enumerate(sorted(cn_layout, key=chrom_sort_key)):
+        item = cn_layout[chrom]
+        x1 = scale_x(item["offset"], cn_total_span, left, plot_width)
+        x2 = scale_x(item["offset"] + item["span"], cn_total_span, left, plot_width)
+        fill = "#263244" if idx % 2 == 0 else "#202b3a"
         svg.append(
-            f'<rect x="{x1:.2f}" y="{signal_top:.2f}" width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="{fill}"/>'
+            f'<rect class="chrom-background" x="{x1:.2f}" y="{signal_top:.2f}" width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="{fill}"/>'
         )
         svg.append(
-            f'<line x1="{x1:.2f}" y1="{signal_top:.2f}" x2="{x1:.2f}" y2="{signal_top + signal_height:.2f}" stroke="#cbd5e1" stroke-width="0.5"/>'
+            f'<line x1="{x1:.2f}" y1="{signal_top:.2f}" x2="{x1:.2f}" y2="{signal_top + signal_height:.2f}" stroke="#475569" stroke-width="0.8"/>'
         )
         svg.append(svg_text((x1 + x2) / 2.0, signal_top + signal_height + 18, chrom, size=10, fill="#334155", anchor="middle"))
+        tick = ((int(item["start"]) // 50_000_000) + 1) * 50_000_000
+        while tick < int(item["end"]):
+            tick_x = scale_x(genome_position(chrom, tick, cn_layout), cn_total_span, left, plot_width)
+            svg.append(
+                f'<line class="chrom-50mb-tick" x1="{tick_x:.2f}" y1="{signal_top + signal_height:.2f}" '
+                f'x2="{tick_x:.2f}" y2="{signal_top + signal_height + 6:.2f}" stroke="#64748b" stroke-width="0.7"/>'
+            )
+            svg.append(svg_text(tick_x, signal_top + signal_height + 31, f"{int(tick / 1_000_000)}Mb", size=8, fill="#64748b", anchor="middle"))
+            tick += 50_000_000
+
+    gap_bins = cn_bins[cn_bins["is_structure_gap_blank"].astype(bool)].copy()
+    for row in gap_bins.itertuples(index=False):
+        if str(row.chrom) not in cn_layout:
+            continue
+        x1 = scale_x(genome_position(row.chrom, int(row.start), cn_layout), cn_total_span, left, plot_width)
+        x2 = scale_x(genome_position(row.chrom, int(row.end), cn_layout), cn_total_span, left, plot_width)
+        svg.append(
+            f'<rect class="structure-gap-blank" x="{x1:.2f}" y="{signal_top:.2f}" '
+            f'width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="#0f172a" opacity="0.96"/>'
+        )
 
     for cn in (1, 2, 3):
         y = scale_copy_number_y(cn, mid_y, half_h)
-        color = "#94a3b8" if cn == 2 else "#cbd5e1"
+        color = "#94a3b8" if cn == 2 else "#475569"
         svg.append(f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" y2="{y:.2f}" stroke="{color}" stroke-width="1" stroke-dasharray="4,4"/>')
         svg.append(svg_text(18, y + 4, f"CN={cn}", size=11, fill="#64748b"))
 
     for row in final_events.itertuples(index=False):
         row_dict = row._asdict()
         state = str(row_dict.get("report_state", "")).lower()
-        color = REPORT_STATE_COLOR.get(state, NEUTRAL_COLOR)
+        color = CN_REPORT_STATE_COLOR.get(state, NEUTRAL_COLOR)
         label = f"{state} {row_dict.get('chrom')}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}"
-        svg.append(render_event_region(row_dict, layout, total_span, left, plot_width, signal_top, signal_height, color, label))
+        svg.append(render_event_region(row_dict, cn_layout, cn_total_span, left, plot_width, signal_top, signal_height, color, label))
 
     plot_bins = downsample_bins(cn_bins, max_points=max_points)
     for row in plot_bins.itertuples(index=False):
-        x = scale_x(genome_position(row.chrom, int(row.start + ((row.end - row.start) / 2)), layout), total_span, left, plot_width)
+        if getattr(row, "is_structure_gap_blank", False) or not np.isfinite(float(row.copy_number)):
+            continue
+        x = scale_x(genome_position(row.chrom, int(row.start + ((row.end - row.start) / 2)), cn_layout), cn_total_span, left, plot_width)
         y = scale_copy_number_y(row.copy_number, mid_y, half_h)
-        color = REPORT_STATE_COLOR.get(str(row.report_state), NEUTRAL_COLOR)
+        color = CN_REPORT_STATE_COLOR.get(str(row.report_state), NEUTRAL_COLOR)
         opacity = 0.82 if row.report_state in {"dup", "del"} else 0.62
         svg.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="1.25" fill="{color}" opacity="{opacity:.2f}"/>')
-    svg.extend(render_report_event_cn_trend_lines(cn_bins, final_events, layout, total_span, left, plot_width, mid_y, half_h))
+    svg.extend(render_report_event_cn_trend_lines(cn_bins, final_events, cn_layout, cn_total_span, left, plot_width, mid_y, half_h))
 
     legend_x = left
     legend_y = height - 62
     legend_items = [
-        ("dup", REPORT_STATE_COLOR["dup"]),
-        ("del", REPORT_STATE_COLOR["del"]),
-        ("neutral bin", NEUTRAL_COLOR),
-        ("report CN trend", TREND_COLOR),
+        ("dup", CN_REPORT_STATE_COLOR["dup"]),
+        ("del", CN_REPORT_STATE_COLOR["del"]),
     ]
     for idx, (label, color) in enumerate(legend_items):
         x = legend_x + idx * 180

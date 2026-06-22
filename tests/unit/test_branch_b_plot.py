@@ -100,24 +100,85 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
     )
     assert "Copy number" in cn_svg
     assert "calibrated z" not in cn_svg.lower()
+    assert 'width="2560"' in cn_svg
     assert "report CN trend" in cn_svg
     assert "smooth" not in cn_svg.lower()
     assert "<polyline" not in cn_svg
     assert cn_svg.count('class="report-cn-trend"') == 2
     assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#dc2626"', cn_svg)
-    assert re.search(r'<circle[^>]+fill="#facc15"', cn_svg)
-    assert re.search(r'<circle[^>]+fill="#2563eb"', cn_svg)
+    assert re.search(r'<circle[^>]+fill="#1d4ed8"', cn_svg)
+    assert re.search(r'<circle[^>]+fill="#ef4444"', cn_svg)
     assert re.search(r'<circle[^>]+fill="#64748b"', cn_svg)
     assert "Branch A" not in cn_svg
     assert "Branch B" not in cn_svg
     assert "internal" not in cn_svg
     assert "filtered" not in cn_svg
     assert "mask" not in cn_svg.lower()
+    assert "neutral bin" not in cn_svg
+    assert "report CN trend" not in re.sub(r"<title>.*?</title>", "", cn_svg)
     assert cn_bins.loc[cn_bins["report_state"].eq("neutral"), "copy_number"].tolist() == [2.0]
-    assert cn_bins.loc[cn_bins["report_state"].eq("dup"), "copy_number"].tolist() == [2.64, 2.64]
-    assert cn_bins.loc[cn_bins["report_state"].eq("del"), "copy_number"].tolist() == [1.42, 1.42]
-    assert set(cn_bins.loc[cn_bins["report_state"].eq("dup"), "copy_number_source"]) == {"copy_number_estimate"}
-    assert set(cn_bins.loc[cn_bins["report_state"].eq("del"), "copy_number_source"]) == {"copy_number_estimate"}
+    assert cn_bins.loc[cn_bins["report_state"].eq("dup"), "copy_number"].tolist() == pytest.approx([2.672, 2.608], abs=0.001)
+    assert cn_bins.loc[cn_bins["report_state"].eq("del"), "copy_number"].tolist() == pytest.approx([1.394, 1.446], abs=0.001)
+    assert set(cn_bins.loc[cn_bins["report_state"].eq("dup"), "copy_number_source"]) == {
+        "event_scaled_calibrated_z_proxy"
+    }
+    assert set(cn_bins.loc[cn_bins["report_state"].eq("del"), "copy_number_source"]) == {
+        "event_scaled_calibrated_z_proxy"
+    }
+
+
+def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path):
+    starts = [idx * 1_000_000 for idx in range(60)]
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1"] * 60,
+            "bin_index": list(range(60)),
+            "start": starts,
+            "end": [start + 1_000_000 for start in starts],
+            "calibrated_z": [3.0 + (idx % 6) * 0.4 for idx in range(60)],
+            "is_gap_centromere_telomere": [idx == 30 for idx in range(60)],
+            "gap_centromere_telomere_overlap_fraction": [1.0 if idx == 30 else 0.0 for idx in range(60)],
+        }
+    )
+    events = pd.DataFrame(
+        {
+            "sample_id": ["Y1"],
+            "chrom": ["chr1"],
+            "start": [0],
+            "end": [60_000_000],
+            "state": ["gain"],
+            "v2_report_layer_class": ["report_event"],
+            "v2_report_visibility": ["report_strong_event"],
+            "copy_number_estimate": [2.5],
+        }
+    )
+
+    output_cn_svg = tmp_path / "Y1.final_cnv_cn.svg"
+    output_cn_bins = tmp_path / "Y1.plot_bins_cn.tsv"
+    build_cnv_plot_svg(
+        sample_id="Y1",
+        bins_df=bins,
+        branch_b_events_df=events,
+        a_branch_df=pd.DataFrame(),
+        output_svg=tmp_path / "Y1.final_cnv.svg",
+        output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
+        output_copy_number_svg=output_cn_svg,
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    cn_svg = output_cn_svg.read_text(encoding="utf-8")
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    gap_row = cn_bins.loc[cn_bins["start"].eq(30_000_000)].iloc[0]
+
+    assert 'class="structure-gap-blank"' in cn_svg
+    assert "50Mb" in cn_svg
+    assert cn_svg.count("<circle") == 59
+    assert cn_svg.count('class="report-cn-trend"') == 2
+    assert pd.isna(gap_row["copy_number"])
+    assert gap_row["copy_number_source"] == "structure_gap_blank"
+    assert cn_bins.loc[cn_bins["copy_number_source"].eq("event_scaled_calibrated_z_proxy"), "copy_number"].nunique() > 1
+    assert "#1d4ed8" in cn_svg
+    assert not re.search(r'<circle[^>]+fill="#ef4444"', cn_svg)
 
 
 def test_copy_number_plot_falls_back_to_a_ratio_and_refuses_missing_cn(tmp_path):
@@ -157,8 +218,8 @@ def test_copy_number_plot_falls_back_to_a_ratio_and_refuses_missing_cn(tmp_path)
         output_copy_number_bins_tsv=output_cn_bins,
     )
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
-    assert cn_bins["copy_number"].tolist() == [2.5, 2.5]
-    assert set(cn_bins["copy_number_source"]) == {"a_ratio"}
+    assert cn_bins["copy_number"].tolist() == pytest.approx([2.492, 2.508], abs=0.001)
+    assert set(cn_bins["copy_number_source"]) == {"event_scaled_calibrated_z_proxy"}
 
     missing_cn_events = events.drop(columns=["a_ratio"])
     with pytest.raises(ValueError, match="copy_number_estimate|a_ratio"):

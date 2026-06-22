@@ -1,5 +1,34 @@
 # PLANS.md
 
+## 2026-06-22 CN Plot V2 Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1100_copy_number_cnv_plot_v2_handoff.md`.
+
+Current report:
+`docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
+
+CN plot V2 is materialized for 0615 as a visualization-only supplement:
+
+- `*.final_cnv_cn.svg` is now 2560px wide with dark plotting background,
+  chromosome gaps, 50Mb ticks, structural gap blanks, and dup/del-only legend.
+- `*.plot_bins_cn.tsv` now records event-anchored CN proxy values and source
+  labels, including structural gap blanks.
+- The proxy is not an independent bin-level CN caller and must not be used to
+  change Branch B V2 filtering or report-event status.
+
+Immediate next steps:
+
+1. Use the updated z/CN plot pair for manual sample review, starting with 56 if
+   continuing the previous 0615 sequence.
+2. Compare the red event-level CN trend against the per-bin CN proxy scatter to
+   identify events driven by sparse bins versus events with coherent bin-level
+   support.
+3. Treat structural gap blank regions as visual caution zones, not automatic
+   filters.
+4. Any candidate-level filter/demotion proposal still requires Y/H/G locked
+   truth ablation with FN=0, H6 chr21 retained, and G2 truth visible.
+
 ## 2026-06-22 0615 High-Confidence Review Next Gate
 
 Current handoff:

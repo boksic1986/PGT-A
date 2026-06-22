@@ -351,3 +351,116 @@ inspect candidate-level evidence among remaining `report_strong_event` and
 
 Any future rule must keep Y/H/G FN=0 and must not filter H6 chr21 or G2 locked
 truth.
+
+## 2026-06-22 CN Plot V2 Update
+
+This update changes only the copy-number visualization. Branch A, Branch B V2,
+Branch S, report-event classification, filtering, mapping, and reference build
+are unchanged.
+
+### CN V2 contract
+
+- z plot remains unchanged and still uses only `calibrated_z`.
+- CN plot width is increased to `2560`.
+- CN plot uses a dark plotting background, wider chromosome gaps, and 50Mb
+  intra-chromosome ticks.
+- structural gap / centromere-telomere bins are blanked when
+  `is_gap_centromere_telomere` is true or
+  `gap_centromere_telomere_overlap_fraction >= 0.5`.
+- report CN trend remains a red horizontal event-level line and is split across
+  non-gap contiguous chunks.
+- CN scatter points are drawn per bin:
+  - neutral outside final events: `CN=2`
+  - final `dup`: dark blue
+  - final `del`: red
+- event-bin scatter uses an event-anchored CN proxy:
+  `2 + calibrated_z * (event_cn - 2) / median_event_z` when median z is
+  informative and direction-consistent.
+- if event median z is uninformative, event bins fall back to uniform event CN.
+- the CN proxy is for visual review only and is not an independent CN caller.
+
+### Remote validation
+
+TDD red run:
+
+```text
+PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
+/biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
+  tests/unit/test_branch_b_plot.py -q
+```
+
+Result on old implementation:
+
+```text
+2 failed, 2 passed
+```
+
+Final unit tests:
+
+```text
+PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
+/biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
+  tests/unit/test_branch_b_plot.py \
+  tests/unit/test_branch_ab_phase12_workflow_contract.py \
+  tests/unit/test_cnv_report.py -q
+```
+
+Result:
+
+```text
+34 passed in 0.89s
+```
+
+0615 dry-run:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 1 -n --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+Only 5 cnv_branch_ab_plot jobs, cnv_report_summary, cnv_report,
+collect_runtime_tracking, and all were planned. No mapping or reference rebuild
+jobs were requested.
+```
+
+0615 materialization:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 4 --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+9 of 9 steps (100%) done
+Complete log: .snakemake/log/2026-06-22T105631.231123.snakemake.log
+```
+
+### 0615 CN V2 output check
+
+| sample | width 2560 | trend chunks | gap blanks | 50Mb ticks | dup/del-only legend | polyline |
+|---|---|---:|---:|---|---|---|
+| JZ26125843-56-56 | true | 15 | 544 | true | true | false |
+| JZ26125844-59-59 | true | 26 | 544 | true | true | false |
+| JZ26125845-60-60 | true | 47 | 544 | true | true | false |
+| JZ26125846-61-61 | true | 42 | 544 | true | true | false |
+| JZ26125847-62-62 | true | 34 | 544 | true | true | false |
+
+| sample | CN TSV rows | structural-gap blank bins | event-scaled proxy bins |
+|---|---:|---:|---:|
+| JZ26125843-56-56 | 4144 | 544 | 0 |
+| JZ26125844-59-59 | 4144 | 544 | 0 |
+| JZ26125845-60-60 | 4144 | 544 | 1003 |
+| JZ26125846-61-61 | 4144 | 544 | 0 |
+| JZ26125847-62-62 | 4144 | 544 | 0 |
+
+Local synced CN V2 outputs:
+
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
