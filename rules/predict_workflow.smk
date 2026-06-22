@@ -710,11 +710,21 @@ if CNV_ENABLED:
             input:
                 bins=CNV_B_CALIBRATED_BINS,
                 events=CNV_B_V2_BENCHMARK_REPORT_EVENTS,
+                review_events=CNV_B_V2_CLASSIFIER,
                 a_branch=([CNV_A_ABERRATIONS_BED] if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
+                ref_bins=[CNV_B_REF_STABILITY_BINS],
+                gender_tsv=([CNV_GENDER_TSV] if PREDICT_BY_SEX_ENABLED else []),
+                branch_s_summary=CNV_BRANCH_S_SUMMARY,
+                branch_s_scores=CNV_BRANCH_S_SCORES,
+                branch_s_evidence=CNV_BRANCH_S_EVIDENCE,
                 metadata=RUN_METADATA
             output:
                 svg=CNV_B_PLOT_SVG,
-                bins_tsv=CNV_B_PLOT_BINS_TSV
+                bins_tsv=CNV_B_PLOT_BINS_TSV,
+                cn_svg=CNV_B_PLOT_CN_SVG,
+                cn_bins_tsv=CNV_B_PLOT_CN_BINS_TSV,
+                cn_event_support_tsv=CNV_B_PLOT_CN_EVENT_SUPPORT_TSV,
+                event_manifest_tsv=CNV_B_PLOT_EVENT_MANIFEST_TSV
             log:
                 project_path("logs", "cnv", "{sample}.branch_ab_plot.log")
             threads: 1
@@ -730,12 +740,28 @@ if CNV_ENABLED:
                     "--sample-id", wildcards.sample,
                     "--input-bins", input.bins,
                     "--input-events", input.events,
+                    "--input-review-events", input.review_events,
                     "--output-svg", output.svg,
                     "--output-bins-tsv", output.bins_tsv,
+                    "--output-copy-number-svg", output.cn_svg,
+                    "--output-copy-number-bins-tsv", output.cn_bins_tsv,
+                    "--output-copy-number-event-support-tsv", output.cn_event_support_tsv,
+                    "--output-event-manifest-tsv", output.event_manifest_tsv,
                     "--log", log[0],
                 ]
                 if input.a_branch:
                     command.extend(["--input-a-branch", input.a_branch[0]])
+                if input.ref_bins:
+                    command.extend(["--input-ref-bins", input.ref_bins[0]])
+                if input.gender_tsv:
+                    command.extend(["--gender-tsv", input.gender_tsv[0]])
+                command.extend(
+                    [
+                        "--branch-s-summary", input.branch_s_summary,
+                        "--branch-s-scores", input.branch_s_scores,
+                        "--branch-s-evidence", input.branch_s_evidence,
+                    ]
+                )
                 subprocess.run(command, check=True)
 
     if CNV_NEGATIVE_BANK_SAMPLES_TSV:
@@ -836,6 +862,8 @@ if CNV_ENABLED:
                     command.extend(["--input-npz", str(npz_path)])
                 for sample_id in CNV_LOWRES_REF_SAMPLE_IDS:
                     command.extend(["--sample-id", str(sample_id)])
+                for sample_sex in CNV_LOWRES_REF_SAMPLE_SEXES:
+                    command.extend(["--sample-sex", str(sample_sex)])
                 subprocess.run(command, check=True)
 
         rule cnv_branch_b_ref_stability:
@@ -979,6 +1007,45 @@ if CNV_ENABLED:
                         command.extend(["--sample-id", str(sample_id)])
                     for path_value in input.classifications:
                         command.extend(["--classification-tsv", path_value])
+                    subprocess.run(command, check=True)
+
+        if "branch_b_v2_report_ablation" in AVAILABLE_TARGETS:
+            rule cnv_branch_b_v2_report_ablation_audit:
+                input:
+                    report_events=CNV_B_V2_BENCHMARK_REPORT_EVENTS,
+                    truth_metrics=CNV_B_V2_BENCHMARK_TRUTH_METRICS,
+                    sample_summary=CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY,
+                    plot_manifests=expand(CNV_B_PLOT_EVENT_MANIFEST_TSV, sample=SAMPLES),
+                    plot_supports=expand(CNV_B_PLOT_CN_EVENT_SUPPORT_TSV, sample=SAMPLES),
+                    metadata=RUN_METADATA
+                output:
+                    audit=CNV_B_V2_REPORT_ABLATION_AUDIT,
+                    summary=CNV_B_V2_REPORT_ABLATION_SUMMARY,
+                    md=CNV_B_V2_REPORT_ABLATION_MD
+                log:
+                    project_path("logs", "cnv", "branch_b_v2_report_ablation.log")
+                threads: 1
+                run:
+                    from pgta.core.logging import write_rule_audit_log
+                    import subprocess
+
+                    write_rule_audit_log(log[0], input.metadata)
+                    command = [
+                        config["biosoft"]["python"],
+                        SCRIPT_PLOT_MANIFEST_AUDIT,
+                        SCRIPT_PLOT_MANIFEST_AUDIT_ACTION,
+                        "--reference-id", CNV_REFERENCE_ID,
+                        "--report-events-tsv", input.report_events,
+                        "--truth-metrics-tsv", input.truth_metrics,
+                        "--sample-summary-tsv", input.sample_summary,
+                        "--output-audit-tsv", output.audit,
+                        "--output-summary-json", output.summary,
+                        "--output-report-md", output.md,
+                    ]
+                    for path_value in input.plot_manifests:
+                        command.extend(["--plot-manifest-tsv", path_value])
+                    for path_value in input.plot_supports:
+                        command.extend(["--plot-support-tsv", path_value])
                     subprocess.run(command, check=True)
 
         rule cnv_branch_s_shadow:
@@ -1175,6 +1242,8 @@ if CNV_ENABLED:
                     else (expand(CNV_B_FINAL_EVENTS, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
                 ),
                 plots=(expand(CNV_B_PLOT_SVG, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
+                cn_plots=(expand(CNV_B_PLOT_CN_SVG, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
+                plot_manifests=(expand(CNV_B_PLOT_EVENT_MANIFEST_TSV, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 genders=(expand(CNV_GENDER_TSV, sample=SAMPLES) if PREDICT_BY_SEX_ENABLED else []),
                 qcs=expand(CNV_QC_TSV, sample=SAMPLES),
                 a_branch=(expand(CNV_A_ABERRATIONS_BED, sample=SAMPLES) if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
@@ -1237,6 +1306,8 @@ if CNV_ENABLED:
                     command.extend(["--event-tsv", path_value])
                 for path_value in input.plots:
                     command.extend(["--plot-svg", path_value])
+                for path_value in input.cn_plots:
+                    command.extend(["--copy-number-plot-svg", path_value])
                 for path_value in input.genders:
                     command.extend(["--gender-tsv", path_value])
                 for path_value in input.qcs:

@@ -289,6 +289,15 @@ rule branch_b_v2_benchmark:
         ) if CNV_ENABLED and CNV_POSTPROCESS_ENABLE_BRANCH_B else []
 
 
+rule branch_b_v2_report_ablation:
+    input:
+        [
+            CNV_B_V2_REPORT_ABLATION_AUDIT,
+            CNV_B_V2_REPORT_ABLATION_SUMMARY,
+            CNV_B_V2_REPORT_ABLATION_MD,
+        ] if CNV_ENABLED and CNV_POSTPROCESS_ENABLE_BRANCH_B else []
+
+
 rule branch_s_review:
     input:
         (

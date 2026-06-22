@@ -95,6 +95,7 @@ reference_packages/
 
 # Local analysis summaries and reports
 /qc/
+/reports/
 /tests/qc_result/
 
 # Local/analysis markdowns not used by the workflow DAG
@@ -106,3 +107,5 @@ reference_packages/
 /sample_info/CNV-seq.xlsx
 /sample_info/reference_samples.xlsx
 /sample_info/abnormal_samples.xlsx
+/sample_info/*.xlsx
+/sample_info/~$*.xlsx

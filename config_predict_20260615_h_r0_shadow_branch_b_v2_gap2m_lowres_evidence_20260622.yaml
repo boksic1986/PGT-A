@@ -18,5 +18,6 @@ core:
         events_3mb_dir: "/data/project/CNV/PGT-A/refactor_validation_20260419/results_20260615_h_r0_shadow_ref_20260619_3mb/wisecondorx/cnv/a_branch_gap2m"
         reference_npz_glob:
           - "/data/project/CNV/PGT-A/refactor_validation_20260419/results_h_r0_shadow_ref_20260619/wisecondorx/tuning/pass_warn_h_r0/bin_750000/mask_only_for_newref/*.npz"
+        reference_sample_sex_map_config: "/data/project/CNV/PGT-A/refactor_validation_20260419/config_reference_h_r0_shadow_20260619.yaml"
         moderate_mad_z: 2.0
         high_mad_z: 4.0

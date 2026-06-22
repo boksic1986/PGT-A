@@ -14,6 +14,7 @@ from pgta.predict.branch_b.common import read_table, write_json, write_table
 BRANCH_S_VERSION = "branch_s_shadow_v1"
 NONPAR_MEDIAN_CALIBRATED_MIN_ABS_Z = 2.0
 NONPAR_MEDIAN_ROBUST_MIN_ABS_Z = 5.0
+SCA_WEAK_REPORT_MIN_BRANCH_A_ABS_Z = 10.0
 SEX_CHROM_LOWRES_2MB_INFORMATIVE_MIN_BP = 3_000_000
 SEX_CHROM_LOWRES_3MB_INFORMATIVE_MIN_BP = 4_000_000
 SEX_CHROM_LOWRES_MIN_OVERLAP_FRACTION = 0.50
@@ -313,7 +314,10 @@ def segment_nonpar_directional_support(region_bins, candidate_rows, state):
     segment_bins = bins_overlapping_candidate_rows(region_bins, candidate_rows)
     if segment_bins.empty:
         return "missing"
-    return _directional_support(segment_bins, state, include_mean=True)
+    # Segment-level SCA corroboration must be median/robust-median driven.
+    # Means are too sensitive to sparse high-z bins on chrX/chrY and can turn
+    # normal XY sex-chromosome baseline artifacts into strong SCA review.
+    return _directional_support(segment_bins, state, include_mean=False)
 
 
 def candidate_abs_zscore(rows):
@@ -573,6 +577,8 @@ def sca_report_layer_class(sca_state, confidence_tier, scores, evidence):
         return "sca_no_call"
     if str(confidence_tier) == "SCA_REVIEW_STRONG":
         return "sca_report_review_event"
+    if weak_sca_should_be_report_review(sca_state, scores):
+        return "sca_report_review_event"
     return "sca_internal_review_event"
 
 
@@ -582,9 +588,26 @@ def sca_report_layer_reason(sca_state, confidence_tier, scores, evidence):
             return "branch_a_only_uncorroborated_by_nonpar_median"
         return "insufficient_sca_evidence"
     score_reason = dominant_state_score_reason(scores, sca_state)
+    if weak_sca_should_be_report_review(sca_state, scores):
+        return "sca_review_weak_report_visible_with_branch_a_support"
     if "sex_call_compatible_uncorroborated_review" in score_reason:
         return f"{str(confidence_tier).lower()}_with_sex_call_compatible_branch_a_support"
     return f"{str(confidence_tier).lower()}_with_nonpar_corroboration"
+
+
+def weak_sca_should_be_report_review(sca_state, scores):
+    state = str(sca_state)
+    if state != "X_LOSS":
+        return False
+    score = _score_value(scores, state)
+    if not np.isfinite(score) or score < SCA_WEAK_REPORT_MIN_BRANCH_A_ABS_Z or score >= 30.0:
+        return False
+    matches = scores[scores["sca_state"].fillna("").astype(str).eq(state)] if scores is not None and "sca_state" in scores.columns else pd.DataFrame()
+    sex_call = str(matches.iloc[0].get("sex_call", "") if not matches.empty else "").strip().upper()
+    if sex_call != "XX":
+        return False
+    reason = dominant_state_score_reason(scores, state)
+    return "branch_a_candidate_zscore" in reason
 
 
 def dominant_state_score_reason(scores, sca_state):

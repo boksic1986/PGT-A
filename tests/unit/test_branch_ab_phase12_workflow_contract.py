@@ -207,12 +207,66 @@ def test_cnv_plot_uses_v2_report_events_and_writes_plot_bins():
 
     assert "CNV_B_PLOT_BINS_TSV" in layout
     assert "{sample}.plot_bins.tsv" in layout
+    assert "CNV_B_PLOT_CN_SVG" in layout
+    assert "{sample}.final_cnv_cn.svg" in layout
+    assert "CNV_B_PLOT_CN_BINS_TSV" in layout
+    assert "{sample}.plot_bins_cn.tsv" in layout
+    assert "CNV_B_PLOT_CN_EVENT_SUPPORT_TSV" in layout
+    assert "{sample}.plot_event_support.tsv" in layout
 
     plot_rule = workflow.split("rule cnv_branch_ab_plot:", 1)[1].split("if CNV_NEGATIVE_BANK_SAMPLES_TSV:", 1)[0]
     assert "events=CNV_B_V2_BENCHMARK_REPORT_EVENTS" in plot_rule
+    assert "ref_bins=[CNV_B_REF_STABILITY_BINS]" in plot_rule
+    assert "if CNV_LOWRES_EVIDENCE_ENABLE else []" not in plot_rule.split("gender_tsv=", 1)[0]
+    assert "gender_tsv=([CNV_GENDER_TSV] if PREDICT_BY_SEX_ENABLED else [])" in plot_rule
+    assert "branch_s_summary=CNV_BRANCH_S_SUMMARY" in plot_rule
+    assert "branch_s_scores=CNV_BRANCH_S_SCORES" in plot_rule
+    assert "branch_s_evidence=CNV_BRANCH_S_EVIDENCE" in plot_rule
     assert "CNV_B_FINAL_EVENTS" not in plot_rule
     assert "bins_tsv=CNV_B_PLOT_BINS_TSV" in plot_rule
+    assert "cn_svg=CNV_B_PLOT_CN_SVG" in plot_rule
+    assert "cn_bins_tsv=CNV_B_PLOT_CN_BINS_TSV" in plot_rule
+    assert "cn_event_support_tsv=CNV_B_PLOT_CN_EVENT_SUPPORT_TSV" in plot_rule
     assert "--output-bins-tsv" in plot_rule
+    assert "--input-ref-bins" in plot_rule
+    assert "--gender-tsv" in plot_rule
+    assert "--branch-s-summary" in plot_rule
+    assert "--branch-s-scores" in plot_rule
+    assert "--branch-s-evidence" in plot_rule
+    assert "--output-copy-number-svg" in plot_rule
+    assert "--output-copy-number-bins-tsv" in plot_rule
+    assert "--output-copy-number-event-support-tsv" in plot_rule
+
+    report_rule = workflow.split("rule cnv_report_summary:", 1)[1].split("if CNV_NEGATIVE_BANK_SAMPLES_TSV:", 1)[0]
+    assert "cn_plots=(expand(CNV_B_PLOT_CN_SVG, sample=SAMPLES)" in report_rule
+    assert "--copy-number-plot-svg" in report_rule
+
+
+def test_report_table_ablation_audit_is_formal_workflow_target():
+    dispatcher = read_text("scripts/_compat_entry.py")
+    entrypoints = read_text("rules/script_entrypoints.smk")
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+    modes = read_text("rules/pipeline_modes.smk")
+    snakefile = read_text("Snakefile")
+
+    assert '"plot_manifest_audit": "pgta.predict.branch_b.plot_manifest_audit"' in dispatcher
+    assert 'SCRIPT_PLOT_MANIFEST_AUDIT_ACTION = "plot_manifest_audit"' in entrypoints
+    assert "branch_b_v2_report_ablation" in modes
+    assert "CNV_B_V2_REPORT_ABLATION_AUDIT" in layout
+    assert "CNV_B_V2_REPORT_ABLATION_SUMMARY" in layout
+    assert "CNV_B_V2_REPORT_ABLATION_MD" in layout
+    assert "rule cnv_branch_b_v2_report_ablation_audit:" in workflow
+    audit_rule = workflow.split("rule cnv_branch_b_v2_report_ablation_audit:", 1)[1].split("if CNV_NEGATIVE_BANK_SAMPLES_TSV:", 1)[0]
+    assert "report_events=CNV_B_V2_BENCHMARK_REPORT_EVENTS" in audit_rule
+    assert "plot_manifests=expand(CNV_B_PLOT_EVENT_MANIFEST_TSV, sample=SAMPLES)" in audit_rule
+    assert "plot_supports=expand(CNV_B_PLOT_CN_EVENT_SUPPORT_TSV, sample=SAMPLES)" in audit_rule
+    assert "truth_metrics=CNV_B_V2_BENCHMARK_TRUTH_METRICS" in audit_rule
+    assert "--output-audit-tsv" in audit_rule
+    assert "--plot-manifest-tsv" in audit_rule
+    assert "--plot-support-tsv" in audit_rule
+    assert "rule branch_b_v2_report_ablation:" in snakefile
+    assert "CNV_B_V2_REPORT_ABLATION_AUDIT" in snakefile
 
 
 def test_negative_bank_rule_is_config_gated_and_not_automatic_n0():

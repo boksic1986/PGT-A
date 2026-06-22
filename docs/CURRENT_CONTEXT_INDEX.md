@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`
+2. `docs/handoff/2026-06-22_2235_report_table_ablation_audit_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,21 +23,47 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md
-previous_handoff: docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md
+active_handoff: docs/handoff/2026-06-22_2235_report_table_ablation_audit_handoff.md
+previous_handoff: docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_report_visibility_materialized_development_only
-branch_s_status: sex_aware_segment_level_lowres_context_not_final
-report_status: 0615_high_confidence_review_candidates_recorded_development_only
+branch_b_status: v2_report_table_ablation_audit_development_only
+branch_s_status: branch_s_review_manifest_visible_not_final
+report_status: report_table_ablation_audit_materialized_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/branch_b_v2_report_table_ablation_audit_2026-06-22.md`
+- `docs/handoff/2026-06-22_2235_report_table_ablation_audit_handoff.md`
+- `docs/reports/plot_event_manifest_low_confidence_ablation_2026-06-22.md`
+- `docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md`
+- `docs/reports/sex_specific_ref_cnv_plot_2026-06-22.md`
+- `docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md`
+- `docs/reports/sex_aware_chry_robust_plot_truth_sync_2026-06-22.md`
+- `docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md`
+- `docs/reports/plot_event_support_ref_z_consistency_2026-06-22.md`
+- `docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md`
+- `docs/reports/branch_a_ref_z_plot_sex_chrom_cn_trend_2026-06-22.md`
+- `docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md`
+- `docs/reports/sex_aware_cn_z_plot_branch_s_overlay_2026-06-22.md`
+- `docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`
+- `docs/reports/copy_number_centering_and_sca_fix_2026-06-22.md`
+- `docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md`
+- `docs/reports/copy_number_ratio_cnv_plot_2026-06-22.md`
+- `docs/handoff/2026-06-22_1425_copy_number_ratio_cnv_plot_handoff.md`
 - `docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`
+- `docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md`
+- `docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md`
+- `docs/handoff/2026-06-22_1234_copy_number_cnv_plot_centromere_scatter_handoff.md`
+- `docs/handoff/2026-06-22_1155_copy_number_cnv_plot_scatter_background_handoff.md`
+- `docs/handoff/2026-06-22_1130_copy_number_cnv_plot_background_fix_handoff.md`
+- `docs/handoff/2026-06-22_1100_copy_number_cnv_plot_v2_handoff.md`
 - `docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md`
+- `docs/handoff/2026-06-22_1025_copy_number_cnv_plot_handoff.md`
+- `docs/handoff/2026-06-22_0941_cnv_plot_wisecondor_style_handoff.md`
 - `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`
 - `docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`
 - `docs/reports/h7_h16_reference_cohort_decision_2026-06-20.md`
@@ -74,6 +100,278 @@ report_status: 0615_high_confidence_review_candidates_recorded_development_only
 
 ## Current Module State
 
+### Report-Table Ablation Audit
+
+The active Branch B V2 report-table ablation audit is documented in
+`docs/reports/branch_b_v2_report_table_ablation_audit_2026-06-22.md`.
+
+This loop adds the formal workflow target `branch_b_v2_report_ablation`. It
+materializes `report_table_ablation_audit.tsv`,
+`report_table_ablation_summary.json`, and
+`report_table_ablation_audit.md` for the active Y/H/G/0615 gap2m lowres
+configs.
+
+The only audited candidate rule is:
+
+```text
+autosomal report_event
+AND plot_support_class = Z_SUPPORTED_CN_NOT_SUPPORTED
+=> downgrade_to_internal_review_candidate
+```
+
+This remains an audit only. The report table is not changed by this loop.
+Locked truth candidates are protected; `CN_DIRECTION_WEAK_OR_MIXED` and
+`Z_AND_CN_NOT_SUPPORTED` are not automatically demoted.
+
+Remote validation on `fengxian`:
+
+- pytest `test_plot_manifest_ablation_audit.py test_branch_b_plot.py
+  test_cnv_report.py test_branch_ab_phase12_workflow_contract.py
+  test_branch_s_shadow.py`: `73 passed in 4.25s`.
+- `branch_b_v2_report_ablation` materialized for Y1-Y8, H1-H16, G1-G8, and
+  0615.
+
+Materialized summary:
+
+- Y1-Y8: report events 40 -> 40 proposed; demotions=0; truth 10/10; FN=0.
+- H1-H16: report events 23 -> 22 proposed; demotions=1; H1-H6 truth 10/10;
+  FN=0.
+- G1-G8: report events 26 -> 26 proposed; demotions=0; truth 10/10; FN=0.
+- 0615: report events 71 -> 68 proposed; demotions=3; context only.
+
+Current proposed demotion candidates:
+
+- H8 `chr4:10.50-48.75Mb gain`, `H8.A0004`.
+- JZ26125846-61-61 `chr4:52.50-101.25Mb gain`,
+  `JZ26125846-61-61.A0022`.
+- JZ26125847-62-62 `chr10:49.50-135.00Mb gain`,
+  `JZ26125847-62-62.A0019`.
+- JZ26125847-62-62 `chr8:46.50-141.75Mb gain`,
+  `JZ26125847-62-62.A0012`.
+
+### Plot Event Manifest And Low-Confidence Ablation
+
+The active plot/support contract is documented in
+`docs/reports/plot_event_manifest_low_confidence_ablation_2026-06-22.md`.
+
+This loop introduces `plot_event_manifest.tsv` as the single source of truth
+for z/CN plot overlays and `plot_event_support.tsv` event coordinates.
+Autosomal `report_event` rows with `Z_SUPPORTED_CN_NOT_SUPPORTED` are demoted
+only at plot visibility level to `internal_review_event_candidate` and
+`review_plot_only`. They remain in support/audit outputs. `CN_DIRECTION_WEAK_OR_MIXED`
+is not demoted, protecting weak/mosaic-sensitive truth candidates.
+
+Remote validation on `fengxian`:
+
+- pytest `test_branch_b_plot.py test_cnv_report.py
+  test_branch_ab_phase12_workflow_contract.py test_branch_s_shadow.py`:
+  `69 passed in 4.17s`.
+- Y/H/G/0615 active lowres/gap2m configs dry-run and materialization for
+  `branch_s_review cnv_report` succeeded.
+- Y, H, and G truth gates remain FN=0 with no hard-suppressed truth.
+
+Low-confidence autosomal report events demoted to review-only plot visibility:
+
+- Y: 1
+- H: 1
+- G: 0 report-layer events
+- 0615: 3 context-only events
+
+Boundary: this is not production filtering and does not alter Branch A/B/S
+caller decisions.
+
+### Sex-Specific Ref CNV Plot And Review Overlay
+
+The active plot/support contract is documented in
+`docs/reports/sex_specific_ref_cnv_plot_2026-06-22.md`.
+
+This loop supersedes the previous chrY visualization guide from
+`docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md`.
+XY chrY is no longer drawn as a fixed `CN=1` or `z=0` guide. chrX/chrY plot
+z and CN now prefer sex-specific reference stability groups (`XX` or `XY`);
+autosomes use the mixed reference group. If a sex-chromosome denominator is
+not interpretable, the bin is marked unavailable and is not drawn as a normal
+CNV point.
+
+Current visualization contract:
+
+- z and CN SVG width is `2560`.
+- z/CN genome axes use shared chromosome-block backgrounds with small
+  chromosome gaps and no vertical chromosome separator lines.
+- z outliers are not clipped to a horizontal ceiling; raw `branch_a_ref_z` is
+  retained in TSV and out-of-range display points are hidden with
+  `z_plot_status=out_of_range_hidden`.
+- review plots overlay `report_event`, `internal_review_event`, and
+  `branch_s_event`; this does not promote those events in the report table.
+- `plot_event_support.tsv` includes autosomal review rows and Branch S rows.
+- CNVpro-inspired pieces are limited to display/review concepts:
+  sex-specific references, PAR/non-PAR context, haploid/diploid centers, and
+  true CN/segment-style lines. CNVcalling.R/cghFLasso is not introduced.
+
+Remote validation on `fengxian`:
+
+- pytest:
+  `test_branch_b_plot.py test_ref_stability.py test_branch_s_shadow.py
+  test_cnv_report.py test_branch_ab_phase12_workflow_contract.py`:
+  `69 passed in 3.07s`.
+- Dry-runs for Y, H, G, and 0615 active lowres/gap2m configs succeeded for
+  `branch_s_review cnv_report` without mapping/reference rebuild jobs.
+- Materialized outputs:
+  Y1-Y8 8/8 plots/support, H1-H16 16/16 plots/support, G1-G8 8/8
+  plots/support, and 0615 5/5 plots/support.
+
+Materialized acceptance:
+
+- Y1-Y8 truth preserved `10/10`, FN=0.
+- H1-H6 truth preserved `10/10`, FN=0; H6 chr21 remains visible.
+- G1-G8 truth preserved `10/10`, FN=0; G2 truth remains preserved.
+- H4 chr15 internal-review gain is visible in z/CN review plots.
+- H5/G3/G5 chrX X-loss Branch S rows are present in `plot_event_support.tsv`
+  and visible in z/CN overlays.
+- G2/G8 XY chrY no longer shows fixed CN=1 or fixed z=0; current chrY bins
+  are marked `sex_chrom_cn_unavailable` when the XY denominator is not
+  interpretable.
+- G7/H5/H4 XX chrY is marked expected absent, not dup/del.
+
+Local synchronized outputs:
+
+- `D:\Pipeline\PGT-A\reports\truth_y1_y8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\truth_h1_h6_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\truth_g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+Boundary:
+
+- This is visualization and support-ledger work only.
+- Branch A, Branch B V2 filtering, Branch S classification, reference build,
+  report-event classification, and TP/FN/FP definitions are unchanged.
+- chrY/SCA final quantification still needs a dedicated sex-specific
+  reference/PAR/non-PAR validation gate.
+
+### Sex-Aware chrY Robust Plot And Truth Sync
+
+The active plot contract is documented in
+`docs/reports/sex_aware_chry_robust_plot_truth_sync_2026-06-22.md`.
+
+This loop updates only CNV plot display and plot support ledgers. It does not
+modify Branch A, Branch B V2 filtering, Branch S classification, reference,
+mapping, report-event classification, or TP/FN/FP definitions.
+
+Current plot contract:
+
+- `plot_bins.tsv` retains raw `branch_a_ref_z` for audit.
+- `plot_z` is the SVG display value clipped to `[-8, 8]`, with
+  `z_plot_clipped=true` for display-only clipping.
+- XX chrY rows remain in TSV but ordinary z/CN scatter is hidden with
+  `chrY_display_mode=xx_absent_expected_hidden`.
+- XY chrY uses a neutral Y-presence guide from BAM sex evidence instead of raw
+  chrY ref-z or ratio-CN, with display modes
+  `xy_y_presence_guide_not_ref_z` and
+  `xy_y_presence_guide_not_ratio_cn`.
+- CN plots no longer draw grey structure-gap background blocks; structure and
+  centromere gaps are represented by absent scatter points.
+- The z SVG legend no longer includes `event ref-z trend`.
+
+Remote validation on `fengxian`:
+
+- Pytest for `test_branch_b_plot.py`, `test_cnv_report.py`,
+  `test_branch_s_shadow.py`, and
+  `test_branch_ab_phase12_workflow_contract.py`: `63 passed in 2.63s`.
+- Y1-Y8, H1-H16, G1-G8, and 0615 context dry-runs for
+  `cnv_branch_s_shadow cnv_branch_ab_plot cnv_report` succeeded without
+  requesting mapping/reference rebuild.
+- Y1-Y8, H1-H16, G1-G8, and 0615 context plot/report outputs were
+  materialized on the remote mirror.
+
+Truth/context sync:
+
+- Y1-Y8 truth preserved: `10/10`.
+- H1-H6 truth preserved: `10/10`.
+- G1-G8 truth preserved: `10/10`.
+- Local synced truth outputs:
+  `D:\Pipeline\PGT-A\reports\truth_y1_y8_cnv_plots\`,
+  `D:\Pipeline\PGT-A\reports\truth_h1_h6_cnv_plots\`, and
+  `D:\Pipeline\PGT-A\reports\truth_g1_g8_cnv_plots\`.
+- 0615 remains context only and is synced under
+  `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`.
+
+### Plot Event Support Ref-Z Consistency
+
+The active support-table contract is documented in
+`docs/reports/plot_event_support_ref_z_consistency_2026-06-22.md`.
+
+This loop supersedes the misleading support-table interpretation from
+`docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md`.
+`median_calibrated_z` is retained as a deprecated compatibility/audit column;
+it is not the main support metric.
+
+The active support metric for z review is:
+
+`same_direction_median_display_ref_z`
+
+with companion fields:
+
+- `same_direction_ref_z_bin_count`
+- `same_direction_ref_z_fraction`
+- `median_raw_branch_a_ref_z`
+- `median_display_ref_z`
+- `median_residual_calibrated_z`
+
+Autosomal bins use autosomal neutral-background-centered `display_ref_z` for
+plot readability. chrX/chrY use raw `branch_a_ref_z` as `display_ref_z`, because
+using autosomal centering on sex chromosomes can flip Branch S X-loss direction
+when the autosomal background is shifted.
+
+`plot_event_support.tsv` now includes Branch S rows. G3/G5 chrX X-loss rows are
+present and marked `Z_DIRECTION_SUPPORTED` after materialization. This remains a
+visualization/support-ledger change only; it does not change Branch B V2
+filtering or Branch S classification.
+
+### Branch A Ref-Z Plot And Sex-Chrom CN Trend
+
+The active plot contract is now documented in
+`docs/reports/branch_a_ref_z_plot_sex_chrom_cn_trend_2026-06-22.md`.
+
+This loop supersedes the z-plot limitation from
+`docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`.
+The previous combined plot used Branch B residual `calibrated_z` as the z-axis.
+The active z plot now uses per-bin `branch_a_ref_z`:
+
+`branch_a_ref_z = (normalized_signal - ref_bin_stability.ref_median) / max(1.4826 * ref_mad, min_ref_scale)`
+
+The z trend line for report events uses direction quantiles, not median:
+
+- gain/dup: `Q75(branch_a_ref_z)`;
+- loss/del: `Q25(branch_a_ref_z)`.
+
+This preserves normal points inside tolerated 2Mb merge gaps while making the
+event-level Branch A direction visible. `plot_bins.tsv` now carries
+`branch_a_ref_z`, `residual_calibrated_z`, `z_source`, `ref_z_scale`, and
+`ref_z_scale_source`.
+
+Branch S `sca_report_review_event` intervals still overlay chrX/chrY. The CN
+plot now additionally draws sex-aware Branch S CN trend lines only when the
+sex-chromosome bins are interpretable and the median CN deviates from expected
+CN by the visual threshold. G8 chrY remains
+`sex_chrom_ref_ratio_not_interpretable`.
+
+Remote validation:
+
+- pytest: `58 passed in 2.06s`;
+- G1-G8 dry-run and 0615 dry-run parsed successfully without mapping/reference
+  rebuild;
+- G1-G8 materialization completed: `20 of 20 steps (100%) done`;
+- 0615 materialization completed: `14 of 14 steps (100%) done`.
+
+Local synchronized plot paths:
+
+- `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+This remains a visualization/report-support update only. It does not change
+Branch A calling, Branch B V2 filtering, Branch S classifier, reference, or
+report-event classification.
+
 ### 0615 High-Confidence Review Candidates
 
 The latest completed loop is
@@ -102,6 +400,52 @@ no TP/FP/FN conclusion is allowed.
 
 ### Report Main And CNV Plot
 
+The active CN plot and Branch S correction report is now
+`docs/reports/copy_number_centering_and_sca_fix_2026-06-22.md`.
+
+The previous `calibrated_z_mosaic30_cn_proxy` contract is superseded.
+`calibrated_z` remains the only signal for the z plot, but it is no longer used
+to estimate copy number. The CN plot now derives bin-level CN from the
+sample/reference depth ratio and then recenters each sample by the autosomal
+non-gap median:
+
+`raw_log2R = log2((sample_cpm + 0.001) / (ref_cpm + 0.001))`
+
+`centered_log2R = raw_log2R - median(raw_log2R over non-gap autosomal bins)`
+
+`CN = 2 * 2^centered_log2R`
+
+where `sample_cpm = expm1(normalized_signal)` and
+`ref_cpm = expm1(ref_bin_stability.ref_median)`. `plot_bins_cn.tsv` carries
+`raw_log2r`, centered `log2r`, `copy_number_centering_log2_shift`, and
+`copy_number_source=normalized_signal_ref_median_log2r_autosome_centered`.
+CN values are not clipped in `plot_bins_cn.tsv`; out-of-range points are clipped
+only for SVG display and marked in the SVG. `plot_event_support.tsv` records per-report-event
+`valid_bin_count`, `cn_support_bin_count`, `cn_same_direction_fraction`,
+`median_bin_cn`, `median_log2r`, `median_calibrated_z`, and
+`cn_direction_consistency_status`.
+
+G1-G8 and 2026-06-15 have been re-materialized with this centered ratio-derived
+CN plot. All materialized samples have autosomal median CN = 2.000 after
+centering.
+0615 remains no-truth review/context only. G1-G8 remains the first truth-backed
+visual check: locked truth is 10/10 preserved, FN=0, and G2 chr8 remains
+internal-review visible rather than filtered.
+
+Branch S correction in the same loop:
+
+- segment-level corroboration uses median/robust-median only, not mean;
+- G3 and G5 X-loss are now `sca_report_review_event`;
+- G2/G6/G8 XY X-gain-like Branch A signals are no-call/sex-consistent audit,
+  not strong SCA review.
+
+Local synchronized plot paths:
+
+- `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+### Superseded CN Proxy Plot
+
 The latest completed loop is
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
 
@@ -116,7 +460,21 @@ visible.
 The CNV plot contract is fixed to `calibrated_z` only. Missing or non-finite
 bin values are skipped, and missing `calibrated_z` is an error. Each sample has
 `{sample}.final_cnv.svg` and `{sample}.plot_bins.tsv`; plot states are limited
-to `dup`, `del`, and `neutral`.
+to `dup`, `del`, and `neutral`. The current SVG style uses yellow `dup` bins,
+blue `del` bins, grey neutral bins, and red horizontal `report-z-trend` lines
+only across final autosomal report event intervals. It does not draw genome-wide
+or chromosome-wide smooth polylines.
+
+Each 0615 sample also has a copy-number proxy plot:
+`{sample}.final_cnv_cn.svg` plus `{sample}.plot_bins_cn.tsv`. The CN scatter is
+drawn for every non-centromere 1Mb bin and is colored only by the bin-level
+visual CN proxy, not by report-event intervals. The proxy is computed from each
+bin's `calibrated_z` as `CN_proxy = clip(2 + calibrated_z * 0.05, 0, 4)`.
+This maps the 30% mosaic review band to `CN=1.7..2.3`: bins below 1.7 are
+colored deletion red, bins above 2.3 are colored duplication blue, and bins in
+the interval are grey. Final report events still draw separate horizontal
+event-level CN trend lines. The CN plot is a report visualization supplement,
+not a bin-level CN caller and not a filtering input.
 
 Materialized report-layer acceptance:
 
@@ -125,8 +483,8 @@ Materialized report-layer acceptance:
   23, plots 16/16.
 - G1-G8: truth 10/10, FN=0, G2 truth not filtered, report events 26, plots
   8/8.
-- 2026-06-15: no locked truth, burden/context only, report events 71, plots
-  5/5.
+- 2026-06-15: no locked truth, burden/context only, report events 71, z plots
+  5/5, CN plots 5/5.
 
 This remains `development_only_not_final_release`.
 

@@ -38,6 +38,28 @@ def test_ref_bin_stability_computes_per_bin_mad(tmp_path):
     assert summary["binsize"] == 1_000_000
 
 
+def test_ref_bin_stability_can_emit_sex_specific_groups(tmp_path):
+    xx = tmp_path / "XX1.npz"
+    xy = tmp_path / "XY1.npz"
+    _write_npz(xx, {"X": [100, 100], "Y": [0, 0], "1": [100, 100]})
+    _write_npz(xy, {"X": [50, 50], "Y": [45, 55], "1": [100, 100]})
+
+    bins, summary = compute_ref_bin_stability(
+        [xx, xy],
+        sample_ids=["XX1", "XY1"],
+        sample_sexes=["XX", "XY"],
+    )
+
+    groups = set(bins["ref_group"])
+    assert {"mixed", "XX", "XY"}.issubset(groups)
+    xy_y = bins.loc[(bins["ref_group"].eq("XY")) & (bins["chrom"].eq("chrY")) & (bins["bin_index"].eq(0))].iloc[0]
+    mixed_y = bins.loc[(bins["ref_group"].eq("mixed")) & (bins["chrom"].eq("chrY")) & (bins["bin_index"].eq(0))].iloc[0]
+    assert int(xy_y["ref_sample_count"]) == 1
+    assert int(mixed_y["ref_sample_count"]) == 2
+    assert summary["ref_sample_sexes"] == ["XX", "XY"]
+    assert summary["ref_group_counts"]["XY"] > 0
+
+
 def test_event_ref_stability_summarizes_high_mad_fraction():
     ref_bins = pd.DataFrame(
         [

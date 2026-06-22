@@ -276,6 +276,116 @@ def test_branch_s_uses_segment_level_nonpar_support_when_global_median_is_neutra
     assert summary["sca_report_layer_class"] == "sca_internal_review_event"
 
 
+def test_branch_s_segment_support_ignores_sparse_mean_skew_for_xy_x_gain():
+    bins = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": idx * 1_000_000,
+                "end": (idx + 1) * 1_000_000,
+                "calibrated_z": 25.0 if idx in {0, 1} else 0.0,
+                "robust_z": 45.0 if idx in {0, 1} else 0.0,
+                "is_PAR": False,
+            }
+            for idx in range(100)
+        ]
+    )
+    a_candidates = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 0,
+                "end": 100_000_000,
+                "state": "gain",
+                "a_zscore": 120.0,
+                "a_abs_zscore": 120.0,
+            }
+        ]
+    )
+    gender = pd.DataFrame(
+        [
+            {
+                "sample_id": "XY_MEAN_SKEW",
+                "sex_call": "XY",
+                "predict_gender": "M",
+                "sex_call_source": "wisecondorx_bam_consensus",
+            }
+        ]
+    )
+
+    evidence, scores = build_branch_s_shadow(
+        sample_id="XY_MEAN_SKEW",
+        bins=bins,
+        a_candidates=a_candidates,
+        gender=gender,
+    )
+    summary = summarize_branch_s_shadow("XY_MEAN_SKEW", evidence, scores, gender)
+    x_gain = scores.loc[scores["sca_state"] == "X_GAIN"].iloc[0]
+
+    assert x_gain["state_score"] == 0.0
+    assert x_gain["state_score_reason"] == "branch_a_only_uncorroborated_by_nonpar_median"
+    assert summary["sca_candidate_state"] == "none_detected"
+    assert summary["sca_report_layer_class"] == "sca_filtered_or_sex_consistent_event"
+
+
+def test_branch_s_promotes_branch_a_supported_weak_x_loss_to_report_review():
+    bins = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 58_000_000,
+                "calibrated_z": -0.05,
+                "robust_z": -0.05,
+                "is_PAR": False,
+            },
+            {
+                "chrom": "chrX",
+                "start": 61_000_000,
+                "end": 154_000_000,
+                "calibrated_z": 0.05,
+                "robust_z": 0.05,
+                "is_PAR": False,
+            },
+        ]
+    )
+    a_candidates = pd.DataFrame(
+        [
+            {
+                "chrom": "chrX",
+                "start": 3_000_000,
+                "end": 154_000_000,
+                "state": "loss",
+                "a_zscore": -14.5,
+                "a_abs_zscore": 14.5,
+            }
+        ]
+    )
+    gender = pd.DataFrame(
+        [
+            {
+                "sample_id": "XX_MOSAIC_XLOSS",
+                "sex_call": "XX",
+                "predict_gender": "F",
+                "sex_call_source": "wisecondorx_bam_consensus",
+            }
+        ]
+    )
+
+    evidence, scores = build_branch_s_shadow(
+        sample_id="XX_MOSAIC_XLOSS",
+        bins=bins,
+        a_candidates=a_candidates,
+        gender=gender,
+    )
+    summary = summarize_branch_s_shadow("XX_MOSAIC_XLOSS", evidence, scores, gender)
+
+    assert summary["sca_candidate_state"] == "X_LOSS"
+    assert summary["sca_confidence_tier"] == "SCA_REVIEW_WEAK"
+    assert summary["sca_report_layer_class"] == "sca_report_review_event"
+    assert summary["sca_report_layer_reason"] == "sca_review_weak_report_visible_with_branch_a_support"
+
+
 def test_branch_s_par_only_signal_is_context_not_sca_call():
     bins = pd.DataFrame(
         [

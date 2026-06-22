@@ -1,5 +1,446 @@
 # PLANS.md
 
+## 2026-06-22 Report-Table Ablation Audit Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_2235_report_table_ablation_audit_handoff.md`.
+
+Current report:
+`docs/reports/branch_b_v2_report_table_ablation_audit_2026-06-22.md`.
+
+Current status:
+
+- `branch_b_v2_report_ablation` is now a formal workflow target.
+- It audits whether autosomal `report_event` rows with
+  `plot_support_class=Z_SUPPORTED_CN_NOT_SUPPORTED` can be proposed for
+  `report_event -> internal_review_event_candidate` demotion.
+- It does not change the report table, Branch A, Branch B V2 classifier,
+  Branch S, reference, sex calling, or production filtering.
+- Y/H/G truth gates remain FN=0 under the audit.
+- 0615 remains context-only.
+
+Current proposed demotion candidates:
+
+1. H8 `chr4:10.50-48.75Mb gain`, `H8.A0004`.
+2. JZ26125846-61-61 `chr4:52.50-101.25Mb gain`,
+   `JZ26125846-61-61.A0022`.
+3. JZ26125847-62-62 `chr10:49.50-135.00Mb gain`,
+   `JZ26125847-62-62.A0019`.
+4. JZ26125847-62-62 `chr8:46.50-141.75Mb gain`,
+   `JZ26125847-62-62.A0012`.
+
+Immediate next steps:
+
+1. Manually review these four rows against z plot, CN plot, and
+   `plot_event_support.tsv`.
+2. Decide whether to implement a separate report-table demotion rule.
+3. If implemented, keep it as demotion only, not hard filtering.
+4. Rerun Y1-Y8, H1-H6, and G1-G8 truth gates with FN=0, H6 chr21 visible, G2
+   truth visible, and truth hard-filtered count=0.
+5. Keep `Z_AND_CN_NOT_SUPPORTED` and `CN_DIRECTION_WEAK_OR_MIXED` out of
+   automatic demotion until separate ablation proves they are safe.
+6. Keep Branch S separate from autosomal report-table demotion.
+
+## 2026-06-22 Plot Manifest Low-Confidence Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md`.
+
+Current report:
+`docs/reports/plot_event_manifest_low_confidence_ablation_2026-06-22.md`.
+
+Current status:
+
+- `plot_event_manifest.tsv` is now the single plot/support event-coordinate
+  contract.
+- Final z/CN plots only highlight `plot_visibility=final_report_plot`.
+- Autosomal report events with `Z_SUPPORTED_CN_NOT_SUPPORTED` are hidden from
+  final plot overlays and retained as `internal_review_event_candidate` in
+  manifest/support/audit outputs.
+- `CN_DIRECTION_WEAK_OR_MIXED` is not demoted.
+- Y/H/G truth gates remain FN=0.
+
+Immediate next steps:
+
+1. Review demoted events first:
+   - Y: 1
+   - H: 1
+   - 0615: 3 context-only
+   - G: 0 report-layer demotions
+2. Compare each demoted event against z plot, CN plot, and
+   `plot_event_support.tsv` before considering any report-table downgrade.
+3. Build a formal ablation table before changing report-event classification:
+   before/after report-event counts, internal review counts, truth overlap, H6
+   chr21, Y6 chr7, and G2 chr8 protection.
+4. Keep Branch S separate; do not mix sex-chromosome review rows into
+   autosomal CNV report-table decisions.
+5. Do not use 0615 to derive thresholds. It remains burden/context only.
+
+## 2026-06-22 Sex-Specific Ref CNV Plot Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md`.
+
+Current report:
+`docs/reports/sex_specific_ref_cnv_plot_2026-06-22.md`.
+
+The active plot outputs now use sex-specific reference groups for display when
+available:
+
+- autosomes use `mixed` reference stability;
+- chrX/chrY prefer `XX` or `XY` reference stability matching the sample sex;
+- chrY is no longer displayed as a fabricated fixed CN=1 / z=0 guide;
+- sex-chromosome bins with non-interpretable denominator are hidden from normal
+  CNV scatter and marked unavailable in TSV;
+- z outliers are hidden from SVG rather than clipped to a horizontal ceiling;
+- review plots show `report_event`, `internal_review_event`, and Branch S
+  review events, but report table classification is unchanged.
+
+Current outputs:
+
+- Y1-Y8:
+  `D:\Pipeline\PGT-A\reports\truth_y1_y8_cnv_plots\`
+- H1-H6 truth subset inside H1-H16:
+  `D:\Pipeline\PGT-A\reports\truth_h1_h6_cnv_plots\`
+- G1-G8:
+  `D:\Pipeline\PGT-A\reports\truth_g1_g8_cnv_plots\`
+- 0615 context only:
+  `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+Immediate next steps:
+
+1. Review the synced truth plots sample by sample, starting with G1-G8 and
+   H5/G3/G5 Branch S X-loss examples.
+2. For chrY, do not infer copy number from missing ordinary scatter. Use TSV
+   status fields to distinguish `sex_chrom_cn_unavailable` from expected
+   absence.
+3. For H4 chr15 and similar cases, inspect review overlay lines plus
+   `plot_event_support.tsv`; visibility in plot does not mean report-table
+   promotion.
+4. Keep 0615 as context only. Do not use 0615 plot burden to tune thresholds.
+5. If report burden reduction resumes, design candidate-level evidence rules
+   and ablate them against Y1-Y8, H1-H6, and G1-G8 with FN=0, H6 chr21 visible,
+   and G2 truth not filtered.
+6. If final SCA/chrY quantification is needed, design a separate Branch S gate
+   using sex-specific reference, PAR/non-PAR partitions, haploid/diploid
+   centers, and locked SCA truth. Do not promote current visualization output
+   to final SCA status.
+
+## 2026-06-22 Sex-Aware chrY Robust Plot Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md`.
+
+Current report:
+`docs/reports/sex_aware_chry_robust_plot_truth_sync_2026-06-22.md`.
+
+The active plot outputs now separate sex-aware chrY display from ordinary CNV
+scatter:
+
+- XX chrY rows are retained in TSV but hidden from ordinary z/CN scatter.
+- XY chrY is shown as a neutral Y-presence guide from BAM sex evidence when the
+  chrY reference denominator is not interpretable.
+- z display uses `plot_z=clip(display_ref_z, -8, 8)` while preserving raw
+  `branch_a_ref_z` in TSV.
+- CN plots use light chromosome backgrounds and absent scatter for
+  structure/centromere gaps; grey gap blocks are no longer drawn.
+
+Current truth outputs:
+
+- Y1-Y8:
+  `D:\Pipeline\PGT-A\reports\truth_y1_y8_cnv_plots\`
+- H1-H6:
+  `D:\Pipeline\PGT-A\reports\truth_h1_h6_cnv_plots\`
+- G1-G8:
+  `D:\Pipeline\PGT-A\reports\truth_g1_g8_cnv_plots\`
+- 0615 context only:
+  `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+Immediate next steps:
+
+1. Review the synced truth plots sample by sample, starting with G1-G8 because
+   it has known SCA/truth examples and exposed the chrY display issue.
+2. For sex chromosomes, use Branch S rows in `plot_event_support.tsv`, CN
+   plots, and z plots together. Do not infer chrY CNV from the neutral
+   Y-presence guide.
+3. Treat `plot_z` clipping as display-only. Use TSV `branch_a_ref_z` for raw
+   audit when an extreme point needs explanation.
+4. Keep 0615 as burden/context only; do not use it to derive thresholds or
+   claim TP/FN/FP.
+5. If report-event reduction resumes, design candidate-level Branch B V2
+   evidence rules and benchmark them against Y1-Y8, H1-H6, and G1-G8 with
+   FN=0, H6 chr21 visible, and G2 truth not filtered.
+6. If final SCA reporting is needed, design a separate Branch S truth gate.
+   Current Branch S remains review/development-only.
+
+## 2026-06-22 Plot Event Support Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md`.
+
+Current report:
+`docs/reports/plot_event_support_ref_z_consistency_2026-06-22.md`.
+
+The active `plot_event_support.tsv` now matches the z/CN plot contract:
+
+- z plot points use `display_ref_z`;
+- autosomes are visually centered by autosomal neutral background;
+- chrX/chrY keep raw `branch_a_ref_z` as display ref-z to avoid flipping Branch
+  S direction;
+- z event support uses `same_direction_median_display_ref_z`, not whole-event
+  median;
+- residual `calibrated_z` is audit-only via `median_residual_calibrated_z`;
+- Branch S rows are included in the same support TSV.
+
+Current outputs:
+
+- G1-G8:
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins.tsv`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins_cn.tsv`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_event_support.tsv`
+- 2026-06-15:
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins.tsv`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_event_support.tsv`
+
+Immediate next steps:
+
+1. Review G1-G8 first because it has locked truth. Use
+   `same_direction_median_display_ref_z` and
+   `same_direction_ref_z_fraction` for event support, not deprecated
+   `median_calibrated_z`.
+2. Confirm G3/G5 X-loss with z plot, CN plot, Branch S summary/scores/evidence,
+   and `plot_event_support.tsv`.
+3. Treat CN support as secondary because current CN ratio remains weaker/mixed
+   for some sex-chrom events; do not promote Branch S from this visualization
+   loop alone.
+4. Use 0615 only for burden/context review. It has no truth and must not be
+   used to derive thresholds.
+5. If report-event reduction resumes, candidate-level rules must be benchmarked
+   against Y1-Y8, H1-H6, and G1-G8 with FN=0, H6 chr21 visible, and G2 truth
+   not filtered.
+6. If SCA report finalization is needed, design a separate Branch S truth gate
+   instead of relying on plot support alone.
+
+## 2026-06-22 Branch A Ref-Z Plot Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md`.
+
+Current report:
+`docs/reports/branch_a_ref_z_plot_sex_chrom_cn_trend_2026-06-22.md`.
+
+The active z plot now shows Branch A-oriented per-bin reference deviation
+(`branch_a_ref_z`) instead of Branch B residual `calibrated_z`. Branch S CN
+trend lines are visible for interpretable sex-chromosome review events.
+
+Current outputs:
+
+- G1-G8:
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins.tsv`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins_cn.tsv`
+- 2026-06-15:
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins.tsv`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+
+Immediate next steps:
+
+1. Review G1-G8 first because it has locked truth. Use `plot_bins.tsv` to
+   inspect `branch_a_ref_z`, not residual `calibrated_z`, when judging whether
+   the visual signal matches Branch A.
+2. Confirm G3/G5 X-loss with Branch S summary/scores/evidence plus CN trend
+   lines. Do not treat the modest chrX `branch_a_ref_z` magnitude as a failure
+   of the autosomal Branch A plot.
+3. Treat G8 chrY as `sex_chrom_ref_ratio_not_interpretable`; do not infer Y
+   copy number from current ratio-CN visualization.
+4. Use 0615 plots only for burden/context review. 0615 has no truth and must
+   not be used to derive thresholds.
+5. If report-event reduction resumes, any plot-derived demotion must be
+   benchmarked against Y1-Y8, H1-H6, and G1-G8 with FN=0, H6 chr21 visible, and
+   G2 truth not filtered.
+6. If final SCA reporting is required, design a separate Branch S truth gate
+   before promoting current review overlays.
+
+## 2026-06-22 Sex-Aware CN/Z Plot Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`.
+
+Current report:
+`docs/reports/sex_aware_cn_z_plot_branch_s_overlay_2026-06-22.md`.
+
+The active combined genome plot now includes sex-aware CN scatter and Branch S
+review overlays. This is a visualization/report-support update only. It is not
+a Branch B filter change and does not promote Branch S to final SCA calling.
+
+Current outputs:
+
+- G1-G8:
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins_cn.tsv`
+- 2026-06-15:
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+
+Immediate next steps:
+
+1. Review G1-G8 first because it has locked truth.
+2. Confirm G3/G5 X-loss visibility on both z and CN plots; use Branch S
+   summary/scores/evidence for the SCA interpretation, not chrY ratio-CN.
+3. Treat G8 chrY as `sex_chrom_ref_ratio_not_interpretable`; do not infer Y
+   copy number from the current mixed/low chrY reference denominator.
+4. Use 0615 plots only for burden/context review. 0615 has no truth and must
+   not be used to derive new thresholds.
+5. If report-event reduction is resumed, any CN/SCA-derived demotion must be
+   benchmarked against Y1-Y8, H1-H6, and G1-G8 with FN=0, H6 chr21 visible, and
+   G2 truth not filtered.
+6. If a final SCA report section is needed, design a separate Branch S truth
+   gate. Do not promote the current Branch S review overlay to final SCA status.
+
+## 2026-06-22 CN Centering And Branch S Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md`.
+
+Current report:
+`docs/reports/copy_number_centering_and_sca_fix_2026-06-22.md`.
+
+The active CN plot contract now uses autosome-centered ratio-derived bin copy
+number. The previous `calibrated_z_mosaic30_cn_proxy` and uncentered ratio-CN
+interpretations are superseded and must not be used for interpretation or
+filtering.
+
+Current Branch S correction:
+
+- segment-level corroboration uses median/robust-median only, not mean;
+- G3/G5 X-loss are report-review visible;
+- obvious XY X-gain-like Branch A artifacts in G/0615 are no-call or
+  sex-consistent audit, not strong SCA review.
+
+Current outputs:
+
+- G1-G8:
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins_cn.tsv`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_event_support.tsv`
+- 2026-06-15:
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_event_support.tsv`
+
+Immediate next steps:
+
+1. Review G1-G8 first because it has locked truth. Confirm that the z plot,
+   centered CN plot, and `plot_event_support.tsv` agree for each truth-visible
+   report event.
+2. Treat G2 chr8 as internal-review truth: it remains preserved but is not
+   highlighted in the autosomal final report CN main plot because the main plot
+   only highlights final autosomal report events.
+3. Use `cn_direction_consistency_status` to separate:
+   - CN-supported report events;
+   - CN weak/mixed report events;
+   - CN-not-supported events that require deeper review before report release.
+4. Review Branch S section separately from autosomal CNV:
+   - G3/G5 X-loss are visible as SCA weak report-review;
+   - XY X-gain-like no-calls remain audit context unless broader SCA truth
+     validation supports promotion.
+5. Do not use 0615 to derive thresholds. 0615 has no locked truth and remains
+   burden/context only.
+6. Any future Branch B V2 demotion/filter proposal must be ablated against
+   Y1-Y8, H1-H6, and G1-G8 with FN=0, H6 chr21 visible, and G2 truth not
+   filtered.
+7. If the user wants truth overlays in plots, implement that as a separate
+   visualization layer. Do not mix internal-review truth events into the final
+   autosomal report main plot without changing the report contract.
+
+## 2026-06-22 CN Plot Bin-CN Threshold Scatter Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md`.
+
+Current report:
+`docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
+
+CN plot bin-CN threshold scatter is materialized for 0615 as a visualization-only
+supplement:
+
+- `*.final_cnv_cn.svg` remains 2560px wide with a white plotting panel, no
+  alternating chromosome background rectangles, explicit chromosome separators,
+  50Mb ticks, centromere-only grey regions, and dup/del-only legend.
+- `*.plot_bins_cn.tsv` now includes `z`, `copy_number`, `report_state`,
+  `event_report_state`, and `copy_number_source`.
+- every non-centromere 1Mb bin uses
+  `CN_proxy = clip(2 + calibrated_z * 0.05, 0, 4)`.
+- scatter colors are based only on bin CN proxy:
+  `CN < 1.7` deletion red, `1.7 <= CN <= 2.3` neutral grey, and
+  `CN > 2.3` duplication blue.
+- `event_report_state` is audit context only; final report intervals do not
+  control scatter color.
+- `copy_number_source=calibrated_z_mosaic30_cn_proxy` marks the current visual
+  proxy; it is not an independent bin-level CN caller.
+- event-level horizontal CN trend lines remain the region-level CN estimate and
+  are still separate from the per-bin scatter.
+
+Immediate next steps:
+
+1. Use the updated z/CN plot pair for manual sample review, starting with 56.
+2. Compare the event-level CN trend against the bin-threshold CN scatter to
+   find sparse-bin driven events versus coherent region-level support.
+3. Treat clipped CN proxy dots as visualized high-z bins, not absolute copy
+   number calls. The old extreme values, including sample 56's `CN=14.923469`,
+   came from superseded event-anchored scaling and should not be used for
+   interpretation.
+4. Do not use the CN proxy as a filter. Any candidate-level filter/demotion
+   proposal still requires Y/H/G locked-truth ablation with FN=0, H6 chr21
+   retained, and G2 truth visible.
+
+## 2026-06-22 CN Plot V2 Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1234_copy_number_cnv_plot_centromere_scatter_handoff.md`.
+
+Current report:
+`docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
+
+CN plot V2 is materialized for 0615 as a visualization-only supplement:
+
+- `*.final_cnv_cn.svg` is now 2560px wide with a white plotting panel, no
+  alternating chromosome background rectangles, wider chromosome gaps, explicit
+  chromosome separators, 50Mb ticks, centromere-only grey regions, visible
+  per-bin `cn-bin-scatter` points, and a dup/del-only legend.
+- `*.plot_bins_cn.tsv` now records event-anchored CN proxy values and source
+  labels, including centromere blank bins.
+- The proxy is not an independent bin-level CN caller and must not be used to
+  change Branch B V2 filtering or report-event status.
+- CN trend lines are horizontal event-level segments colored by event direction:
+  `dup=#1d4ed8`, `del=#ef4444`.
+
+Immediate next steps:
+
+1. Use the updated z/CN plot pair for manual sample review, starting with 56 if
+   continuing the previous 0615 sequence.
+2. Compare the red event-level CN trend against the per-bin CN proxy scatter to
+   identify events driven by sparse bins versus events with coherent bin-level
+   support.
+3. Treat grey centromere regions as visual caution zones, not automatic
+   filters. Current 0615 inputs still lack centromere-only columns, so these
+   grey blanks use hg19 centromere coordinates as visualization fallback; the
+   combined gap/telomere field is no longer used for CN plot background.
+4. Any candidate-level filter/demotion proposal still requires Y/H/G locked
+   truth ablation with FN=0, H6 chr21 retained, and G2 truth visible.
+
 ## 2026-06-22 0615 High-Confidence Review Next Gate
 
 Current handoff:
@@ -27,7 +468,7 @@ Immediate next steps:
 ## 2026-06-22 Report Main And CNV Plot Next Gate
 
 Current handoff:
-`docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`.
+`docs/handoff/2026-06-22_1025_copy_number_cnv_plot_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
@@ -41,6 +482,13 @@ The report layer now has a usable development contract:
 - zero-report-event samples remain visible in sample summaries;
 - every materialized sample has a calibrated-z WisecondorX-style CNV plot and
   plot-bin TSV.
+- the current plot style uses yellow duplication bins, blue deletion bins, grey
+  neutral bins, and red horizontal `report-z-trend` lines only across final
+  report event intervals.
+- every 0615 sample now also has a CN proxy plot and CN bin table. Scatter is
+  colored by each bin's `calibrated_z`-derived CN proxy using the 1.7/2.3
+  threshold band; the plot is a visualization supplement and does not change
+  report-event logic.
 
 The next gate is candidate-level interpretation of the remaining report burden,
 not another broad threshold.
@@ -55,7 +503,9 @@ Immediate next steps:
    - ref-MAD stability;
    - clean support;
    - acrocentric/telomere/centromere/high-repeat risk;
-   - matching visual trend in the `.final_cnv.svg`.
+   - matching red horizontal report-event trend in the `.final_cnv.svg`;
+   - bin-level CN proxy scatter plus event-level horizontal CN trend in
+     `.final_cnv_cn.svg` when copy-number visualization helps sample review.
 2. Use Y1-Y8, H1-H6, and G1-G8 locked truth as the no-FN guardrail.
 3. Keep H6 chr21 and G2 locked truth visible.
 4. Treat 2026-06-15 as burden/context only until locked truth labels exist.
@@ -69,6 +519,8 @@ Current open issue:
 - 2026-06-15 still has 71 autosomal report events across 5 samples. This is too
   high for a final-style report, but broad filtering risks FN. The next
   reduction must be candidate-level and truth-safe.
+- CN plots can make bin-level coherence and event-level amplitude easier to
+  review, but the CN proxy must not be used as an independent filter.
 
 ## 2026-06-22 Lowres Branch B/S Next Gate
 
