@@ -41,7 +41,7 @@ derive production Branch B V2 filters.
 ## 2026-06-22 Report Main Convergence And CNV Plot
 
 Current handoff:
-`docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`.
+`docs/handoff/2026-06-22_0941_cnv_plot_wisecondor_style_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
@@ -69,6 +69,10 @@ Implemented contract:
 - Plot TSV outputs are written as
   `wisecondorx/cnv/plots/{sample}.plot_bins.tsv` with states limited to
   `dup`, `del`, and `neutral`.
+- Plot SVGs no longer draw genome-wide or chromosome-wide smooth polylines.
+  They draw red horizontal `report-z-trend` lines only over final autosomal
+  report event intervals. Duplication bins are yellow, deletion bins are blue,
+  and neutral bins remain grey.
 
 Remote validation:
 
@@ -77,6 +81,8 @@ Remote validation:
   `branch_b_v2_benchmark branch_s_review cnv_report`.
 - Reports were rematerialized by forcing the real report rule:
   `--forcerun cnv_report_summary cnv_report`.
+- The 0615 plot style refresh was rematerialized with:
+  `--forcerun cnv_branch_ab_plot cnv_report`.
 
 Materialized acceptance:
 

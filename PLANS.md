@@ -27,7 +27,7 @@ Immediate next steps:
 ## 2026-06-22 Report Main And CNV Plot Next Gate
 
 Current handoff:
-`docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`.
+`docs/handoff/2026-06-22_0941_cnv_plot_wisecondor_style_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
@@ -41,6 +41,9 @@ The report layer now has a usable development contract:
 - zero-report-event samples remain visible in sample summaries;
 - every materialized sample has a calibrated-z WisecondorX-style CNV plot and
   plot-bin TSV.
+- the current plot style uses yellow duplication bins, blue deletion bins, grey
+  neutral bins, and red horizontal `report-z-trend` lines only across final
+  report event intervals.
 
 The next gate is candidate-level interpretation of the remaining report burden,
 not another broad threshold.
@@ -55,7 +58,7 @@ Immediate next steps:
    - ref-MAD stability;
    - clean support;
    - acrocentric/telomere/centromere/high-repeat risk;
-   - matching visual trend in the `.final_cnv.svg`.
+   - matching red horizontal report-event trend in the `.final_cnv.svg`.
 2. Use Y1-Y8, H1-H6, and G1-G8 locked truth as the no-FN guardrail.
 3. Keep H6 chr21 and G2 locked truth visible.
 4. Treat 2026-06-15 as burden/context only until locked truth labels exist.

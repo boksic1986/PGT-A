@@ -12,14 +12,14 @@ from pgta.core.logging import setup_logger
 
 AUTOSOME_ORDER = {f"chr{index}": index for index in range(1, 23)}
 CHROM_ORDER = {**AUTOSOME_ORDER, "chrX": 23, "chrY": 24}
-STATE_COLOR = {"gain": "#dc2626", "loss": "#2563eb", "neutral": "#64748b"}
-REPORT_STATE_COLOR = {"dup": "#dc2626", "del": "#2563eb", "neutral": "#64748b"}
+STATE_COLOR = {"gain": "#facc15", "loss": "#2563eb", "neutral": "#64748b"}
+REPORT_STATE_COLOR = {"dup": "#facc15", "del": "#2563eb", "neutral": "#64748b"}
 NEUTRAL_COLOR = "#64748b"
-TREND_COLOR = "#b91c1c"
+TREND_COLOR = "#dc2626"
 
-# Plot idiom reference: cnvpro/cnvseqpipe/CNVcalling.R keeps neutral points subdued,
-# highlights final gain/loss segments, and overlays a smoothed trend. The runtime
-# implementation stays here to avoid coupling PGT-A reports to cnvpro HDF5/R schema.
+# Plot idiom reference: cnvpro/cnvseqpipe/CNVcalling.R keeps neutral points subdued
+# and highlights final gain/loss segments. The runtime implementation stays here
+# to avoid coupling PGT-A reports to cnvpro HDF5/R schema.
 
 
 def parse_args():
@@ -228,47 +228,39 @@ def render_event_region(row, layout, total_span, left, plot_width, y, height, co
     )
 
 
-def smooth_signal_by_chrom(frame):
-    smoothed_frames = []
-    for chrom, chrom_df in frame.groupby("chrom", sort=False):
-        ordered = chrom_df.sort_values("bin_index").copy()
-        n_bins = len(ordered)
-        if n_bins == 0:
-            continue
-        window = max(3, int(round(n_bins / 40.0)))
-        if window % 2 == 0:
-            window += 1
-        window = min(window, 101)
-        ordered["smooth_signal"] = (
-            ordered["plot_signal"]
-            .rolling(window=window, center=True, min_periods=1)
-            .median()
-            .clip(lower=-12.0, upper=12.0)
-        )
-        smoothed_frames.append(ordered)
-    if not smoothed_frames:
-        return frame.assign(smooth_signal=frame["plot_signal"])
-    return pd.concat(smoothed_frames, ignore_index=True)
-
-
-def render_smooth_polylines(frame, layout, total_span, left, plot_width, mid_y, half_h):
+def render_report_event_trend_lines(bins_df, final_events, layout, total_span, left, plot_width, mid_y, half_h):
     chunks = []
-    for chrom, chrom_df in frame.groupby("chrom", sort=False):
-        if chrom not in layout or chrom_df.empty:
+    if final_events.empty:
+        return chunks
+    for row in final_events.itertuples(index=False):
+        row_dict = row._asdict()
+        chrom = str(row_dict.get("chrom", ""))
+        if chrom not in layout:
             continue
-        points = []
-        for row in chrom_df.itertuples(index=False):
-            center = int(row.start + ((row.end - row.start) / 2))
-            x = scale_x(genome_position(row.chrom, center, layout), total_span, left, plot_width)
-            y = scale_y(row.smooth_signal, mid_y, half_h)
-            points.append(f"{x:.2f},{y:.2f}")
-        if len(points) >= 2:
-            chunks.append(
-                '<polyline points="'
-                + " ".join(points)
-                + f'" fill="none" stroke="{TREND_COLOR}" stroke-width="2.0" opacity="0.92">'
-                + f"<title>Smoothed signal trend {html.escape(str(chrom))}</title></polyline>"
-            )
+        event_bins = bins_df[
+            bins_df["chrom"].astype(str).eq(chrom)
+            & bins_df["end"].astype(int).gt(int(row_dict.get("start")))
+            & bins_df["start"].astype(int).lt(int(row_dict.get("end")))
+        ].copy()
+        if event_bins.empty:
+            continue
+        trend_value = float(event_bins["plot_signal"].median())
+        x1 = scale_x(genome_position(chrom, int(row_dict.get("start")), layout), total_span, left, plot_width)
+        x2 = scale_x(genome_position(chrom, int(row_dict.get("end")), layout), total_span, left, plot_width)
+        if x2 <= x1:
+            continue
+        y = scale_y(trend_value, mid_y, half_h)
+        label = (
+            f"report z trend {row_dict.get('report_state')} "
+            f"{chrom}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}; "
+            f"median z={trend_value:.3f}"
+        )
+        chunks.append(
+            f'<line class="report-z-trend" x1="{x1:.2f}" y1="{y:.2f}" '
+            f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{TREND_COLOR}" '
+            f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
+            f"<title>{html.escape(label)}</title></line>"
+        )
     return chunks
 
 
@@ -347,7 +339,6 @@ def build_cnv_plot_svg(
         svg.append(render_event_region(row_dict, layout, total_span, left, plot_width, signal_top, signal_height, color, label))
 
     plot_bins = downsample_bins(bins, max_points=max_points)
-    smooth_bins = smooth_signal_by_chrom(plot_bins)
     point_chunks = []
     for row in plot_bins.itertuples(index=False):
         x = scale_x(genome_position(row.chrom, int(row.start + ((row.end - row.start) / 2)), layout), total_span, left, plot_width)
@@ -356,7 +347,7 @@ def build_cnv_plot_svg(
         opacity = 0.82 if row.report_state in {"dup", "del"} else 0.62
         point_chunks.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="1.25" fill="{color}" opacity="{opacity:.2f}"/>')
     svg.extend(point_chunks)
-    svg.extend(render_smooth_polylines(smooth_bins, layout, total_span, left, plot_width, mid_y, half_h))
+    svg.extend(render_report_event_trend_lines(bins, final_events, layout, total_span, left, plot_width, mid_y, half_h))
 
     legend_x = left
     legend_y = height - 62
@@ -364,7 +355,7 @@ def build_cnv_plot_svg(
         ("dup", REPORT_STATE_COLOR["dup"]),
         ("del", REPORT_STATE_COLOR["del"]),
         ("neutral bin", NEUTRAL_COLOR),
-        ("smooth z trend", TREND_COLOR),
+        ("report z trend", TREND_COLOR),
     ]
     for idx, (label, color) in enumerate(legend_items):
         x = legend_x + idx * 180

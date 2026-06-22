@@ -1,5 +1,4 @@
 import re
-import re
 from pathlib import Path
 
 import pandas as pd
@@ -66,7 +65,10 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
     assert plot_bins.loc[plot_bins["report_state"].eq("del"), "z"].tolist() == [-3.4, -3.1]
     assert 2_000_000 not in plot_bins.loc[plot_bins["chrom"].eq("chr2"), "start"].tolist()
     assert 9.9 not in plot_bins["z"].tolist()
-    assert "smooth z trend" in svg
+    assert "report z trend" in svg
+    assert "smooth z trend" not in svg
+    assert "<polyline" not in svg
+    assert svg.count('class="report-z-trend"') == 2
     assert "Branch A" not in svg
     assert "Branch B" not in svg
     assert "report_strong" not in svg
@@ -78,8 +80,9 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
     assert "chr1" in svg
     assert '<circle cx="' in svg
     assert re.search(r'<circle[^>]+fill="#64748b"', svg)
-    assert re.search(r'<circle[^>]+fill="#dc2626"', svg)
+    assert re.search(r'<circle[^>]+fill="#facc15"', svg)
     assert re.search(r'<circle[^>]+fill="#2563eb"', svg)
+    assert re.search(r'<line[^>]+class="report-z-trend"[^>]+stroke="#dc2626"', svg)
     assert "dup" in svg
     assert "del" in svg
     assert "neutral bin" in svg

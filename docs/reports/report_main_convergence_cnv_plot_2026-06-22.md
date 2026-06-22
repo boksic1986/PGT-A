@@ -65,7 +65,12 @@ Rules:
   `report_state`
 - `report_state` is limited to `dup`, `del`, `neutral`
 - only final autosomal report events are highlighted
-- SVG legend is limited to `dup`, `del`, `neutral bin`, `smooth z trend`
+- SVG legend is limited to `dup`, `del`, `neutral bin`, `report z trend`
+- `dup` bins use WisecondorX-style yellow
+- `del` bins use blue
+- no genome-wide smooth polyline is drawn
+- each final autosomal report event gets one red horizontal report-z trend line,
+  spanning only that event interval and using the event median `calibrated_z`
 
 ## Remote Validation
 
@@ -141,9 +146,68 @@ Plot contract checks:
 - all cohorts have matching `.final_cnv.svg` and `.plot_bins.tsv` per sample
 - all plot TSV files contain required columns
 - `report_state` values are restricted to `dup`, `del`, `neutral`
-- SVG legend contains only `dup`, `del`, `neutral bin`, `smooth z trend`
+- SVG legend contains only `dup`, `del`, `neutral bin`, `report z trend`
 - SVG does not contain Branch A/B, internal, filtered, mask, or rejected legend
   terms
+
+## 2026-06-22 Plot Style Refinement
+
+This follow-up changed only CNV plot rendering. Branch A, Branch B V2, Branch S,
+report classification, and reference outputs were unchanged.
+
+Updated rendering:
+
+- removed chromosome/global smoothed polylines
+- added red horizontal `report-z-trend` lines only over final autosomal report
+  event intervals
+- changed duplication highlight color to WisecondorX-style yellow
+- kept deletion highlight color blue
+- kept neutral bins grey
+
+Remote validation:
+
+```text
+PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
+/biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
+  tests/unit/test_branch_b_plot.py \
+  tests/unit/test_cnv_report.py \
+  tests/unit/test_branch_ab_phase12_workflow_contract.py -q
+```
+
+Result:
+
+```text
+32 passed
+```
+
+0615 plot rematerialization:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 4 --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+9 of 9 steps (100%) done
+Complete log: .snakemake/log/2026-06-22T093707.721304.snakemake.log
+```
+
+0615 SVG content check after local sync:
+
+| sample | report trend lines | polyline present | smooth legend present | dup yellow | del blue | red trend |
+|---|---:|---|---|---|---|---|
+| JZ26125843-56-56 | 7 | false | false | true | true | true |
+| JZ26125844-59-59 | 11 | false | false | true | true | true |
+| JZ26125845-60-60 | 23 | false | false | true | true | true |
+| JZ26125846-61-61 | 18 | false | false | true | true | true |
+| JZ26125847-62-62 | 12 | false | false | true | true | true |
+
+Local synced SVG path:
+
+`D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv.svg`
 
 ## Interpretation
 

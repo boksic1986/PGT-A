@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`
+2. `docs/handoff/2026-06-22_0941_cnv_plot_wisecondor_style_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,8 +23,8 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md
-previous_handoff: docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md
+active_handoff: docs/handoff/2026-06-22_0941_cnv_plot_wisecondor_style_handoff.md
+previous_handoff: docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
@@ -38,6 +38,7 @@ report_status: 0615_high_confidence_review_candidates_recorded_development_only
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
 - `docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`
 - `docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md`
+- `docs/handoff/2026-06-22_0941_cnv_plot_wisecondor_style_handoff.md`
 - `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`
 - `docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`
 - `docs/reports/h7_h16_reference_cohort_decision_2026-06-20.md`
@@ -116,7 +117,10 @@ visible.
 The CNV plot contract is fixed to `calibrated_z` only. Missing or non-finite
 bin values are skipped, and missing `calibrated_z` is an error. Each sample has
 `{sample}.final_cnv.svg` and `{sample}.plot_bins.tsv`; plot states are limited
-to `dup`, `del`, and `neutral`.
+to `dup`, `del`, and `neutral`. The current SVG style uses yellow `dup` bins,
+blue `del` bins, grey neutral bins, and red horizontal `report-z-trend` lines
+only across final autosomal report event intervals. It does not draw genome-wide
+or chromosome-wide smooth polylines.
 
 Materialized report-layer acceptance:
 
