@@ -239,6 +239,24 @@ def boolean_like_series(series):
 def structural_gap_mask(bins_df):
     if bins_df.empty:
         return pd.Series(dtype=bool, index=bins_df.index)
+    centromere_mask = pd.Series(False, index=bins_df.index)
+    centromere_columns_seen = False
+    for column in ("is_near_centromere", "near_centromere", "is_centromere", "is_centromere_bin"):
+        if column in bins_df.columns:
+            centromere_columns_seen = True
+            centromere_mask = centromere_mask | boolean_like_series(bins_df[column])
+    for column in ("centromere_overlap_fraction", "centromere_fraction", "centromere_bin_fraction"):
+        if column in bins_df.columns:
+            centromere_columns_seen = True
+            overlap = pd.to_numeric(bins_df[column], errors="coerce").fillna(0.0)
+            centromere_mask = centromere_mask | overlap.ge(0.5)
+    if "nearest_centromere_distance_bp" in bins_df.columns:
+        centromere_columns_seen = True
+        distance = pd.to_numeric(bins_df["nearest_centromere_distance_bp"], errors="coerce")
+        centromere_mask = centromere_mask | distance.le(5_000_000)
+    if centromere_columns_seen:
+        return centromere_mask
+
     mask = pd.Series(False, index=bins_df.index)
     if "is_gap_centromere_telomere" in bins_df.columns:
         mask = mask | boolean_like_series(bins_df["is_gap_centromere_telomere"])
@@ -461,10 +479,6 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         item = cn_layout[chrom]
         x1 = scale_x(item["offset"], cn_total_span, left, plot_width)
         x2 = scale_x(item["offset"] + item["span"], cn_total_span, left, plot_width)
-        fill = "#f8fafc" if idx % 2 == 0 else "#eef2f7"
-        svg.append(
-            f'<rect class="chrom-background" x="{x1:.2f}" y="{signal_top:.2f}" width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="{fill}"/>'
-        )
         svg.append(
             f'<line x1="{x1:.2f}" y1="{signal_top:.2f}" x2="{x1:.2f}" y2="{signal_top + signal_height:.2f}" stroke="#cbd5e1" stroke-width="0.8"/>'
         )
@@ -511,7 +525,10 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         y = scale_copy_number_y(row.copy_number, mid_y, half_h)
         color = CN_REPORT_STATE_COLOR.get(str(row.report_state), NEUTRAL_COLOR)
         opacity = 0.82 if row.report_state in {"dup", "del"} else 0.62
-        svg.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="1.25" fill="{color}" opacity="{opacity:.2f}"/>')
+        svg.append(
+            f'<circle class="cn-bin-scatter" cx="{x:.2f}" cy="{y:.2f}" '
+            f'r="1.25" fill="{color}" opacity="{opacity:.2f}"/>'
+        )
     svg.extend(render_report_event_cn_trend_lines(cn_bins, final_events, cn_layout, cn_total_span, left, plot_width, mid_y, half_h))
 
     legend_x = left

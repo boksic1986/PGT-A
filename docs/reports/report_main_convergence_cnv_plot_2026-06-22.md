@@ -202,7 +202,8 @@ PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
 /biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
   tests/unit/test_branch_b_plot.py \
   tests/unit/test_cnv_report.py \
-  tests/unit/test_branch_ab_phase12_workflow_contract.py -q
+  tests/unit/test_branch_ab_phase12_workflow_contract.py \
+  tests/unit/test_current_context_index.py -q
 ```
 
 Result:
@@ -525,3 +526,103 @@ Complete log: .snakemake/log/2026-06-22T112510.010306.snakemake.log
 | JZ26125845-60-60 | true | true | true | 47 | 28 | 19 | 0 | false |
 | JZ26125846-61-61 | true | true | true | 42 | 20 | 22 | 0 | false |
 | JZ26125847-62-62 | true | true | true | 34 | 23 | 11 | 0 | false |
+
+## 2026-06-22 CN Plot Scatter And White Background Fix
+
+This follow-up supersedes the alternating chromosome background used in the
+previous CN SVG. The change is visualization-only and does not alter Branch A,
+Branch B V2, Branch S, report-event classification, filtering, mapping, or
+reference outputs.
+
+Updated rendering:
+
+- CN plot panel remains white; no `chrom-background` rectangles are emitted.
+- Alternating fills `#f8fafc` / `#eef2f7` are absent from the CN SVG.
+- Grey fill `#cbd5e1` is reserved for blank regions. The code now prioritizes
+  centromere-only fields when present; current 0615 calibrated-bin inputs lack
+  those fields, so the materialized output uses the existing structure
+  gap/centromere/telomere fallback.
+- Every non-blank bin is drawn as a `cn-bin-scatter` point.
+- Scatter colors are `neutral=#64748b`, `dup=#1d4ed8`, and `del=#ef4444`.
+- CN trend lines remain horizontal event-level segments colored by state:
+  `dup=#1d4ed8`, `del=#ef4444`.
+- Legend remains limited to `dup` and `del`.
+
+TDD red run:
+
+```text
+PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
+/biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
+  tests/unit/test_branch_b_plot.py -q
+```
+
+Result:
+
+```text
+2 failed, 2 passed
+```
+
+Expected failures confirmed that the old implementation still emitted
+`chrom-background` and did not emit `cn-bin-scatter`.
+
+Remote validation:
+
+```text
+PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
+/biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
+  tests/unit/test_branch_b_plot.py \
+  tests/unit/test_cnv_report.py \
+  tests/unit/test_branch_ab_phase12_workflow_contract.py -q
+```
+
+Result:
+
+```text
+37 passed in 1.01s
+```
+
+0615 dry-run:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 1 -n --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+Only 5 cnv_branch_ab_plot jobs, cnv_report_summary, cnv_report,
+collect_runtime_tracking, and all were planned. No mapping or reference build
+jobs were requested.
+```
+
+0615 materialization:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 4 --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+9 of 9 steps (100%) done
+Complete log: .snakemake/log/2026-06-22T115301.719875.snakemake.log
+```
+
+0615 CN SVG check:
+
+| sample | width 2560 | no chrom background | no alternating fill | scatter count | neutral/dup/del scatter | grey blanks | old red CN trend | polyline |
+|---|---|---|---|---:|---|---:|---:|---|
+| JZ26125843-56-56 | true | true | true | 3600 | true | 544 | 0 | false |
+| JZ26125844-59-59 | true | true | true | 3600 | true | 544 | 0 | false |
+| JZ26125845-60-60 | true | true | true | 3600 | true | 544 | 0 | false |
+| JZ26125846-61-61 | true | true | true | 3600 | true | 544 | 0 | false |
+| JZ26125847-62-62 | true | true | true | 3600 | true | 544 | 0 | false |
+
+Local synced outputs:
+
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`

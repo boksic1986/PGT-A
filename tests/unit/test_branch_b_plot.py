@@ -108,19 +108,21 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
     assert 'fill="#1f2937"' not in cn_svg
     assert 'fill="#263244"' not in cn_svg
     assert 'fill="#202b3a"' not in cn_svg
-    assert re.search(r'<rect[^>]+class="chrom-background"[^>]+fill="#f8fafc"', cn_svg)
-    assert re.search(r'<rect[^>]+class="chrom-background"[^>]+fill="#eef2f7"', cn_svg)
+    assert 'class="chrom-background"' not in cn_svg
+    assert 'fill="#f8fafc"' not in cn_svg
+    assert 'fill="#eef2f7"' not in cn_svg
     assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#1d4ed8"', cn_svg)
     assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#ef4444"', cn_svg)
     assert not re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#dc2626"', cn_svg)
-    assert re.search(r'<circle[^>]+fill="#1d4ed8"', cn_svg)
-    assert re.search(r'<circle[^>]+fill="#ef4444"', cn_svg)
-    assert re.search(r'<circle[^>]+fill="#64748b"', cn_svg)
+    assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#1d4ed8"', cn_svg)
+    assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#ef4444"', cn_svg)
+    assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#64748b"', cn_svg)
     assert "Branch A" not in cn_svg
     assert "Branch B" not in cn_svg
     assert "internal" not in cn_svg
     assert "filtered" not in cn_svg
     assert "mask" not in cn_svg.lower()
+    assert "cytoband" not in cn_svg.lower()
     assert "neutral bin" not in cn_svg
     assert "report CN trend" not in re.sub(r"<title>.*?</title>", "", cn_svg)
     assert cn_bins.loc[cn_bins["report_state"].eq("neutral"), "copy_number"].tolist() == [2.0]
@@ -182,14 +184,17 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
     assert 'class="structure-gap-blank" x="' in cn_svg
     assert 'fill="#0f172a" opacity="0.96"' not in cn_svg
     assert "50Mb" in cn_svg
-    assert cn_svg.count("<circle") == 59
+    assert cn_svg.count('class="cn-bin-scatter"') == 59
     assert cn_svg.count('class="report-cn-trend"') == 2
     assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#1d4ed8"', cn_svg)
     assert pd.isna(gap_row["copy_number"])
     assert gap_row["copy_number_source"] == "structure_gap_blank"
     assert cn_bins.loc[cn_bins["copy_number_source"].eq("event_scaled_calibrated_z_proxy"), "copy_number"].nunique() > 1
     assert "#1d4ed8" in cn_svg
-    assert not re.search(r'<circle[^>]+fill="#ef4444"', cn_svg)
+    assert 'class="chrom-background"' not in cn_svg
+    assert 'fill="#f8fafc"' not in cn_svg
+    assert 'fill="#eef2f7"' not in cn_svg
+    assert not re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#ef4444"', cn_svg)
 
 
 def test_copy_number_plot_falls_back_to_a_ratio_and_refuses_missing_cn(tmp_path):

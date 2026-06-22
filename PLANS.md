@@ -3,16 +3,17 @@
 ## 2026-06-22 CN Plot V2 Review Next Gate
 
 Current handoff:
-`docs/handoff/2026-06-22_1130_copy_number_cnv_plot_background_fix_handoff.md`.
+`docs/handoff/2026-06-22_1155_copy_number_cnv_plot_scatter_background_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
 
 CN plot V2 is materialized for 0615 as a visualization-only supplement:
 
-- `*.final_cnv_cn.svg` is now 2560px wide with a white/light plotting
-  background, wider chromosome gaps, 50Mb ticks, grey structural gap blanks,
-  and dup/del-only legend.
+- `*.final_cnv_cn.svg` is now 2560px wide with a white plotting panel, no
+  alternating chromosome background rectangles, wider chromosome gaps, 50Mb
+  ticks, grey structure blank regions, per-bin `cn-bin-scatter` points, and a
+  dup/del-only legend.
 - `*.plot_bins_cn.tsv` now records event-anchored CN proxy values and source
   labels, including structural gap blanks.
 - The proxy is not an independent bin-level CN caller and must not be used to
@@ -27,8 +28,9 @@ Immediate next steps:
 2. Compare the red event-level CN trend against the per-bin CN proxy scatter to
    identify events driven by sparse bins versus events with coherent bin-level
    support.
-3. Treat structural gap blank regions as visual caution zones, not automatic
-   filters.
+3. Treat grey structure blank regions as visual caution zones, not automatic
+   filters. Current 0615 inputs still lack centromere-only columns, so these
+   grey blanks use the existing structure gap/centromere/telomere fallback.
 4. Any candidate-level filter/demotion proposal still requires Y/H/G locked
    truth ablation with FN=0, H6 chr21 retained, and G2 truth visible.
 
