@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`
+2. `docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,19 +23,21 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md
-previous_handoff: docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md
+active_handoff: docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md
+previous_handoff: docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_visibility_materialized_development_only
 branch_s_status: sex_aware_branch_s_overlay_not_final
-report_status: cnv_z_and_sex_aware_cn_plots_materialized_development_only
+report_status: branch_a_ref_z_and_sex_aware_cn_plots_materialized_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/branch_a_ref_z_plot_sex_chrom_cn_trend_2026-06-22.md`
+- `docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md`
 - `docs/reports/sex_aware_cn_z_plot_branch_s_overlay_2026-06-22.md`
 - `docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`
 - `docs/reports/copy_number_centering_and_sca_fix_2026-06-22.md`
@@ -87,6 +89,51 @@ report_status: cnv_z_and_sex_aware_cn_plots_materialized_development_only
 - `docs/reports/branch_ab_v2_rnd_constraints_2026-06-18.md`
 
 ## Current Module State
+
+### Branch A Ref-Z Plot And Sex-Chrom CN Trend
+
+The active plot contract is now documented in
+`docs/reports/branch_a_ref_z_plot_sex_chrom_cn_trend_2026-06-22.md`.
+
+This loop supersedes the z-plot limitation from
+`docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`.
+The previous combined plot used Branch B residual `calibrated_z` as the z-axis.
+The active z plot now uses per-bin `branch_a_ref_z`:
+
+`branch_a_ref_z = (normalized_signal - ref_bin_stability.ref_median) / max(1.4826 * ref_mad, min_ref_scale)`
+
+The z trend line for report events uses direction quantiles, not median:
+
+- gain/dup: `Q75(branch_a_ref_z)`;
+- loss/del: `Q25(branch_a_ref_z)`.
+
+This preserves normal points inside tolerated 2Mb merge gaps while making the
+event-level Branch A direction visible. `plot_bins.tsv` now carries
+`branch_a_ref_z`, `residual_calibrated_z`, `z_source`, `ref_z_scale`, and
+`ref_z_scale_source`.
+
+Branch S `sca_report_review_event` intervals still overlay chrX/chrY. The CN
+plot now additionally draws sex-aware Branch S CN trend lines only when the
+sex-chromosome bins are interpretable and the median CN deviates from expected
+CN by the visual threshold. G8 chrY remains
+`sex_chrom_ref_ratio_not_interpretable`.
+
+Remote validation:
+
+- pytest: `58 passed in 2.06s`;
+- G1-G8 dry-run and 0615 dry-run parsed successfully without mapping/reference
+  rebuild;
+- G1-G8 materialization completed: `20 of 20 steps (100%) done`;
+- 0615 materialization completed: `14 of 14 steps (100%) done`.
+
+Local synchronized plot paths:
+
+- `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+This remains a visualization/report-support update only. It does not change
+Branch A calling, Branch B V2 filtering, Branch S classifier, reference, or
+report-event classification.
 
 ### 0615 High-Confidence Review Candidates
 

@@ -1,5 +1,48 @@
 # PLANS.md
 
+## 2026-06-22 Branch A Ref-Z Plot Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md`.
+
+Current report:
+`docs/reports/branch_a_ref_z_plot_sex_chrom_cn_trend_2026-06-22.md`.
+
+The active z plot now shows Branch A-oriented per-bin reference deviation
+(`branch_a_ref_z`) instead of Branch B residual `calibrated_z`. Branch S CN
+trend lines are visible for interpretable sex-chromosome review events.
+
+Current outputs:
+
+- G1-G8:
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins.tsv`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins_cn.tsv`
+- 2026-06-15:
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins.tsv`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+
+Immediate next steps:
+
+1. Review G1-G8 first because it has locked truth. Use `plot_bins.tsv` to
+   inspect `branch_a_ref_z`, not residual `calibrated_z`, when judging whether
+   the visual signal matches Branch A.
+2. Confirm G3/G5 X-loss with Branch S summary/scores/evidence plus CN trend
+   lines. Do not treat the modest chrX `branch_a_ref_z` magnitude as a failure
+   of the autosomal Branch A plot.
+3. Treat G8 chrY as `sex_chrom_ref_ratio_not_interpretable`; do not infer Y
+   copy number from current ratio-CN visualization.
+4. Use 0615 plots only for burden/context review. 0615 has no truth and must
+   not be used to derive thresholds.
+5. If report-event reduction resumes, any plot-derived demotion must be
+   benchmarked against Y1-Y8, H1-H6, and G1-G8 with FN=0, H6 chr21 visible, and
+   G2 truth not filtered.
+6. If final SCA reporting is required, design a separate Branch S truth gate
+   before promoting current review overlays.
+
 ## 2026-06-22 Sex-Aware CN/Z Plot Review Next Gate
 
 Current handoff:

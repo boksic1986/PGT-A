@@ -1,5 +1,74 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Branch A Ref-Z Plot And Sex-Chrom CN Trend
+
+Current handoff:
+`docs/handoff/2026-06-22_1618_branch_a_ref_z_plot_sex_chrom_cn_trend_handoff.md`.
+
+Current report:
+`docs/reports/branch_a_ref_z_plot_sex_chrom_cn_trend_2026-06-22.md`.
+
+This loop supersedes the z-plot limitation in
+`docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`.
+It updates only visualization inputs and output TSV fields. It does not modify
+Branch A, autosomal Branch B V2 filtering, Branch S classifier, reference,
+mapping, or report-event classification.
+
+Active plot contract:
+
+- z plot y-axis is now per-bin `branch_a_ref_z`, not downstream residual
+  `calibrated_z`.
+- `branch_a_ref_z = (normalized_signal - ref_median) / ref_scale`, where
+  `ref_scale = max(1.4826 * ref_mad, min_ref_scale)`.
+- `min_ref_scale` is derived from autosomal non-gap reference MAD scale p10 in
+  real full-genome runs.
+- structure/hard-mask/invalid reference bins are not plotted and are marked in
+  `z_source`.
+- `plot_bins.tsv` includes `branch_a_ref_z`, `residual_calibrated_z`,
+  `z_source`, `ref_z_scale`, and `ref_z_scale_source`.
+- event z trend lines use direction quantiles: gain/dup uses Q75 and loss/del
+  uses Q25. Median is no longer used for event z trend visualization.
+- Branch S `sca_report_review_event` intervals remain on chrX/chrY. CN plots
+  now draw Branch S CN trend lines only when sex-aware bins are interpretable
+  and the median CN deviates from expected CN by the visual threshold.
+- G8 chrY remains `sex_chrom_ref_ratio_not_interpretable`; no giant chrY CN
+  trend is drawn.
+
+Remote validation:
+
+- Remote pytest:
+  `tests/unit/test_branch_b_plot.py`,
+  `tests/unit/test_branch_s_shadow.py`,
+  `tests/unit/test_cnv_report.py`, and
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`: `58 passed in
+  2.06s`.
+- G1-G8 dry-run for `cnv_branch_s_shadow cnv_branch_ab_plot cnv_report`
+  parsed successfully and did not request mapping/reference rebuild.
+- 0615 dry-run for `cnv_branch_s_shadow cnv_branch_ab_plot cnv_report` parsed
+  successfully and did not request mapping/reference rebuild.
+- G1-G8 materialization completed: `20 of 20 steps (100%) done`.
+- 0615 materialization completed: `14 of 14 steps (100%) done`.
+
+Materialized acceptance:
+
+- G1-G8: 8/8 z SVG, 8/8 CN SVG, 8/8 z TSV, 8/8 CN TSV.
+- 0615: 5/5 z SVG, 5/5 CN SVG, 5/5 z TSV, 5/5 CN TSV.
+- G1/G4/G6 and other autosomal/whole-chromosome truth events show visible
+  same-direction `branch_a_ref_z` signal.
+- G3/G5 X-loss have Branch S z regions and Branch S CN trend lines.
+- G8 chrY is still marked `sex_chrom_ref_ratio_not_interpretable`.
+
+Local synced outputs:
+
+- `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+Boundary:
+
+- `branch_a_ref_z` and Branch S CN trend lines are visualization-only.
+- No report-event counts, Branch B V2 filtering decisions, Branch S classes, or
+  TP/FN/FP metrics are changed by this loop.
+
 ## 2026-06-22 Sex-Aware CN/Z Plot And Branch S Overlay
 
 Current handoff:

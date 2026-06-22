@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -21,11 +22,16 @@ def _ref_bins(rows):
             "start": [row[2] for row in rows],
             "end": [row[3] for row in rows],
             "ref_median": [_norm_signal(row[4]) for row in rows],
+            "ref_mad": [row[5] if len(row) > 5 else 0.1 for row in rows],
         }
     )
 
 
-def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
+def _ref_z(sample_cpm, ref_cpm=100, ref_mad=0.1):
+    return (_norm_signal(sample_cpm) - _norm_signal(ref_cpm)) / (1.4826 * ref_mad)
+
+
+def test_build_cnv_plot_svg_uses_branch_a_ref_z_and_writes_plot_bins(tmp_path):
     bins = pd.DataFrame(
         {
             "chrom": ["chr1", "chr1", "chr1", "chr2", "chr2", "chr2"],
@@ -102,17 +108,40 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
 
     assert "<svg" in svg
     assert "CNV final profile - Y1" in svg
-    assert set(["chrom", "start", "end", "genome_pos", "z", "report_state"]).issubset(plot_bins.columns)
+    assert set(
+        [
+            "chrom",
+            "start",
+            "end",
+            "genome_pos",
+            "z",
+            "report_state",
+            "branch_a_ref_z",
+            "residual_calibrated_z",
+            "z_source",
+            "ref_z_scale",
+            "ref_z_scale_source",
+        ]
+    ).issubset(plot_bins.columns)
     assert set(plot_bins["report_state"]) == {"dup", "del", "neutral"}
-    assert plot_bins.loc[plot_bins["report_state"].eq("dup"), "z"].tolist() == [7.2, 6.8]
-    assert plot_bins.loc[plot_bins["report_state"].eq("del"), "z"].tolist() == [-7.1, -6.6]
-    assert 2_000_000 not in plot_bins.loc[plot_bins["chrom"].eq("chr2"), "start"].tolist()
+    chr1_z = plot_bins.loc[plot_bins["chrom"].eq("chr1"), "z"].tolist()
+    assert chr1_z == pytest.approx([0.0, _ref_z(118), _ref_z(119)], abs=1e-6)
+    assert set(plot_bins.loc[plot_bins["chrom"].eq("chr1"), "z_source"]) == {
+        "branch_a_ref_median_mad_z",
+    }
+    del_bins = plot_bins.loc[plot_bins["report_state"].eq("del")].sort_values("start")
+    assert del_bins["z"].iloc[0] == pytest.approx(_ref_z(84), abs=1e-6)
+    assert pd.isna(del_bins["z"].iloc[1])
+    assert del_bins["z_source"].iloc[1] == "ref_z_unavailable_masked_or_structure_gap"
     assert 9.9 not in plot_bins["z"].tolist()
-    assert "report z trend" in svg
+    assert "branch_a_ref_z" in svg
+    assert "Q75" in svg
+    assert "Q25" in svg
+    assert "report z trend" not in svg
+    assert "median z" not in svg
     assert "smooth z trend" not in svg
     assert "<polyline" not in svg
-    assert svg.count('class="report-z-trend"') == 2
-    assert "Branch A" not in svg
+    assert svg.count('class="report-ref-z-trend"') == 2
     assert "Branch B" not in svg
     assert "report_strong" not in svg
     assert "report_weak" not in svg
@@ -125,72 +154,61 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
     assert re.search(r'<circle[^>]+fill="#64748b"', svg)
     assert re.search(r'<circle[^>]+fill="#facc15"', svg)
     assert re.search(r'<circle[^>]+fill="#2563eb"', svg)
-    assert re.search(r'<line[^>]+class="report-z-trend"[^>]+stroke="#dc2626"', svg)
+    assert re.search(r'<line[^>]+class="report-ref-z-trend"[^>]+stroke="#dc2626"', svg)
     assert "dup" in svg
     assert "del" in svg
-    assert "neutral bin" in svg
 
-    cn_svg = output_cn_svg.read_text(encoding="utf-8")
-    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
-    assert set(
-        [
-            "chrom",
-            "start",
-            "end",
-            "genome_pos",
-            "z",
-            "raw_log2r",
-            "log2r",
-            "copy_number",
-            "copy_number_centering_log2_shift",
-            "copy_number_source",
-            "cn_scatter_state",
-            "report_state",
-            "event_report_state",
-            "is_structure_gap_blank",
-        ]
-    ).issubset(cn_bins.columns)
-    assert "Copy number" in cn_svg
-    assert "calibrated z" not in cn_svg.lower()
-    assert "ratio-derived" in cn_svg
-    assert 'width="2560"' in cn_svg
-    assert "report CN trend" in cn_svg
-    assert "smooth" not in cn_svg.lower()
-    assert "<polyline" not in cn_svg
-    assert cn_svg.count('class="report-cn-trend"') == 2
-    assert 'fill="#1f2937"' not in cn_svg
-    assert 'fill="#263244"' not in cn_svg
-    assert 'fill="#202b3a"' not in cn_svg
-    assert 'class="chrom-background"' not in cn_svg
-    assert 'fill="#f8fafc"' not in cn_svg
-    assert 'fill="#eef2f7"' not in cn_svg
-    assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#1d4ed8"', cn_svg)
-    assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#ef4444"', cn_svg)
-    assert not re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#dc2626"', cn_svg)
-    assert re.search(r'<rect[^>]+class="report-cn-region"[^>]+fill="#1d4ed8"', cn_svg)
-    assert re.search(r'<rect[^>]+class="report-cn-region"[^>]+fill="#ef4444"', cn_svg)
-    assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#1d4ed8"', cn_svg)
-    assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#ef4444"', cn_svg)
-    assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#64748b"', cn_svg)
-    assert "Branch A" not in cn_svg
-    assert "Branch B" not in cn_svg
-    assert "internal" not in cn_svg
-    assert "filtered" not in cn_svg
-    assert "mask" not in cn_svg.lower()
-    assert "cytoband" not in cn_svg.lower()
-    assert "neutral bin" not in cn_svg
-    assert "report CN trend" not in re.sub(r"<title>.*?</title>", "", cn_svg)
-    assert cn_bins.loc[cn_bins["cn_scatter_state"].eq("neutral"), "copy_number"].tolist() == pytest.approx([2.0], abs=0.01)
-    assert cn_bins.loc[cn_bins["cn_scatter_state"].eq("dup"), "copy_number"].tolist() == pytest.approx([2.36, 2.38], abs=0.01)
-    assert cn_bins.loc[cn_bins["cn_scatter_state"].eq("del"), "copy_number"].tolist() == pytest.approx([1.68, 1.66], abs=0.01)
-    assert set(cn_bins.loc[cn_bins["cn_scatter_state"].eq("dup"), "copy_number_source"]) == {
-        "normalized_signal_ref_median_log2r_autosome_centered"
-    }
-    assert set(cn_bins.loc[cn_bins["cn_scatter_state"].eq("del"), "copy_number_source"]) == {
-        "normalized_signal_ref_median_log2r_autosome_centered"
-    }
-    assert cn_bins["copy_number_centering_log2_shift"].dropna().abs().max() == pytest.approx(0.0)
-    assert "calibrated_z_mosaic30_cn_proxy" not in set(cn_bins["copy_number_source"])
+
+def test_ref_z_event_trend_uses_direction_quantile_without_filling_merge_gap(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1"] * 6,
+            "bin_index": list(range(6)),
+            "start": [idx * 1_000_000 for idx in range(6)],
+            "end": [(idx + 1) * 1_000_000 for idx in range(6)],
+            "calibrated_z": [0.0] * 6,
+            "normalized_signal": [_norm_signal(value) for value in [130, 130, 100, 100, 100, 100]],
+        }
+    )
+    ref_bins = _ref_bins(
+        [("chr1", idx, idx * 1_000_000, (idx + 1) * 1_000_000, 100, 0.05) for idx in range(6)]
+    )
+    events = pd.DataFrame(
+        {
+            "event_id": ["merged_evt"],
+            "sample_id": ["Y1"],
+            "chrom": ["chr1"],
+            "start": [0],
+            "end": [6_000_000],
+            "state": ["gain"],
+            "v2_report_layer_class": ["report_event"],
+            "v2_report_visibility": ["report_strong_event"],
+            "a_zscore": [31.0],
+        }
+    )
+    output_bins = tmp_path / "Y1.plot_bins.tsv"
+    output_svg = tmp_path / "Y1.final_cnv.svg"
+
+    build_cnv_plot_svg(
+        sample_id="Y1",
+        bins_df=bins,
+        branch_b_events_df=events,
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=output_bins,
+    )
+
+    plot_bins = pd.read_csv(output_bins, sep="\t")
+    assert plot_bins["z"].tolist() == pytest.approx([_ref_z(130, ref_mad=0.05), _ref_z(130, ref_mad=0.05), 0, 0, 0, 0], abs=1e-6)
+    assert plot_bins.loc[plot_bins["start"].isin([2_000_000, 3_000_000]), "z"].tolist() == pytest.approx([0.0, 0.0])
+    svg = output_svg.read_text(encoding="utf-8")
+    assert svg.count('class="report-ref-z-trend"') == 1
+    assert "Q75 branch_a_ref_z" in svg
+    assert "valid bins=6" in svg
+    assert "a_zscore=31.000" in svg
+    assert "report z trend" not in svg
+    assert "neutral bin" in svg
 
 
 def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path):
@@ -419,7 +437,7 @@ def test_copy_number_scatter_uses_ratio_derived_bin_cn_independent_of_event_dire
     assert event_bins["cn_scatter_state"].tolist() == ["dup", "dup"]
     assert event_bins["event_report_state"].tolist() == ["del", "del"]
     assert set(event_bins["copy_number_source"]) == {"normalized_signal_ref_median_log2r_autosome_centered"}
-    assert event_bins["z"].tolist() == [7.0, 8.0]
+    assert event_bins["z"].tolist() == pytest.approx([_ref_z(118), _ref_z(120)], abs=1e-6)
 
 
 def test_copy_number_scatter_covers_all_bins_and_does_not_clip_tsv_values(tmp_path):
@@ -517,7 +535,7 @@ def test_copy_number_plot_uses_ref_median_and_refuses_z_only_cn(tmp_path):
     assert set(cn_bins["copy_number_source"]) == {"normalized_signal_ref_median_log2r_autosome_centered"}
     assert output_cn_svg.read_text(encoding="utf-8").count('class="report-cn-trend"') == 1
 
-    with pytest.raises(ValueError, match="reference bin medians|log2r|copy_number"):
+    with pytest.raises(ValueError, match="reference bin stability|reference bin medians|log2r|copy_number"):
         build_cnv_plot_svg(
             sample_id="Y1",
             bins_df=bins,
@@ -585,7 +603,7 @@ def test_copy_number_event_support_counts_use_ratio_cn_not_z(tmp_path):
     assert row["z_support_bin_count"] == 3
 
 
-def test_build_cnv_plot_svg_requires_calibrated_z_without_fallback(tmp_path):
+def test_build_cnv_plot_svg_requires_ref_stability_for_ref_z_without_fallback(tmp_path):
     bins = pd.DataFrame(
         {
             "chrom": ["chr1"],
@@ -598,7 +616,7 @@ def test_build_cnv_plot_svg_requires_calibrated_z_without_fallback(tmp_path):
         }
     )
 
-    with pytest.raises(ValueError, match="calibrated_z"):
+    with pytest.raises(ValueError, match="reference bin stability|ref_median|ref_mad"):
         build_cnv_plot_svg(
             sample_id="Y1",
             bins_df=bins,
@@ -801,6 +819,64 @@ def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp
     assert set(chr_y["copy_number_interpretation_status"]) == {"sex_chrom_ref_ratio_not_interpretable"}
 
 
+def test_branch_s_cn_trend_skips_uninterpretable_chry_reference(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chrY", "chrY"],
+            "bin_index": [0, 1],
+            "start": [0, 1_000_000],
+            "end": [1_000_000, 2_000_000],
+            "calibrated_z": [0.1, 0.2],
+            "normalized_signal": [_norm_signal(50), _norm_signal(50)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chrY", 0, 0, 1_000_000, 0),
+            ("chrY", 1, 1_000_000, 2_000_000, 0),
+        ]
+    )
+    gender = pd.DataFrame({"sample_id": ["XY1"], "sex_call": ["XY"], "predict_gender": ["M"]})
+    branch_s_summary = pd.DataFrame(
+        {
+            "sample_id": ["XY1"],
+            "sex_call": ["XY"],
+            "sca_candidate_state": ["Y_GAIN"],
+            "sca_report_layer_class": ["sca_report_review_event"],
+        }
+    )
+    branch_s_scores = pd.DataFrame({"sample_id": ["XY1"], "sca_state": ["Y_GAIN"], "state_score": [18.0]})
+    branch_s_evidence = pd.DataFrame(
+        {
+            "sample_id": ["XY1"],
+            "region_class": ["Y_NONPAR"],
+            "chrom": ["chrY"],
+            "start": [0],
+            "end": [2_000_000],
+        }
+    )
+    output_cn_svg = tmp_path / "XY1.final_cnv_cn.svg"
+
+    build_cnv_plot_svg(
+        sample_id="XY1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        gender_df=gender,
+        branch_s_summary_df=branch_s_summary,
+        branch_s_scores_df=branch_s_scores,
+        branch_s_evidence_df=branch_s_evidence,
+        ref_bins_df=ref_bins,
+        output_svg=tmp_path / "XY1.final_cnv.svg",
+        output_bins_tsv=tmp_path / "XY1.plot_bins.tsv",
+        output_copy_number_svg=output_cn_svg,
+        output_copy_number_bins_tsv=tmp_path / "XY1.plot_bins_cn.tsv",
+    )
+
+    assert 'class="branch-s-cn-region"' in output_cn_svg.read_text(encoding="utf-8")
+    assert 'class="branch-s-cn-trend"' not in output_cn_svg.read_text(encoding="utf-8")
+
+
 def test_branch_s_report_review_event_is_overlaid_in_combined_genome_plot(tmp_path):
     bins = pd.DataFrame(
         {
@@ -873,5 +949,6 @@ def test_branch_s_report_review_event_is_overlaid_in_combined_genome_plot(tmp_pa
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
     assert 'class="branch-s-review-region"' in svg
     assert 'class="branch-s-cn-region"' in cn_svg
+    assert 'class="branch-s-cn-trend"' in cn_svg
     assert "event-level score=24.160" in svg
     assert set(cn_bins["event_layer"]) == {"branch_s_review"}

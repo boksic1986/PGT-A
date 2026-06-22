@@ -216,7 +216,8 @@ def test_cnv_plot_uses_v2_report_events_and_writes_plot_bins():
 
     plot_rule = workflow.split("rule cnv_branch_ab_plot:", 1)[1].split("if CNV_NEGATIVE_BANK_SAMPLES_TSV:", 1)[0]
     assert "events=CNV_B_V2_BENCHMARK_REPORT_EVENTS" in plot_rule
-    assert "ref_bins=([CNV_B_REF_STABILITY_BINS] if CNV_LOWRES_EVIDENCE_ENABLE else [])" in plot_rule
+    assert "ref_bins=[CNV_B_REF_STABILITY_BINS]" in plot_rule
+    assert "if CNV_LOWRES_EVIDENCE_ENABLE else []" not in plot_rule.split("gender_tsv=", 1)[0]
     assert "gender_tsv=([CNV_GENDER_TSV] if PREDICT_BY_SEX_ENABLED else [])" in plot_rule
     assert "branch_s_summary=CNV_BRANCH_S_SUMMARY" in plot_rule
     assert "branch_s_scores=CNV_BRANCH_S_SCORES" in plot_rule

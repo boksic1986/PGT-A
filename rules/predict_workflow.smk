@@ -711,7 +711,7 @@ if CNV_ENABLED:
                 bins=CNV_B_CALIBRATED_BINS,
                 events=CNV_B_V2_BENCHMARK_REPORT_EVENTS,
                 a_branch=([CNV_A_ABERRATIONS_BED] if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
-                ref_bins=([CNV_B_REF_STABILITY_BINS] if CNV_LOWRES_EVIDENCE_ENABLE else []),
+                ref_bins=[CNV_B_REF_STABILITY_BINS],
                 gender_tsv=([CNV_GENDER_TSV] if PREDICT_BY_SEX_ENABLED else []),
                 branch_s_summary=CNV_BRANCH_S_SUMMARY,
                 branch_s_scores=CNV_BRANCH_S_SCORES,
