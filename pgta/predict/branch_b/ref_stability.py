@@ -20,6 +20,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Compute reference cohort per-bin MAD stability context.")
     parser.add_argument("--input-npz", action="append", default=[])
     parser.add_argument("--sample-id", action="append", default=[])
+    parser.add_argument("--sample-sex", action="append", default=[])
     parser.add_argument("--input-bins", default="")
     parser.add_argument("--input-events", default="")
     parser.add_argument("--output-bins", default="")
@@ -58,7 +59,7 @@ def _event_context(median_z, high_fraction, moderate_mad_z, high_mad_z):
     return "REF_STABILITY_STABLE"
 
 
-def _summary_payload(sample_ids, binsize, bins, high_mad_z):
+def _summary_payload(sample_ids, binsize, bins, high_mad_z, sample_sexes=None):
     high_fraction = 0.0
     if not bins.empty:
         high_fraction = float((pd.to_numeric(bins["ref_mad_z"], errors="coerce") >= high_mad_z).mean())
@@ -66,6 +67,7 @@ def _summary_payload(sample_ids, binsize, bins, high_mad_z):
         "version": REF_STABILITY_VERSION,
         "ref_sample_count": int(len(sample_ids)),
         "ref_sample_ids": [str(item) for item in sample_ids],
+        "ref_sample_sexes": [str(item) for item in sample_sexes or []],
         "binsize": int(binsize),
         "bin_count": int(len(bins)),
         "high_ref_mad_bin_fraction": high_fraction,
@@ -76,6 +78,7 @@ def _summary_payload(sample_ids, binsize, bins, high_mad_z):
 def compute_ref_bin_stability(
     npz_paths,
     sample_ids=None,
+    sample_sexes=None,
     moderate_mad_z=DEFAULT_MODERATE_MAD_Z,
     high_mad_z=DEFAULT_HIGH_MAD_Z,
 ):
@@ -84,11 +87,14 @@ def compute_ref_bin_stability(
         raise ValueError("at least one reference NPZ is required")
     if sample_ids and len(sample_ids) != len(paths):
         raise ValueError("--sample-id count must match --input-npz count when supplied")
+    if sample_sexes and len(sample_sexes) != len(paths):
+        raise ValueError("--sample-sex count must match --input-npz count when supplied")
     resolved_sample_ids = [str(sample_ids[index]) if sample_ids else path.stem for index, path in enumerate(paths)]
+    resolved_sample_sexes = [str(sample_sexes[index]).strip().upper() if sample_sexes else "" for index, _path in enumerate(paths)]
 
     frames = []
     binsize_seen = None
-    for path, sample_id in zip(paths, resolved_sample_ids):
+    for path, sample_id, sample_sex in zip(paths, resolved_sample_ids, resolved_sample_sexes):
         bins, binsize, _quality = load_sample_bins(path)
         if binsize_seen is None:
             binsize_seen = binsize
@@ -96,6 +102,7 @@ def compute_ref_bin_stability(
             raise ValueError(f"inconsistent binsize in reference NPZ inputs: {binsize_seen} vs {binsize}")
         sample_bins = bins[["chrom", "bin_index", "start", "end", "normalized_signal"]].copy()
         sample_bins["ref_sample_id"] = sample_id
+        sample_bins["ref_sample_sex"] = sample_sex if sample_sex in {"XX", "XY"} else ""
         frames.append(sample_bins)
 
     combined = pd.concat(frames, ignore_index=True)
@@ -106,14 +113,31 @@ def compute_ref_bin_stability(
         median = float(np.median(values))
         return float(np.median(np.abs(values - median)))
 
-    grouped = (
-        combined.groupby(["chrom", "bin_index", "start", "end"], as_index=False)
-        .agg(
-            ref_sample_count=("normalized_signal", "count"),
-            ref_median=("normalized_signal", "median"),
-            ref_std=("normalized_signal", "std"),
-            ref_mad=("normalized_signal", _mad),
+    def _group_stability(input_frame, ref_group):
+        grouped = (
+            input_frame.groupby(["chrom", "bin_index", "start", "end"], as_index=False)
+            .agg(
+                ref_sample_count=("normalized_signal", "count"),
+                ref_median=("normalized_signal", "median"),
+                ref_std=("normalized_signal", "std"),
+                ref_mad=("normalized_signal", _mad),
+            )
+            .sort_values(["chrom", "bin_index"])
+            .reset_index(drop=True)
         )
+        grouped["ref_group"] = ref_group
+        return grouped
+
+    grouped_frames = [_group_stability(combined, "mixed")]
+    if any(sex in {"XX", "XY"} for sex in resolved_sample_sexes):
+        for sex in ("XX", "XY"):
+            sex_frame = combined[combined["ref_sample_sex"].astype(str).eq(sex)].copy()
+            if not sex_frame.empty:
+                grouped_frames.append(_group_stability(sex_frame, sex))
+
+    grouped = pd.concat(grouped_frames, ignore_index=True, sort=False)
+    grouped = (
+        grouped
         .sort_values(["chrom", "bin_index"])
         .reset_index(drop=True)
     )
@@ -124,7 +148,12 @@ def compute_ref_bin_stability(
         _label_ref_stability(value, moderate_mad_z, high_mad_z)
         for value in grouped["ref_mad_z"].to_numpy(dtype=float)
     ]
-    summary = _summary_payload(resolved_sample_ids, int(binsize_seen or 0), grouped, high_mad_z)
+    summary = _summary_payload(resolved_sample_ids, int(binsize_seen or 0), grouped, high_mad_z, resolved_sample_sexes)
+    if "ref_group" in grouped.columns:
+        summary["ref_group_counts"] = {
+            str(key): int(value)
+            for key, value in grouped["ref_group"].fillna("mixed").astype(str).value_counts().sort_index().to_dict().items()
+        }
     return grouped, summary
 
 
@@ -198,11 +227,12 @@ def main():
     args = parse_args()
     if args.input_bins:
         bins = read_table(args.input_bins, empty_ok=False)
-        summary = _summary_payload(args.sample_id, 0, bins, args.high_mad_z)
+        summary = _summary_payload(args.sample_id, 0, bins, args.high_mad_z, args.sample_sex)
     else:
         bins, summary = compute_ref_bin_stability(
             args.input_npz,
             sample_ids=args.sample_id or None,
+            sample_sexes=args.sample_sex or None,
             moderate_mad_z=args.moderate_mad_z,
             high_mad_z=args.high_mad_z,
         )

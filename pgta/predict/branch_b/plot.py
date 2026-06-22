@@ -18,7 +18,7 @@ REPORT_STATE_COLOR = {"dup": "#facc15", "del": "#2563eb", "neutral": "#64748b"}
 CN_REPORT_STATE_COLOR = {"dup": "#1d4ed8", "del": "#ef4444", "neutral": "#64748b"}
 NEUTRAL_COLOR = "#64748b"
 TREND_COLOR = "#dc2626"
-CN_CHROM_GAP_BP = 20_000_000
+PLOT_CHROM_GAP_BP = 5_000_000
 CN_SCATTER_RADIUS = 1.35
 CN_NEUTRAL_LOWER = 1.7
 CN_NEUTRAL_UPPER = 2.3
@@ -27,13 +27,13 @@ CN_HAPLOID_NEUTRAL_UPPER = 1.15
 SEX_CHROM_REF_MIN_CPM = 1.0
 CN_COPY_NUMBER_MIN = 0.0
 CN_COPY_NUMBER_MAX = 4.0
-REF_Z_PLOT_CLIP = 8.0
+REF_Z_AXIS_LIMIT = 12.0
 CN_LOG2R_PSEUDOCOUNT = 1e-3
 CN_BIN_COPY_NUMBER_SOURCE = "normalized_signal_ref_median_log2r_autosome_centered"
 REF_Z_NEAR_ZERO_THRESHOLD = 0.5
 CHRY_XX_ABSENT_HIDDEN = "xx_absent_expected_hidden"
-CHRY_XY_PRESENCE_GUIDE_CN = "xy_y_presence_guide_not_ratio_cn"
-CHRY_XY_PRESENCE_GUIDE_Z = "xy_y_presence_guide_not_ref_z"
+SEX_CHROM_REF_Z_UNAVAILABLE = "sex_chrom_ref_z_unavailable"
+SEX_CHROM_CN_UNAVAILABLE = "sex_chrom_cn_unavailable"
 HG19_CENTROMERES = {
     "chr1": (121_535_434, 124_535_434),
     "chr2": (92_326_171, 95_326_171),
@@ -71,6 +71,7 @@ def parse_args():
     parser.add_argument("--sample-id", required=True)
     parser.add_argument("--input-bins", required=True)
     parser.add_argument("--input-events", required=True)
+    parser.add_argument("--input-review-events", default="")
     parser.add_argument("--input-a-branch", default="")
     parser.add_argument("--input-ref-bins", default="")
     parser.add_argument("--gender-tsv", default="")
@@ -171,18 +172,48 @@ def hard_mask_series(frame):
     return label.isin({"hard", "hard_mask", "hard_exclude", "exclude", "excluded"})
 
 
-def annotate_branch_a_ref_z_bins(bins_df, ref_bins_df):
+def _canonical_ref_group(value):
+    token = str(value or "").strip().upper()
+    if token in {"F", "FEMALE"}:
+        return "XX"
+    if token in {"M", "MALE"}:
+        return "XY"
+    if token in {"XX", "XY"}:
+        return token
+    return "mixed"
+
+
+def _select_ref_bins_for_plot(ref_bins_df, sex_call=""):
+    ref = coerce_ref_bins(ref_bins_df)
+    if ref.empty:
+        return ref
+    sex = _canonical_ref_group(sex_call) if str(sex_call or "").strip() else ""
+
+    def rank(row):
+        chrom = str(row["chrom"])
+        group = str(row.get("ref_group", "mixed"))
+        if chrom in AUTOSOME_ORDER:
+            return 0 if group == "mixed" else 1
+        if sex in {"XX", "XY"} and group == sex:
+            return 0
+        if group == "mixed":
+            return 1
+        return 2
+
+    ref = ref.copy()
+    ref["_plot_ref_rank"] = ref.apply(rank, axis=1)
+    ref = ref.sort_values(["chrom", "bin_index", "_plot_ref_rank"]).drop_duplicates(
+        ["chrom", "bin_index"], keep="first"
+    )
+    return ref.drop(columns=["_plot_ref_rank"])
+
+
+def annotate_branch_a_ref_z_bins(bins_df, ref_bins_df, sex_call=""):
     validate_ref_bins_for_ref_z(ref_bins_df)
     frame = bins_df.copy()
-    ref = ref_bins_df.copy()
-    ref["chrom"] = ref["chrom"].map(normalize_chrom)
-    ref["bin_index"] = pd.to_numeric(ref["bin_index"], errors="coerce")
-    ref["ref_median"] = pd.to_numeric(ref["ref_median"], errors="coerce")
-    ref["ref_mad"] = pd.to_numeric(ref["ref_mad"], errors="coerce")
-    ref = ref.dropna(subset=["chrom", "bin_index"]).copy()
-    ref["bin_index"] = ref["bin_index"].astype(int)
-    ref = ref.sort_values(["chrom", "bin_index"]).drop_duplicates(["chrom", "bin_index"], keep="first")
-    frame = frame.merge(ref[["chrom", "bin_index", "ref_median", "ref_mad"]], on=["chrom", "bin_index"], how="left")
+    ref = _select_ref_bins_for_plot(ref_bins_df, sex_call=sex_call)
+    keep_ref_columns = ["chrom", "bin_index", "ref_median", "ref_mad", "ref_group"]
+    frame = frame.merge(ref[keep_ref_columns], on=["chrom", "bin_index"], how="left")
 
     raw_scale = 1.4826 * pd.to_numeric(frame["ref_mad"], errors="coerce")
     structure_or_hard = structural_gap_mask(frame) | hard_mask_series(frame)
@@ -206,12 +237,21 @@ def annotate_branch_a_ref_z_bins(bins_df, ref_bins_df):
 
     ref_scale = raw_scale.copy()
     ref_scale = ref_scale.where(ref_scale.ge(min_ref_scale), min_ref_scale)
+    ref_cpm = _expm1_series(frame["ref_median"])
+    sex = _canonical_ref_group(sex_call) if str(sex_call or "").strip() else ""
+    chry_requires_sex_ref = frame["chrom"].astype(str).eq("chrY") & pd.Series(sex == "XY", index=frame.index)
+    chry_without_reliable_ref = chry_requires_sex_ref & (
+        ~frame.get("ref_group", pd.Series("", index=frame.index)).astype(str).eq("XY")
+        | ~np.isfinite(ref_cpm)
+        | ref_cpm.lt(SEX_CHROM_REF_MIN_CPM)
+    )
     valid = (
         ~structure_or_hard
         & np.isfinite(frame["normalized_signal"])
         & np.isfinite(frame["ref_median"])
         & np.isfinite(ref_scale)
         & ref_scale.gt(0.0)
+        & ~chry_without_reliable_ref
     )
     frame["ref_z_scale"] = np.where(valid, ref_scale, np.nan)
     frame["ref_z_scale_source"] = np.where(
@@ -227,6 +267,17 @@ def annotate_branch_a_ref_z_bins(bins_df, ref_bins_df):
     frame["plot_signal"] = pd.to_numeric(frame["z"], errors="coerce").clip(lower=-12.0, upper=12.0)
     frame["z_source"] = "ref_z_unavailable_invalid_ref"
     frame.loc[valid, "z_source"] = "branch_a_ref_median_mad_z"
+    sex_ref_valid = (
+        valid
+        & ~frame["chrom"].isin(AUTOSOME_ORDER)
+        & frame.get("ref_group", pd.Series("", index=frame.index)).astype(str).isin({"XX", "XY"})
+    )
+    if sex_ref_valid.any():
+        frame.loc[sex_ref_valid, "z_source"] = (
+            "branch_a_ref_median_mad_z_sex_specific_"
+            + frame.loc[sex_ref_valid, "ref_group"].astype(str)
+        )
+    frame.loc[chry_without_reliable_ref, "z_source"] = SEX_CHROM_REF_Z_UNAVAILABLE
     frame.loc[structure_or_hard, "z_source"] = "ref_z_unavailable_masked_or_structure_gap"
     return frame
 
@@ -413,6 +464,7 @@ def coerce_final_events(events_df, sample_id=""):
         frame = frame[~frame["artifact_status"].str.lower().eq("artifact")].copy()
     frame["report_state"] = frame["state"].map(normalize_report_state)
     frame = frame[frame["report_state"].isin({"dup", "del"})].copy()
+    frame["event_layer"] = "autosomal_report"
     for column in ("priority_score", "a_abs_zscore"):
         if column in frame.columns:
             frame[column] = pd.to_numeric(frame[column], errors="coerce")
@@ -423,6 +475,47 @@ def coerce_final_events(events_df, sample_id=""):
     if sort_columns:
         frame = frame.sort_values(sort_columns, ascending=[False] * len(sort_columns)).copy()
     return frame
+
+
+def coerce_internal_review_events(events_df, sample_id=""):
+    if events_df is None or events_df.empty:
+        return pd.DataFrame()
+    frame = events_df.copy()
+    if sample_id and "sample_id" in frame.columns:
+        frame = frame[frame["sample_id"].astype(str).eq(str(sample_id))].copy()
+    if frame.empty:
+        return frame
+    frame["chrom"] = frame["chrom"].map(normalize_chrom)
+    frame = frame[frame["chrom"].isin(CHROM_ORDER)].copy()
+    visibility = frame.get("v2_report_visibility", pd.Series("", index=frame.index)).fillna("").astype(str)
+    layer_class = frame.get("v2_report_layer_class", pd.Series("", index=frame.index)).fillna("").astype(str)
+    frame = frame[visibility.eq("internal_review_event") | layer_class.eq("internal_review_event")].copy()
+    if frame.empty:
+        return frame
+    for column in ("start", "end", "priority_score"):
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    if "state" not in frame.columns:
+        frame["state"] = ""
+    frame["state"] = frame["state"].fillna("").astype(str)
+    frame = frame.dropna(subset=["start", "end"]).copy()
+    frame["report_state"] = frame["state"].map(normalize_report_state)
+    frame = frame[frame["report_state"].isin({"dup", "del"})].copy()
+    for column in ("priority_score", "a_abs_zscore", "a_zscore"):
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    for column in ("copy_number_estimate", "sex_adjusted_copy_number", "a_ratio"):
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    frame["event_layer"] = "internal_review_event"
+    return frame
+
+
+def combine_plot_events(*frames):
+    payloads = [frame for frame in frames if frame is not None and not frame.empty]
+    if not payloads:
+        return pd.DataFrame()
+    return pd.concat(payloads, ignore_index=True, sort=False)
 
 
 def annotate_report_states(bins_df, final_events):
@@ -508,18 +601,22 @@ def annotate_display_ref_z_bins(bins_df, final_events=None, branch_s_events=None
         frame.loc[chry_mask, "display_z_source"] = CHRY_XX_ABSENT_HIDDEN
         frame.loc[chry_mask, "z_source"] = CHRY_XX_ABSENT_HIDDEN
     elif sex == "XY":
-        frame.loc[chry_mask, "display_ref_z"] = 0.0
-        frame.loc[chry_mask, "z_display_mode"] = CHRY_XY_PRESENCE_GUIDE_Z
-        frame.loc[chry_mask, "chrY_display_mode"] = CHRY_XY_PRESENCE_GUIDE_Z
-        frame.loc[chry_mask, "display_z_source"] = "xy_y_presence_guide_from_bam_depth"
-        frame.loc[chry_mask, "z_source"] = "xy_y_presence_guide_from_bam_depth"
+        unavailable = chry_mask & frame["z_source"].astype(str).eq(SEX_CHROM_REF_Z_UNAVAILABLE)
+        frame.loc[unavailable, "display_ref_z"] = np.nan
+        frame.loc[unavailable, "z_display_mode"] = SEX_CHROM_REF_Z_UNAVAILABLE
+        frame.loc[unavailable, "chrY_display_mode"] = SEX_CHROM_REF_Z_UNAVAILABLE
+        frame.loc[unavailable, "display_z_source"] = SEX_CHROM_REF_Z_UNAVAILABLE
     elif chry_mask.any():
         frame.loc[chry_mask, "z_display_mode"] = "chry_context_no_sex_call"
         frame.loc[chry_mask, "chrY_display_mode"] = "chry_context_no_sex_call"
     frame["z"] = frame["display_ref_z"]
     z_values = pd.to_numeric(frame["z"], errors="coerce")
-    frame["plot_z"] = z_values.clip(lower=-REF_Z_PLOT_CLIP, upper=REF_Z_PLOT_CLIP)
-    frame["z_plot_clipped"] = np.isfinite(z_values) & z_values.abs().gt(REF_Z_PLOT_CLIP)
+    frame["z_plot_out_of_range"] = np.isfinite(z_values) & z_values.abs().gt(REF_Z_AXIS_LIMIT)
+    frame["plot_z"] = z_values.where(~frame["z_plot_out_of_range"], np.nan)
+    frame["z_plot_status"] = "in_range"
+    frame.loc[~np.isfinite(z_values), "z_plot_status"] = "unavailable"
+    frame.loc[frame["z_plot_out_of_range"], "z_plot_status"] = "out_of_range_hidden"
+    frame["z_plot_clipped"] = False
     frame["plot_signal"] = frame["plot_z"]
     return frame
 
@@ -554,13 +651,17 @@ def coerce_ref_bins(ref_bins_df):
     frame["chrom"] = frame["chrom"].map(normalize_chrom)
     frame["bin_index"] = pd.to_numeric(frame["bin_index"], errors="coerce")
     frame["ref_median"] = pd.to_numeric(frame["ref_median"], errors="coerce")
+    if "ref_group" in frame.columns:
+        frame["ref_group"] = frame["ref_group"].map(_canonical_ref_group)
+    else:
+        frame["ref_group"] = "mixed"
     frame = frame.dropna(subset=["chrom", "bin_index", "ref_median"]).copy()
     frame["bin_index"] = frame["bin_index"].astype(int)
-    keep_columns = ["chrom", "bin_index", "ref_median"]
+    keep_columns = ["chrom", "bin_index", "ref_median", "ref_group"]
     for column in ("ref_sample_count", "ref_mad", "ref_mad_z", "ref_stability_label"):
         if column in frame.columns:
             keep_columns.append(column)
-    return frame[keep_columns].drop_duplicates(["chrom", "bin_index"], keep="first")
+    return frame[keep_columns].drop_duplicates(["ref_group", "chrom", "bin_index"], keep="first")
 
 
 def _expm1_series(series):
@@ -568,7 +669,7 @@ def _expm1_series(series):
     return np.expm1(values)
 
 
-def derive_ratio_copy_number(frame, ref_bins_df=None):
+def derive_ratio_copy_number(frame, ref_bins_df=None, sex_call=""):
     result = frame.copy()
     input_copy_number = pd.to_numeric(result["copy_number"], errors="coerce") if "copy_number" in result.columns else None
     input_log2r = pd.to_numeric(result["log2r"], errors="coerce") if "log2r" in result.columns else None
@@ -607,11 +708,15 @@ def derive_ratio_copy_number(frame, ref_bins_df=None):
     if "normalized_signal" not in result.columns:
         raise ValueError("Copy-number plot requires log2r, copy_number, or normalized_signal plus reference bin medians.")
 
-    ref_bins = coerce_ref_bins(ref_bins_df)
+    ref_bins = _select_ref_bins_for_plot(ref_bins_df, sex_call=sex_call)
     if ref_bins.empty:
         raise ValueError("Copy-number plot requires reference bin medians when log2r/copy_number are not present.")
 
-    ref_columns = [column for column in ("ref_median", "ref_mad", "ref_mad_z", "ref_stability_label") if column in result.columns]
+    ref_columns = [
+        column
+        for column in ("ref_median", "ref_group", "ref_mad", "ref_mad_z", "ref_stability_label")
+        if column in result.columns
+    ]
     if ref_columns:
         result = result.drop(columns=ref_columns)
     result = result.merge(ref_bins, on=["chrom", "bin_index"], how="left")
@@ -717,7 +822,7 @@ def annotate_copy_number_bins(
     sex_call="",
     gender_info=None,
 ):
-    frame = derive_ratio_copy_number(bins_df.copy(), ref_bins_df=ref_bins_df)
+    frame = derive_ratio_copy_number(bins_df.copy(), ref_bins_df=ref_bins_df, sex_call=sex_call)
     frame["cn_scatter_state"] = frame["copy_number"].map(classify_copy_number_state)
     if "is_par_region" in frame.columns:
         par_flag = boolean_like_series(frame["is_par_region"])
@@ -747,21 +852,27 @@ def annotate_copy_number_bins(
     )
     chrom_ref_cpm_median = pd.to_numeric(frame["chrom_ref_cpm_median"], errors="coerce")
     expected_numeric = pd.to_numeric(frame["expected_copy_number"], errors="coerce")
-    y_haploid_interpretable = (
-        frame["chrom"].astype(str).eq("chrY")
-        & expected_numeric.eq(1.0)
+    sex_group = _canonical_ref_group(sex_call) if str(sex_call or "").strip() else ""
+    sex_specific_haploid_interpretable = (
+        frame["chrom"].astype(str).isin({"chrX", "chrY"})
+        & expected_numeric.le(1.0)
+        & frame.get("ref_group", pd.Series("", index=frame.index)).astype(str).eq(sex_group)
         & raw_ratio.notna()
         & ref_cpm.ge(SEX_CHROM_REF_MIN_CPM)
         & chrom_ref_cpm_median.ge(SEX_CHROM_REF_MIN_CPM)
     )
-    frame.loc[y_haploid_interpretable, "copy_number"] = raw_ratio.loc[y_haploid_interpretable] * expected_numeric.loc[
-        y_haploid_interpretable
+    frame.loc[sex_specific_haploid_interpretable, "copy_number"] = raw_ratio.loc[
+        sex_specific_haploid_interpretable
+    ] * expected_numeric.loc[
+        sex_specific_haploid_interpretable
     ]
-    frame.loc[y_haploid_interpretable, "log2r"] = np.log2(
-        frame.loc[y_haploid_interpretable, "copy_number"] / expected_numeric.loc[y_haploid_interpretable]
+    frame.loc[sex_specific_haploid_interpretable, "log2r"] = np.log2(
+        frame.loc[sex_specific_haploid_interpretable, "copy_number"]
+        / expected_numeric.loc[sex_specific_haploid_interpretable]
     )
-    frame.loc[y_haploid_interpretable, "copy_number_source"] = (
-        "normalized_signal_ref_median_log2r_y_haploid_centered"
+    frame.loc[sex_specific_haploid_interpretable, "copy_number_source"] = (
+        "normalized_signal_ref_median_log2r_y_haploid_sex_specific_"
+        + frame.loc[sex_specific_haploid_interpretable, "ref_group"].astype(str)
     )
     frame["copy_number_delta"] = pd.to_numeric(frame["copy_number"], errors="coerce") - pd.to_numeric(
         frame["expected_copy_number"], errors="coerce"
@@ -778,10 +889,18 @@ def annotate_copy_number_bins(
     ]
     frame["cn_scatter_state_sex_aware"] = [item[0] for item in sex_aware]
     frame["copy_number_interpretation_status"] = [item[1] for item in sex_aware]
+    chry_requires_sex_ref = (
+        frame["chrom"].astype(str).eq("chrY")
+        & pd.Series(sex_group == "XY", index=frame.index)
+        & ~frame.get("ref_group", pd.Series("", index=frame.index)).astype(str).eq("XY")
+    )
+    if chry_requires_sex_ref.any():
+        frame.loc[chry_requires_sex_ref, "copy_number_interpretation_status"] = "sex_chrom_ref_ratio_not_interpretable"
     not_interpretable = frame["copy_number_interpretation_status"].eq("sex_chrom_ref_ratio_not_interpretable")
     frame.loc[not_interpretable, "copy_number"] = np.nan
     frame.loc[not_interpretable, "log2r"] = np.nan
     frame.loc[not_interpretable, "copy_number_delta"] = np.nan
+    frame.loc[not_interpretable, "copy_number_interpretation_status"] = SEX_CHROM_CN_UNAVAILABLE
     frame.loc[not_interpretable, "copy_number_source"] = "sex_chrom_ref_ratio_not_interpretable"
     chry_mask = frame["chrom"].astype(str).eq("chrY")
     sex = str(sex_call or "").strip().upper()
@@ -794,16 +913,11 @@ def annotate_copy_number_bins(
         frame.loc[xx_chry, "copy_number_interpretation_status"] = "sex_aware_absent_expected"
         frame.loc[xx_chry, "copy_number_source"] = CHRY_XX_ABSENT_HIDDEN
         frame.loc[xx_chry, "chrY_display_mode"] = CHRY_XX_ABSENT_HIDDEN
-    xy_chry_guide = chry_mask & pd.Series(sex == "XY", index=frame.index) & not_interpretable
-    if xy_chry_guide.any():
-        frame.loc[xy_chry_guide, "copy_number"] = 1.0
-        frame.loc[xy_chry_guide, "log2r"] = 0.0
-        frame.loc[xy_chry_guide, "copy_number_delta"] = 0.0
-        frame.loc[xy_chry_guide, "cn_scatter_state"] = "neutral"
-        frame.loc[xy_chry_guide, "cn_scatter_state_sex_aware"] = "neutral"
-        frame.loc[xy_chry_guide, "copy_number_interpretation_status"] = CHRY_XY_PRESENCE_GUIDE_CN
-        frame.loc[xy_chry_guide, "copy_number_source"] = "xy_y_presence_guide_from_bam_depth"
-        frame.loc[xy_chry_guide, "chrY_display_mode"] = CHRY_XY_PRESENCE_GUIDE_CN
+    xy_chry_unavailable = chry_mask & pd.Series(sex == "XY", index=frame.index) & not_interpretable
+    if xy_chry_unavailable.any():
+        frame.loc[xy_chry_unavailable, "cn_scatter_state"] = "neutral"
+        frame.loc[xy_chry_unavailable, "cn_scatter_state_sex_aware"] = "neutral"
+        frame.loc[xy_chry_unavailable, "chrY_display_mode"] = SEX_CHROM_CN_UNAVAILABLE
     xy_chry_interpretable = (
         chry_mask
         & pd.Series(sex == "XY", index=frame.index)
@@ -986,14 +1100,17 @@ def render_report_event_trend_lines(bins_df, final_events, layout, total_span, l
             ("a_zscore", "branch_a_zscore", "a_abs_zscore", "max_abs_zscore", "priority_score"),
         )
         score_text = f"; a_zscore={score:.3f}" if score is not None else ""
+        event_layer = str(row_dict.get("event_layer", "autosomal_report") or "autosomal_report")
+        line_class = "internal-review-ref-z-trend" if event_layer == "internal_review_event" else "report-ref-z-trend"
         label = (
             f"same-direction median display_ref_z {row_dict.get('report_state')} "
             f"{chrom}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}; "
+            f"plot_event_layer={event_layer}; "
             f"same-direction median display_ref_z={trend_value:.3f}; "
             f"same-direction bins={len(same_direction_z)}; valid bins={len(valid_z)}{score_text}"
         )
         chunks.append(
-            f'<line class="report-ref-z-trend" x1="{x1:.2f}" y1="{y:.2f}" '
+            f'<line class="{line_class}" x1="{x1:.2f}" y1="{y:.2f}" '
             f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{TREND_COLOR}" '
             f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
             f"<title>{html.escape(label)}</title></line>"
@@ -1219,15 +1336,17 @@ def render_cn_trend_chunk(chunk_rows, row_dict, trend_value, layout, total_span,
     if x2 <= x1:
         return []
     y = scale_copy_number_y(trend_value, mid_y, half_h)
+    event_layer = str(row_dict.get("event_layer", "autosomal_report") or "autosomal_report")
+    line_class = "internal-review-cn-trend" if event_layer == "internal_review_event" else "report-cn-trend"
     label = (
         f"report CN trend {row_dict.get('report_state')} "
         f"{chrom}:{int(chunk_rows[0].start)}-{int(chunk_rows[-1].end)}; "
-        f"event CN={trend_value:.3f}"
+        f"plot_event_layer={event_layer}; event CN={trend_value:.3f}"
     )
     state = str(row_dict.get("report_state", "")).lower()
     trend_color = CN_REPORT_STATE_COLOR.get(state, TREND_COLOR)
     return [
-        f'<line class="report-cn-trend" x1="{x1:.2f}" y1="{y:.2f}" '
+        f'<line class="{line_class}" x1="{x1:.2f}" y1="{y:.2f}" '
         f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{trend_color}" '
         f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
         f"<title>{html.escape(label)}</title></line>"
@@ -1441,6 +1560,8 @@ def write_plot_bins_tsv(path_value, bins_df, layout):
         "z",
         "plot_z",
         "z_plot_clipped",
+        "z_plot_out_of_range",
+        "z_plot_status",
         "branch_a_ref_z",
         "display_ref_z",
         "residual_calibrated_z",
@@ -1455,6 +1576,7 @@ def write_plot_bins_tsv(path_value, bins_df, layout):
         "autosomal_neutral_ref_z_bin_count",
         "ref_z_scale",
         "ref_z_scale_source",
+        "ref_group",
         "report_state",
     ]
     for column in columns:
@@ -1486,6 +1608,7 @@ def write_copy_number_bins_tsv(path_value, bins_df, layout):
             "log2r",
             "raw_ratio",
             "ref_cpm",
+            "ref_group",
             "chrom_ref_cpm_median",
             "copy_number",
             "copy_number_centering_log2_shift",
@@ -1535,7 +1658,7 @@ def build_copy_number_plot_svg(
         sex_call=sex_call,
         gender_info=gender_info,
     )
-    cn_layout, cn_total_span = build_chrom_layout(cn_bins, gap_bp=CN_CHROM_GAP_BP)
+    cn_layout, cn_total_span = build_chrom_layout(cn_bins, gap_bp=PLOT_CHROM_GAP_BP)
     write_copy_number_bins_tsv(output_bins_tsv, cn_bins, cn_layout)
     write_copy_number_event_support_tsv(
         output_event_support_tsv,
@@ -1571,11 +1694,6 @@ def build_copy_number_plot_svg(
             f'<rect class="chrom-background" x="{x1:.2f}" y="{signal_top:.2f}" '
             f'width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="{fill}" opacity="0.52"/>'
         )
-        svg.append(
-            f'<line class="chrom-separator" x1="{x1:.2f}" y1="{signal_top:.2f}" '
-            f'x2="{x1:.2f}" y2="{signal_top + signal_height:.2f}" '
-            f'stroke="#475569" stroke-width="0.75" opacity="0.70"/>'
-        )
         svg.append(svg_text((x1 + x2) / 2.0, signal_top + signal_height + 18, chrom, size=10, fill="#334155", anchor="middle"))
         tick = ((int(item["start"]) // 50_000_000) + 1) * 50_000_000
         while tick < int(item["end"]):
@@ -1595,6 +1713,8 @@ def build_copy_number_plot_svg(
 
     for row in final_events.to_dict("records"):
         color = CN_REPORT_STATE_COLOR.get(str(row.get("report_state", "")), NEUTRAL_COLOR)
+        event_layer = str(row.get("event_layer", "autosomal_report") or "autosomal_report")
+        class_name = "internal-review-cn-region" if event_layer == "internal_review_event" else "report-cn-region"
         region = render_event_region(
             row,
             cn_layout,
@@ -1604,8 +1724,11 @@ def build_copy_number_plot_svg(
             signal_top,
             signal_height,
             color,
-            f"report CN region {row.get('report_state')} {row.get('chrom')}:{int(row.get('start'))}-{int(row.get('end'))}",
-            class_name="report-cn-region",
+            (
+                f"report CN region {row.get('report_state')} {row.get('chrom')}:"
+                f"{int(row.get('start'))}-{int(row.get('end'))}; plot_event_layer={event_layer}"
+            ),
+            class_name=class_name,
         )
         if region:
             svg.append(region)
@@ -1642,8 +1765,6 @@ def build_copy_number_plot_svg(
         color = CN_REPORT_STATE_COLOR.get(str(row.cn_scatter_state_sex_aware), NEUTRAL_COLOR)
         opacity = 0.78 if row.cn_scatter_state_sex_aware in {"dup", "del"} else 0.58
         point_class = "cn-bin-scatter"
-        if str(getattr(row, "chrY_display_mode", "")) == CHRY_XY_PRESENCE_GUIDE_CN:
-            point_class += " chry-presence-guide"
         out_of_range_attr = (
             ' data-copy-number-out-of-range="true"'
             if float(row.copy_number) < CN_COPY_NUMBER_MIN or float(row.copy_number) > CN_COPY_NUMBER_MAX
@@ -1682,6 +1803,7 @@ def build_cnv_plot_svg(
     branch_b_events_df,
     a_branch_df,
     output_svg,
+    review_events_df=None,
     gender_df=None,
     branch_s_summary_df=None,
     branch_s_scores_df=None,
@@ -1693,29 +1815,31 @@ def build_cnv_plot_svg(
     output_copy_number_event_support_tsv="",
     max_points=8000,
 ):
-    bins = coerce_bins(bins_df)
-    bins = annotate_branch_a_ref_z_bins(bins, ref_bins_df)
-    final_events = coerce_final_events(branch_b_events_df, sample_id=sample_id)
     sex_call = sample_sex_call(gender_df, branch_s_summary_df, sample_id=sample_id)
     gender_info = sample_gender_record(gender_df, sample_id=sample_id)
+    bins = coerce_bins(bins_df)
+    bins = annotate_branch_a_ref_z_bins(bins, ref_bins_df, sex_call=sex_call)
+    final_events = coerce_final_events(branch_b_events_df, sample_id=sample_id)
+    review_events = coerce_internal_review_events(review_events_df, sample_id=sample_id)
+    plot_events = combine_plot_events(final_events, review_events)
     branch_s_events = coerce_branch_s_review_events(
         branch_s_summary_df,
         scores_df=branch_s_scores_df,
         evidence_df=branch_s_evidence_df,
         sample_id=sample_id,
     )
-    layout, total_span = build_chrom_layout(bins)
-    bins = annotate_report_states(bins, final_events)
+    layout, total_span = build_chrom_layout(bins, gap_bp=PLOT_CHROM_GAP_BP)
+    bins = annotate_report_states(bins, plot_events)
     bins = annotate_display_ref_z_bins(
         bins,
-        final_events=final_events,
+        final_events=plot_events,
         branch_s_events=branch_s_events,
         sex_call=sex_call,
         gender_info=gender_info,
     )
     write_plot_bins_tsv(output_bins_tsv, bins, layout)
 
-    width = 1280
+    width = 2560
     height = 620
     left = 70
     right = 30
@@ -1740,10 +1864,19 @@ def build_cnv_plot_svg(
         x2 = scale_x(item["offset"] + item["span"], total_span, left, plot_width)
         fill = "#f8fafc" if idx % 2 == 0 else "#eef2f7"
         svg.append(
-            f'<rect x="{x1:.2f}" y="{signal_top:.2f}" width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="{fill}"/>'
+            f'<rect class="chrom-background" x="{x1:.2f}" y="{signal_top:.2f}" '
+            f'width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="{fill}" opacity="0.52"/>'
         )
-        svg.append(f'<line x1="{x1:.2f}" y1="{signal_top:.2f}" x2="{x1:.2f}" y2="{signal_top + signal_height:.2f}" stroke="#cbd5e1" stroke-width="0.5"/>')
         svg.append(svg_text((x1 + x2) / 2.0, signal_top + signal_height + 18, chrom, size=10, fill="#334155", anchor="middle"))
+        tick = ((int(item["start"]) // 50_000_000) + 1) * 50_000_000
+        while tick < int(item["end"]):
+            tick_x = scale_x(genome_position(chrom, tick, layout), total_span, left, plot_width)
+            svg.append(
+                f'<line class="chrom-50mb-tick" x1="{tick_x:.2f}" y1="{signal_top + signal_height:.2f}" '
+                f'x2="{tick_x:.2f}" y2="{signal_top + signal_height + 6:.2f}" stroke="#64748b" stroke-width="0.7"/>'
+            )
+            svg.append(svg_text(tick_x, signal_top + signal_height + 31, f"{int(tick / 1_000_000)}Mb", size=8, fill="#64748b", anchor="middle"))
+            tick += 50_000_000
 
     for z in (-6, 0, 6):
         y = scale_y(z, mid_y, half_h)
@@ -1751,13 +1884,18 @@ def build_cnv_plot_svg(
         svg.append(f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" y2="{y:.2f}" stroke="{color}" stroke-width="1" stroke-dasharray="4,4"/>')
         svg.append(svg_text(20, y + 4, f"z={z}", size=11, fill="#64748b"))
 
-    for row in final_events.itertuples(index=False):
+    for row in plot_events.itertuples(index=False):
         row_dict = row._asdict()
         state = str(row_dict.get("report_state", "")).lower()
         color = STATE_COLOR.get(state, NEUTRAL_COLOR)
         color = REPORT_STATE_COLOR.get(state, NEUTRAL_COLOR)
-        label = f"{state} {row_dict.get('chrom')}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}"
-        svg.append(render_event_region(row_dict, layout, total_span, left, plot_width, signal_top, signal_height, color, label))
+        event_layer = str(row_dict.get("event_layer", "autosomal_report") or "autosomal_report")
+        label = (
+            f"{state} {row_dict.get('chrom')}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}; "
+            f"plot_event_layer={event_layer}"
+        )
+        class_name = "internal-review-region" if event_layer == "internal_review_event" else "report-region"
+        svg.append(render_event_region(row_dict, layout, total_span, left, plot_width, signal_top, signal_height, color, label, class_name=class_name))
     if not branch_s_events.empty:
         for row in branch_s_events.to_dict("records"):
             color = REPORT_STATE_COLOR.get(str(row.get("report_state", "")), NEUTRAL_COLOR)
@@ -1794,19 +1932,12 @@ def build_cnv_plot_svg(
         color = REPORT_STATE_COLOR.get(str(row.report_state), NEUTRAL_COLOR)
         opacity = 0.82 if row.report_state in {"dup", "del"} else 0.62
         point_class = "z-bin-scatter"
-        if str(getattr(row, "chrY_display_mode", "")) == CHRY_XY_PRESENCE_GUIDE_Z:
-            point_class += " chry-presence-guide"
-        clipped_attr = (
-            ' data-z-plot-clipped="true"'
-            if bool(getattr(row, "z_plot_clipped", False))
-            else ""
-        )
         point_chunks.append(
-            f'<circle class="{point_class}" data-chrom="{html.escape(str(row.chrom))}"{clipped_attr} '
+            f'<circle class="{point_class}" data-chrom="{html.escape(str(row.chrom))}" '
             f'cx="{x:.2f}" cy="{y:.2f}" r="1.25" fill="{color}" opacity="{opacity:.2f}"/>'
         )
     svg.extend(point_chunks)
-    svg.extend(render_report_event_trend_lines(bins, final_events, layout, total_span, left, plot_width, mid_y, half_h))
+    svg.extend(render_report_event_trend_lines(bins, plot_events, layout, total_span, left, plot_width, mid_y, half_h))
     svg.extend(render_branch_s_ref_z_trend_lines(bins, branch_s_events, layout, total_span, left, plot_width, mid_y, half_h))
 
     legend_x = left
@@ -1830,7 +1961,7 @@ def build_cnv_plot_svg(
         build_copy_number_plot_svg(
             sample_id=sample_id,
             bins=bins,
-            final_events=final_events,
+            final_events=plot_events,
             branch_s_events=branch_s_events,
             layout=layout,
             total_span=total_span,
@@ -1849,6 +1980,7 @@ def main():
     logger = setup_logger("cnv_branch_b_plot", args.log or None)
     bins_df = read_table(args.input_bins, empty_ok=False)
     events_df = read_table(args.input_events, empty_ok=True)
+    review_events_df = read_table(args.input_review_events, empty_ok=True)
     a_branch_df = read_table(args.input_a_branch, empty_ok=True)
     ref_bins_df = read_table(args.input_ref_bins, empty_ok=True)
     gender_df = read_table(args.gender_tsv, empty_ok=True)
@@ -1859,6 +1991,7 @@ def main():
         sample_id=args.sample_id,
         bins_df=bins_df,
         branch_b_events_df=events_df,
+        review_events_df=review_events_df,
         a_branch_df=a_branch_df,
         gender_df=gender_df,
         branch_s_summary_df=branch_s_summary_df,

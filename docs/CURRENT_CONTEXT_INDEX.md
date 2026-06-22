@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md`
+2. `docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,19 +23,21 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md
-previous_handoff: docs/handoff/2026-06-22_1715_plot_event_support_ref_z_handoff.md
+active_handoff: docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md
+previous_handoff: docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_visibility_materialized_development_only
-branch_s_status: sex_aware_branch_s_support_visible_not_final
-report_status: sex_aware_chry_robust_plot_truth_synced_development_only
+branch_s_status: sex_specific_ref_visualization_support_visible_not_final
+report_status: sex_specific_ref_plot_truth_synced_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/sex_specific_ref_cnv_plot_2026-06-22.md`
+- `docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md`
 - `docs/reports/sex_aware_chry_robust_plot_truth_sync_2026-06-22.md`
 - `docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md`
 - `docs/reports/plot_event_support_ref_z_consistency_2026-06-22.md`
@@ -93,6 +95,74 @@ report_status: sex_aware_chry_robust_plot_truth_synced_development_only
 - `docs/reports/branch_ab_v2_rnd_constraints_2026-06-18.md`
 
 ## Current Module State
+
+### Sex-Specific Ref CNV Plot And Review Overlay
+
+The active plot/support contract is documented in
+`docs/reports/sex_specific_ref_cnv_plot_2026-06-22.md`.
+
+This loop supersedes the previous chrY visualization guide from
+`docs/handoff/2026-06-22_1815_sex_aware_chry_robust_plot_handoff.md`.
+XY chrY is no longer drawn as a fixed `CN=1` or `z=0` guide. chrX/chrY plot
+z and CN now prefer sex-specific reference stability groups (`XX` or `XY`);
+autosomes use the mixed reference group. If a sex-chromosome denominator is
+not interpretable, the bin is marked unavailable and is not drawn as a normal
+CNV point.
+
+Current visualization contract:
+
+- z and CN SVG width is `2560`.
+- z/CN genome axes use shared chromosome-block backgrounds with small
+  chromosome gaps and no vertical chromosome separator lines.
+- z outliers are not clipped to a horizontal ceiling; raw `branch_a_ref_z` is
+  retained in TSV and out-of-range display points are hidden with
+  `z_plot_status=out_of_range_hidden`.
+- review plots overlay `report_event`, `internal_review_event`, and
+  `branch_s_event`; this does not promote those events in the report table.
+- `plot_event_support.tsv` includes autosomal review rows and Branch S rows.
+- CNVpro-inspired pieces are limited to display/review concepts:
+  sex-specific references, PAR/non-PAR context, haploid/diploid centers, and
+  true CN/segment-style lines. CNVcalling.R/cghFLasso is not introduced.
+
+Remote validation on `fengxian`:
+
+- pytest:
+  `test_branch_b_plot.py test_ref_stability.py test_branch_s_shadow.py
+  test_cnv_report.py test_branch_ab_phase12_workflow_contract.py`:
+  `69 passed in 3.07s`.
+- Dry-runs for Y, H, G, and 0615 active lowres/gap2m configs succeeded for
+  `branch_s_review cnv_report` without mapping/reference rebuild jobs.
+- Materialized outputs:
+  Y1-Y8 8/8 plots/support, H1-H16 16/16 plots/support, G1-G8 8/8
+  plots/support, and 0615 5/5 plots/support.
+
+Materialized acceptance:
+
+- Y1-Y8 truth preserved `10/10`, FN=0.
+- H1-H6 truth preserved `10/10`, FN=0; H6 chr21 remains visible.
+- G1-G8 truth preserved `10/10`, FN=0; G2 truth remains preserved.
+- H4 chr15 internal-review gain is visible in z/CN review plots.
+- H5/G3/G5 chrX X-loss Branch S rows are present in `plot_event_support.tsv`
+  and visible in z/CN overlays.
+- G2/G8 XY chrY no longer shows fixed CN=1 or fixed z=0; current chrY bins
+  are marked `sex_chrom_cn_unavailable` when the XY denominator is not
+  interpretable.
+- G7/H5/H4 XX chrY is marked expected absent, not dup/del.
+
+Local synchronized outputs:
+
+- `D:\Pipeline\PGT-A\reports\truth_y1_y8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\truth_h1_h6_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\truth_g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+Boundary:
+
+- This is visualization and support-ledger work only.
+- Branch A, Branch B V2 filtering, Branch S classification, reference build,
+  report-event classification, and TP/FN/FP definitions are unchanged.
+- chrY/SCA final quantification still needs a dedicated sex-specific
+  reference/PAR/non-PAR validation gate.
 
 ### Sex-Aware chrY Robust Plot And Truth Sync
 

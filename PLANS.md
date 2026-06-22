@@ -1,5 +1,55 @@
 # PLANS.md
 
+## 2026-06-22 Sex-Specific Ref CNV Plot Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md`.
+
+Current report:
+`docs/reports/sex_specific_ref_cnv_plot_2026-06-22.md`.
+
+The active plot outputs now use sex-specific reference groups for display when
+available:
+
+- autosomes use `mixed` reference stability;
+- chrX/chrY prefer `XX` or `XY` reference stability matching the sample sex;
+- chrY is no longer displayed as a fabricated fixed CN=1 / z=0 guide;
+- sex-chromosome bins with non-interpretable denominator are hidden from normal
+  CNV scatter and marked unavailable in TSV;
+- z outliers are hidden from SVG rather than clipped to a horizontal ceiling;
+- review plots show `report_event`, `internal_review_event`, and Branch S
+  review events, but report table classification is unchanged.
+
+Current outputs:
+
+- Y1-Y8:
+  `D:\Pipeline\PGT-A\reports\truth_y1_y8_cnv_plots\`
+- H1-H6 truth subset inside H1-H16:
+  `D:\Pipeline\PGT-A\reports\truth_h1_h6_cnv_plots\`
+- G1-G8:
+  `D:\Pipeline\PGT-A\reports\truth_g1_g8_cnv_plots\`
+- 0615 context only:
+  `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+Immediate next steps:
+
+1. Review the synced truth plots sample by sample, starting with G1-G8 and
+   H5/G3/G5 Branch S X-loss examples.
+2. For chrY, do not infer copy number from missing ordinary scatter. Use TSV
+   status fields to distinguish `sex_chrom_cn_unavailable` from expected
+   absence.
+3. For H4 chr15 and similar cases, inspect review overlay lines plus
+   `plot_event_support.tsv`; visibility in plot does not mean report-table
+   promotion.
+4. Keep 0615 as context only. Do not use 0615 plot burden to tune thresholds.
+5. If report burden reduction resumes, design candidate-level evidence rules
+   and ablate them against Y1-Y8, H1-H6, and G1-G8 with FN=0, H6 chr21 visible,
+   and G2 truth not filtered.
+6. If final SCA/chrY quantification is needed, design a separate Branch S gate
+   using sex-specific reference, PAR/non-PAR partitions, haploid/diploid
+   centers, and locked SCA truth. Do not promote current visualization output
+   to final SCA status.
+
 ## 2026-06-22 Sex-Aware chrY Robust Plot Review Next Gate
 
 Current handoff:

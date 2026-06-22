@@ -146,6 +146,30 @@ CNV_LOWRES_REF_SAMPLE_IDS = [
     for item in CNV_LOWRES_EVIDENCE_CFG.get("reference_sample_ids", [])
     if str(item).strip()
 ]
+if CNV_LOWRES_REF_NPZ_PATHS and not CNV_LOWRES_REF_SAMPLE_IDS:
+    CNV_LOWRES_REF_SAMPLE_IDS = [Path(path_value).stem for path_value in CNV_LOWRES_REF_NPZ_PATHS]
+CNV_LOWRES_REF_SAMPLE_SEX_MAP = {}
+CNV_LOWRES_REF_SAMPLE_SEX_MAP_CONFIG = str(
+    CNV_LOWRES_EVIDENCE_CFG.get("reference_sample_sex_map_config", "") or ""
+).strip()
+if CNV_LOWRES_REF_SAMPLE_SEX_MAP_CONFIG:
+    sex_cfg = load_yaml_config(resolve_path(CNV_LOWRES_REF_SAMPLE_SEX_MAP_CONFIG))
+    for sex_label, sex_samples in sex_cfg.get("build_reference", {}).get("groups", {}).items():
+        canonical_sex = str(sex_label).strip().upper()
+        if canonical_sex not in {"XX", "XY"}:
+            continue
+        for sample_id in sex_samples or []:
+            CNV_LOWRES_REF_SAMPLE_SEX_MAP[str(sample_id)] = canonical_sex
+for sex_label, sex_samples in CNV_LOWRES_EVIDENCE_CFG.get("reference_sample_sex_map", {}).items():
+    canonical_sex = str(sex_label).strip().upper()
+    if canonical_sex not in {"XX", "XY"}:
+        continue
+    for sample_id in sex_samples or []:
+        CNV_LOWRES_REF_SAMPLE_SEX_MAP[str(sample_id)] = canonical_sex
+CNV_LOWRES_REF_SAMPLE_SEXES = [
+    CNV_LOWRES_REF_SAMPLE_SEX_MAP.get(str(sample_id), "")
+    for sample_id in CNV_LOWRES_REF_SAMPLE_IDS
+]
 if CNV_LOWRES_EVIDENCE_ENABLE and not CNV_LOWRES_REF_NPZ_PATHS:
     raise ValueError(
         "core.wisecondorx.cnv.lowres_evidence.enable=true requires lowres_evidence.reference_npz or reference_npz_glob"
@@ -157,6 +181,14 @@ if (
 ):
     raise ValueError(
         "core.wisecondorx.cnv.lowres_evidence.reference_sample_ids must match lowres_evidence.reference_npz length"
+    )
+if (
+    CNV_LOWRES_EVIDENCE_ENABLE
+    and CNV_LOWRES_REF_SAMPLE_SEXES
+    and len(CNV_LOWRES_REF_SAMPLE_SEXES) != len(CNV_LOWRES_REF_NPZ_PATHS)
+):
+    raise ValueError(
+        "lowres_evidence reference sample sex mapping must match lowres_evidence.reference_npz length"
     )
 CNV_LOWRES_REF_MODERATE_MAD_Z = float(CNV_LOWRES_EVIDENCE_CFG.get("moderate_mad_z", 2.0))
 CNV_LOWRES_REF_HIGH_MAD_Z = float(CNV_LOWRES_EVIDENCE_CFG.get("high_mad_z", 4.0))

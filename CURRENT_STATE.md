@@ -1,5 +1,88 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Sex-Specific Ref CNV Plot And Review Overlay
+
+Current handoff:
+`docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md`.
+
+Current report:
+`docs/reports/sex_specific_ref_cnv_plot_2026-06-22.md`.
+
+This loop fixes plot display and plot support ledgers only. It does not modify
+Branch A, Branch B V2 filtering, Branch S classification, reference, mapping,
+report-event classification, or TP/FN/FP definitions.
+
+Superseded behavior:
+
+- XY chrY is no longer drawn as a fixed `CN=1` or fixed `z=0` presence guide.
+- z outliers are no longer clipped into a horizontal ceiling in SVG.
+- `report_event`-only plot overlays are replaced by review plots that also
+  show `internal_review_event` and Branch S review events.
+
+Active plot/support contract:
+
+- `ref_stability` now emits `mixed`, `XX`, and `XY` reference groups when
+  reference sample sex labels are configured.
+- autosomes use the mixed reference group; chrX/chrY prefer the matching
+  sex-specific reference group for plot z and CN.
+- if a sex-chromosome denominator is not interpretable, the bin is marked
+  unavailable and is not drawn as a normal CNV point.
+- z/CN SVG width is `2560`.
+- z and CN plots use shared genome-axis layout, light chromosome background
+  blocks, small chromosome gaps, and no vertical chromosome separator lines.
+- raw `branch_a_ref_z` remains in TSV. Out-of-range z points are hidden from
+  SVG and marked `z_plot_status=out_of_range_hidden`.
+- review plots overlay final report events, internal review events, and Branch
+  S review events. This does not promote any event in `cnv_report`.
+- `plot_event_support.tsv` includes autosomal and Branch S rows.
+
+Remote validation:
+
+- Remote pytest:
+  `tests/unit/test_branch_b_plot.py`,
+  `tests/unit/test_ref_stability.py`,
+  `tests/unit/test_branch_s_shadow.py`,
+  `tests/unit/test_cnv_report.py`, and
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`: `69 passed in
+  3.07s`.
+- Y1-Y8, H1-H16, G1-G8, and 0615 active lowres/gap2m dry-runs for
+  `branch_s_review cnv_report` all succeeded and did not request mapping or
+  reference rebuild jobs.
+- Y1-Y8, H1-H16, G1-G8, and 0615 plot/report outputs were materialized on
+  `fengxian`.
+
+Materialized acceptance:
+
+- Y1-Y8: 8/8 z SVG, 8/8 CN SVG, 8/8 support TSV; truth preserved `10/10`,
+  FN=0.
+- H1-H16: 16/16 z SVG, 16/16 CN SVG, 16/16 support TSV; H1-H6 truth preserved
+  `10/10`, FN=0; H6 chr21 remains visible.
+- G1-G8: 8/8 z SVG, 8/8 CN SVG, 8/8 support TSV; truth preserved `10/10`,
+  FN=0; G2 truth remains preserved.
+- 0615 context: 5/5 z SVG, 5/5 CN SVG, 5/5 support TSV; no truth metrics are
+  computed.
+- H4 chr15 internal-review gain is visible in the z/CN review plots.
+- H5/G3/G5 chrX X-loss Branch S rows are visible in `plot_event_support.tsv`
+  and in z/CN overlays.
+- G2/G8 XY chrY no longer shows fixed CN=1 or fixed z=0. It is marked
+  `sex_chrom_cn_unavailable` where the XY denominator is not interpretable.
+- G7/H5/H4 XX chrY is marked expected absent, not dup/del.
+
+Local synced outputs:
+
+- `D:\Pipeline\PGT-A\reports\truth_y1_y8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\truth_h1_h6_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\truth_g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+Remaining risk:
+
+- Current sex-specific chrY denominators can still be non-interpretable for
+  ordinary CNV scatter. The correct behavior is to mark those bins unavailable,
+  not to fabricate a CN=1 guide.
+- Final SCA/chrY quantification still needs a dedicated sex-specific
+  reference/PAR/non-PAR validation gate.
+
 ## 2026-06-22 Sex-Aware chrY Robust Plot And Truth Sync
 
 Current handoff:

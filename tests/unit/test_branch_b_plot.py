@@ -15,16 +15,17 @@ def _norm_signal(cpm):
 
 
 def _ref_bins(rows):
-    return pd.DataFrame(
-        {
-            "chrom": [row[0] for row in rows],
-            "bin_index": [row[1] for row in rows],
-            "start": [row[2] for row in rows],
-            "end": [row[3] for row in rows],
-            "ref_median": [_norm_signal(row[4]) for row in rows],
-            "ref_mad": [row[5] if len(row) > 5 else 0.1 for row in rows],
-        }
-    )
+    payload = {
+        "chrom": [row[0] for row in rows],
+        "bin_index": [row[1] for row in rows],
+        "start": [row[2] for row in rows],
+        "end": [row[3] for row in rows],
+        "ref_median": [_norm_signal(row[4]) for row in rows],
+        "ref_mad": [row[5] if len(row) > 5 else 0.1 for row in rows],
+    }
+    if any(len(row) > 6 for row in rows):
+        payload["ref_group"] = [row[6] if len(row) > 6 else "mixed" for row in rows]
+    return pd.DataFrame(payload)
 
 
 def _ref_z(sample_cpm, ref_cpm=100, ref_mad=0.1):
@@ -330,13 +331,13 @@ def test_copy_number_plot_v2_leaves_structure_gaps_blank_and_uses_50mb_ticks(tmp
     gap_row = cn_bins.loc[cn_bins["start"].eq(30_000_000)].iloc[0]
 
     assert 'class="structure-gap-blank"' not in cn_svg
-    assert 'fill="#cbd5e1"' not in cn_svg
     assert 'fill="#0f172a" opacity="0.96"' not in cn_svg
     assert "50Mb" in cn_svg
     assert cn_svg.count('class="cn-bin-scatter"') == 59
     assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+r="1\.35"', cn_svg)
     assert cn_svg.count('class="report-cn-trend"') == 2
     assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#1d4ed8"', cn_svg)
+    assert 'class="chrom-separator"' not in cn_svg
     non_centromere_gap_row = cn_bins.loc[cn_bins["start"].eq(10_000_000)].iloc[0]
     assert non_centromere_gap_row["copy_number_source"] != "structure_gap_blank"
     assert pd.isna(gap_row["copy_number"])
@@ -714,7 +715,7 @@ def test_copy_number_scatter_is_sex_aware_for_xy_chrx_and_chry(tmp_path):
         [
             ("chr1", 0, 0, 1_000_000, 100),
             ("chrX", 0, 0, 1_000_000, 100),
-            ("chrY", 0, 0, 1_000_000, 50),
+            ("chrY", 0, 0, 1_000_000, 50, 0.1, "XY"),
         ]
     )
     gender = pd.DataFrame(
@@ -868,7 +869,7 @@ def test_xx_chry_is_hidden_from_standard_z_and_cn_scatter(tmp_path):
     assert pd.isna(cn_chr_y["copy_number"])
 
 
-def test_xy_chry_uses_y_presence_guide_instead_of_raw_ref_z_gain(tmp_path):
+def test_xy_chry_zero_mixed_ref_is_unavailable_not_fixed_cn_one(tmp_path):
     bins = pd.DataFrame(
         {
             "chrom": ["chr1", "chrY"],
@@ -920,20 +921,70 @@ def test_xy_chry_uses_y_presence_guide_instead_of_raw_ref_z_gain(tmp_path):
     z_svg = output_svg.read_text(encoding="utf-8")
     cn_svg = output_cn_svg.read_text(encoding="utf-8")
 
-    assert z_chr_y["z_display_mode"] == "xy_y_presence_guide_not_ref_z"
-    assert z_chr_y["chrY_display_mode"] == "xy_y_presence_guide_not_ref_z"
-    assert z_chr_y["z"] == pytest.approx(0.0)
-    assert z_chr_y["plot_z"] == pytest.approx(0.0)
-    assert z_chr_y["z_source"] == "xy_y_presence_guide_from_bam_depth"
-    assert cn_chr_y["copy_number"] == pytest.approx(1.0)
-    assert cn_chr_y["copy_number_interpretation_status"] == "xy_y_presence_guide_not_ratio_cn"
-    assert cn_chr_y["copy_number_source"] == "xy_y_presence_guide_from_bam_depth"
+    assert z_chr_y["z_display_mode"] == "sex_chrom_ref_z_unavailable"
+    assert z_chr_y["chrY_display_mode"] == "sex_chrom_ref_z_unavailable"
+    assert pd.isna(z_chr_y["z"])
+    assert pd.isna(z_chr_y["plot_z"])
+    assert z_chr_y["z_source"] == "sex_chrom_ref_z_unavailable"
+    assert pd.isna(cn_chr_y["copy_number"])
+    assert cn_chr_y["copy_number_interpretation_status"] == "sex_chrom_cn_unavailable"
+    assert cn_chr_y["copy_number_source"] == "sex_chrom_ref_ratio_not_interpretable"
     assert cn_chr_y["cn_scatter_state_sex_aware"] == "neutral"
-    assert 'class="z-bin-scatter chry-presence-guide"' in z_svg
-    assert 'class="cn-bin-scatter chry-presence-guide"' in cn_svg
+    assert 'chry-presence-guide' not in z_svg
+    assert 'chry-presence-guide' not in cn_svg
+    assert not re.search(r'data-chrom="chrY"[^>]+class="z-bin-scatter"', z_svg)
+    assert not re.search(r'data-chrom="chrY"[^>]+class="cn-bin-scatter"', cn_svg)
 
 
-def test_ref_z_plot_clips_extreme_display_values_but_keeps_raw_ref_z(tmp_path):
+def test_xy_chry_uses_sex_specific_ref_when_available(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chrY"],
+            "bin_index": [0, 0],
+            "start": [0, 0],
+            "end": [1_000_000, 1_000_000],
+            "calibrated_z": [0.0, 0.5],
+            "normalized_signal": [_norm_signal(100), _norm_signal(50)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100, 0.1, "mixed"),
+            ("chrY", 0, 0, 1_000_000, 0, 0.1, "mixed"),
+            ("chrY", 0, 0, 1_000_000, 50, 0.1, "XY"),
+        ]
+    )
+    gender = pd.DataFrame({"sample_id": ["XY1"], "sex_call": ["XY"], "predict_gender": ["M"]})
+    output_bins = tmp_path / "XY1.plot_bins.tsv"
+    output_cn_bins = tmp_path / "XY1.plot_bins_cn.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="XY1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        gender_df=gender,
+        ref_bins_df=ref_bins,
+        output_svg=tmp_path / "XY1.final_cnv.svg",
+        output_bins_tsv=output_bins,
+        output_copy_number_svg=tmp_path / "XY1.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    plot_bins = pd.read_csv(output_bins, sep="\t")
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    z_chr_y = plot_bins.loc[plot_bins["chrom"].eq("chrY")].iloc[0]
+    cn_chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")].iloc[0]
+
+    assert z_chr_y["z_source"] == "branch_a_ref_median_mad_z_sex_specific_XY"
+    assert z_chr_y["z_display_mode"] == "branch_a_ref_z_display"
+    assert z_chr_y["z"] == pytest.approx(0.0, abs=1e-6)
+    assert cn_chr_y["copy_number"] == pytest.approx(1.0, abs=0.02)
+    assert cn_chr_y["copy_number_source"] == "normalized_signal_ref_median_log2r_y_haploid_sex_specific_XY"
+    assert cn_chr_y["copy_number_interpretation_status"] == "sex_aware_interpretable"
+
+
+def test_ref_z_plot_hides_out_of_range_points_but_keeps_raw_ref_z(tmp_path):
     bins = pd.DataFrame(
         {
             "chrom": ["chr1", "chr1"],
@@ -964,11 +1015,107 @@ def test_ref_z_plot_clips_extreme_display_values_but_keeps_raw_ref_z(tmp_path):
     )
 
     plot_bins = pd.read_csv(output_bins, sep="\t")
+    svg = output_svg.read_text(encoding="utf-8")
     extreme = plot_bins.loc[plot_bins["start"].eq(1_000_000)].iloc[0]
     assert extreme["branch_a_ref_z"] > 8.0
-    assert extreme["plot_z"] == pytest.approx(8.0)
-    assert bool(extreme["z_plot_clipped"]) is True
-    assert 'data-z-plot-clipped="true"' in output_svg.read_text(encoding="utf-8")
+    assert pd.isna(extreme["plot_z"])
+    assert extreme["z_plot_status"] == "out_of_range_hidden"
+    assert bool(extreme["z_plot_out_of_range"]) is True
+    assert 'data-z-plot-clipped="true"' not in svg
+    assert 'data-z-plot-status="out_of_range_hidden"' not in svg
+
+
+def test_z_plot_is_wide_and_uses_chromosome_background_without_separator_lines(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chr2"],
+            "bin_index": [0, 0],
+            "start": [0, 0],
+            "end": [60_000_000, 60_000_000],
+            "calibrated_z": [0.0, 0.0],
+            "normalized_signal": [_norm_signal(100), _norm_signal(100)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 60_000_000, 100),
+            ("chr2", 0, 0, 60_000_000, 100),
+        ]
+    )
+    output_svg = tmp_path / "Y1.final_cnv.svg"
+
+    build_cnv_plot_svg(
+        sample_id="Y1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
+    )
+
+    svg = output_svg.read_text(encoding="utf-8")
+    assert 'width="2560"' in svg
+    assert 'class="chrom-background"' in svg
+    assert 'class="chrom-separator"' not in svg
+    assert "50Mb" in svg
+
+
+def test_internal_review_event_is_drawn_in_review_plot_without_promoting_report_table(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr15", "chr15", "chr15"],
+            "bin_index": [0, 1, 2],
+            "start": [25_000_000, 26_000_000, 27_000_000],
+            "end": [26_000_000, 27_000_000, 28_000_000],
+            "calibrated_z": [0.0, 0.0, 0.0],
+            "normalized_signal": [_norm_signal(140), _norm_signal(141), _norm_signal(142)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr15", 0, 25_000_000, 26_000_000, 100),
+            ("chr15", 1, 26_000_000, 27_000_000, 100),
+            ("chr15", 2, 27_000_000, 28_000_000, 100),
+        ]
+    )
+    report_events = pd.DataFrame(columns=["sample_id", "chrom", "start", "end", "state"])
+    review_events = pd.DataFrame(
+        {
+            "sample_id": ["H4"],
+            "chrom": ["chr15"],
+            "start": [25_000_000],
+            "end": [28_000_000],
+            "state": ["gain"],
+            "v2_report_visibility": ["internal_review_event"],
+            "v2_report_layer_class": ["internal_review_event"],
+            "copy_number_estimate": [2.5],
+            "a_zscore": [111.5],
+        }
+    )
+    output_svg = tmp_path / "H4.final_cnv.svg"
+    support_tsv = tmp_path / "H4.plot_event_support.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="H4",
+        bins_df=bins,
+        branch_b_events_df=report_events,
+        review_events_df=review_events,
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=tmp_path / "H4.plot_bins.tsv",
+        output_copy_number_svg=tmp_path / "H4.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=tmp_path / "H4.plot_bins_cn.tsv",
+        output_copy_number_event_support_tsv=support_tsv,
+    )
+
+    svg = output_svg.read_text(encoding="utf-8")
+    support = pd.read_csv(support_tsv, sep="\t")
+    assert 'class="internal-review-region"' in svg
+    assert 'plot_event_layer=internal_review_event' in svg
+    assert "internal_review_event" in set(support["event_layer"])
+    assert "autosomal_report" not in set(support["event_layer"])
 
 
 def test_copy_number_scatter_marks_chry_zero_ref_as_not_interpretable(tmp_path):
@@ -1017,13 +1164,14 @@ def test_copy_number_scatter_marks_chry_zero_ref_as_not_interpretable(tmp_path):
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
     cn_svg = output_cn_svg.read_text(encoding="utf-8")
     chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")].iloc[0]
-    assert chr_y["copy_number"] == pytest.approx(1.0)
+    assert pd.isna(chr_y["copy_number"])
     assert chr_y["cn_scatter_state_sex_aware"] == "neutral"
     assert chr_y["report_state"] == "neutral"
-    assert chr_y["copy_number_interpretation_status"] == "xy_y_presence_guide_not_ratio_cn"
-    assert chr_y["copy_number_source"] == "xy_y_presence_guide_from_bam_depth"
-    assert chr_y["chrY_display_mode"] == "xy_y_presence_guide_not_ratio_cn"
-    assert 'class="cn-bin-scatter chry-presence-guide"' in cn_svg
+    assert chr_y["copy_number_interpretation_status"] == "sex_chrom_cn_unavailable"
+    assert chr_y["copy_number_source"] == "sex_chrom_ref_ratio_not_interpretable"
+    assert chr_y["chrY_display_mode"] == "sex_chrom_cn_unavailable"
+    assert 'chry-presence-guide' not in cn_svg
+    assert 'data-chrom="chrY"' not in cn_svg
 
 
 def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp_path):
@@ -1072,11 +1220,11 @@ def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp
 
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
     chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")]
-    assert chr_y["copy_number"].tolist() == pytest.approx([1.0, 1.0, 1.0])
+    assert chr_y["copy_number"].isna().all()
     assert set(chr_y["cn_scatter_state_sex_aware"]) == {"neutral"}
-    assert set(chr_y["copy_number_interpretation_status"]) == {"xy_y_presence_guide_not_ratio_cn"}
-    assert set(chr_y["copy_number_source"]) == {"xy_y_presence_guide_from_bam_depth"}
-    assert set(chr_y["chrY_display_mode"]) == {"xy_y_presence_guide_not_ratio_cn"}
+    assert set(chr_y["copy_number_interpretation_status"]) == {"sex_chrom_cn_unavailable"}
+    assert set(chr_y["copy_number_source"]) == {"sex_chrom_ref_ratio_not_interpretable"}
+    assert set(chr_y["chrY_display_mode"]) == {"sex_chrom_cn_unavailable"}
 
 
 def test_branch_s_cn_trend_skips_uninterpretable_chry_reference(tmp_path):

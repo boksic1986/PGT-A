@@ -710,6 +710,7 @@ if CNV_ENABLED:
             input:
                 bins=CNV_B_CALIBRATED_BINS,
                 events=CNV_B_V2_BENCHMARK_REPORT_EVENTS,
+                review_events=CNV_B_V2_CLASSIFIER,
                 a_branch=([CNV_A_ABERRATIONS_BED] if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
                 ref_bins=[CNV_B_REF_STABILITY_BINS],
                 gender_tsv=([CNV_GENDER_TSV] if PREDICT_BY_SEX_ENABLED else []),
@@ -738,6 +739,7 @@ if CNV_ENABLED:
                     "--sample-id", wildcards.sample,
                     "--input-bins", input.bins,
                     "--input-events", input.events,
+                    "--input-review-events", input.review_events,
                     "--output-svg", output.svg,
                     "--output-bins-tsv", output.bins_tsv,
                     "--output-copy-number-svg", output.cn_svg,
@@ -858,6 +860,8 @@ if CNV_ENABLED:
                     command.extend(["--input-npz", str(npz_path)])
                 for sample_id in CNV_LOWRES_REF_SAMPLE_IDS:
                     command.extend(["--sample-id", str(sample_id)])
+                for sample_sex in CNV_LOWRES_REF_SAMPLE_SEXES:
+                    command.extend(["--sample-sex", str(sample_sex)])
                 subprocess.run(command, check=True)
 
         rule cnv_branch_b_ref_stability:
