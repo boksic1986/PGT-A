@@ -1,37 +1,42 @@
 # PLANS.md
 
-## 2026-06-22 CN Plot Bin-Z Scatter Review Next Gate
+## 2026-06-22 CN Plot Bin-CN Threshold Scatter Review Next Gate
 
 Current handoff:
-`docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md`.
+`docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
 
-CN plot bin-z scatter is materialized for 0615 as a visualization-only
+CN plot bin-CN threshold scatter is materialized for 0615 as a visualization-only
 supplement:
 
 - `*.final_cnv_cn.svg` remains 2560px wide with a white plotting panel, no
   alternating chromosome background rectangles, explicit chromosome separators,
   50Mb ticks, centromere-only grey regions, and dup/del-only legend.
-- `*.plot_bins_cn.tsv` now includes `z` and records per-bin z-scaled CN proxy
-  values inside final report events.
-- event bins use
-  `copy_number_source=event_calibrated_z_scaled_to_cn_proxy` unless they are
-  centromere blanks.
-- neutral bins outside report events remain `CN=2`; the CN proxy is not an
-  independent bin-level CN caller.
+- `*.plot_bins_cn.tsv` now includes `z`, `copy_number`, `report_state`,
+  `event_report_state`, and `copy_number_source`.
+- every non-centromere 1Mb bin uses
+  `CN_proxy = clip(2 + calibrated_z * 0.05, 0, 4)`.
+- scatter colors are based only on bin CN proxy:
+  `CN < 1.7` deletion red, `1.7 <= CN <= 2.3` neutral grey, and
+  `CN > 2.3` duplication blue.
+- `event_report_state` is audit context only; final report intervals do not
+  control scatter color.
+- `copy_number_source=calibrated_z_mosaic30_cn_proxy` marks the current visual
+  proxy; it is not an independent bin-level CN caller.
 - event-level horizontal CN trend lines remain the region-level CN estimate and
   are still separate from the per-bin scatter.
 
 Immediate next steps:
 
 1. Use the updated z/CN plot pair for manual sample review, starting with 56.
-2. Compare the event-level CN trend against per-bin z-scaled CN scatter to find
-   sparse-bin driven events versus coherent region-level support.
-3. Treat very high CN proxy dots as visualized high-z bins, not absolute copy
-   number calls; the y-axis rendering clips the visual range, and the TSV keeps
-   the computed proxy for audit.
+2. Compare the event-level CN trend against the bin-threshold CN scatter to
+   find sparse-bin driven events versus coherent region-level support.
+3. Treat clipped CN proxy dots as visualized high-z bins, not absolute copy
+   number calls. The old extreme values, including sample 56's `CN=14.923469`,
+   came from superseded event-anchored scaling and should not be used for
+   interpretation.
 4. Do not use the CN proxy as a filter. Any candidate-level filter/demotion
    proposal still requires Y/H/G locked-truth ablation with FN=0, H6 chr21
    retained, and G2 truth visible.
@@ -115,9 +120,10 @@ The report layer now has a usable development contract:
 - the current plot style uses yellow duplication bins, blue deletion bins, grey
   neutral bins, and red horizontal `report-z-trend` lines only across final
   report event intervals.
-- every 0615 sample now also has an event-level copy-number plot and CN bin
-  table. The CN plot is a visualization supplement; it is not a bin-level CN
-  caller and does not change report-event logic.
+- every 0615 sample now also has a CN proxy plot and CN bin table. Scatter is
+  colored by each bin's `calibrated_z`-derived CN proxy using the 1.7/2.3
+  threshold band; the plot is a visualization supplement and does not change
+  report-event logic.
 
 The next gate is candidate-level interpretation of the remaining report burden,
 not another broad threshold.
@@ -133,8 +139,8 @@ Immediate next steps:
    - clean support;
    - acrocentric/telomere/centromere/high-repeat risk;
    - matching red horizontal report-event trend in the `.final_cnv.svg`;
-   - event-level CN block in `.final_cnv_cn.svg` when copy-number explanation
-     helps sample review.
+   - bin-level CN proxy scatter plus event-level horizontal CN trend in
+     `.final_cnv_cn.svg` when copy-number visualization helps sample review.
 2. Use Y1-Y8, H1-H6, and G1-G8 locked truth as the no-FN guardrail.
 3. Keep H6 chr21 and G2 locked truth visible.
 4. Treat 2026-06-15 as burden/context only until locked truth labels exist.
@@ -148,9 +154,8 @@ Current open issue:
 - 2026-06-15 still has 71 autosomal report events across 5 samples. This is too
   high for a final-style report, but broad filtering risks FN. The next
   reduction must be candidate-level and truth-safe.
-- CN plots can make event-level amplitude easier to review, but they must not
-  be used as an independent filter because they are derived from final report
-  event CN estimates.
+- CN plots can make bin-level coherence and event-level amplitude easier to
+  review, but the CN proxy must not be used as an independent filter.
 
 ## 2026-06-22 Lowres Branch B/S Next Gate
 

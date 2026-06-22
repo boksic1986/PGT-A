@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md`
+2. `docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,20 +23,21 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md
-previous_handoff: docs/handoff/2026-06-22_1234_copy_number_cnv_plot_centromere_scatter_handoff.md
+active_handoff: docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md
+previous_handoff: docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_visibility_materialized_development_only
 branch_s_status: sex_aware_segment_level_lowres_context_not_final
-report_status: cnv_z_and_copy_number_proxy_plots_bin_z_scatter_materialized_development_only
+report_status: cnv_z_and_bin_cn_threshold_proxy_plots_materialized_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
 - `docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`
+- `docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md`
 - `docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md`
 - `docs/handoff/2026-06-22_1234_copy_number_cnv_plot_centromere_scatter_handoff.md`
 - `docs/handoff/2026-06-22_1155_copy_number_cnv_plot_scatter_background_handoff.md`
@@ -128,12 +129,16 @@ blue `del` bins, grey neutral bins, and red horizontal `report-z-trend` lines
 only across final autosomal report event intervals. It does not draw genome-wide
 or chromosome-wide smooth polylines.
 
-Each 0615 sample also has an event-level copy-number plot:
-`{sample}.final_cnv_cn.svg` plus `{sample}.plot_bins_cn.tsv`. Neutral bins are
-shown as `CN=2`; bins inside final autosomal report events use the event-level
-copy number estimate, with fallback to `sex_adjusted_copy_number` or
-`CN = 2 * (1 + a_ratio)` if needed. The CN plot is a report visualization
-supplement, not a bin-level CN caller and not a filtering input.
+Each 0615 sample also has a copy-number proxy plot:
+`{sample}.final_cnv_cn.svg` plus `{sample}.plot_bins_cn.tsv`. The CN scatter is
+drawn for every non-centromere 1Mb bin and is colored only by the bin-level
+visual CN proxy, not by report-event intervals. The proxy is computed from each
+bin's `calibrated_z` as `CN_proxy = clip(2 + calibrated_z * 0.05, 0, 4)`.
+This maps the 30% mosaic review band to `CN=1.7..2.3`: bins below 1.7 are
+colored deletion red, bins above 2.3 are colored duplication blue, and bins in
+the interval are grey. Final report events still draw separate horizontal
+event-level CN trend lines. The CN plot is a report visualization supplement,
+not a bin-level CN caller and not a filtering input.
 
 Materialized report-layer acceptance:
 

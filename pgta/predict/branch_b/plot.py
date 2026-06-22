@@ -18,7 +18,13 @@ CN_REPORT_STATE_COLOR = {"dup": "#1d4ed8", "del": "#ef4444", "neutral": "#64748b
 NEUTRAL_COLOR = "#64748b"
 TREND_COLOR = "#dc2626"
 CN_CHROM_GAP_BP = 20_000_000
-CN_SCATTER_RADIUS = 2.0
+CN_SCATTER_RADIUS = 1.35
+CN_NEUTRAL_LOWER = 1.7
+CN_NEUTRAL_UPPER = 2.3
+CN_Z_TO_COPY_NUMBER_SCALE = 0.05
+CN_COPY_NUMBER_MIN = 0.0
+CN_COPY_NUMBER_MAX = 4.0
+CN_BIN_COPY_NUMBER_SOURCE = "calibrated_z_mosaic30_cn_proxy"
 HG19_CENTROMERES = {
     "chr1": (121_535_434, 124_535_434),
     "chr2": (92_326_171, 95_326_171),
@@ -222,39 +228,47 @@ def event_copy_number(row_dict):
     raise ValueError("Final report event is missing copy_number_estimate, sex_adjusted_copy_number, and a_ratio.")
 
 
+def classify_copy_number_state(value):
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "neutral"
+    if not np.isfinite(numeric):
+        return "neutral"
+    if numeric < CN_NEUTRAL_LOWER:
+        return "del"
+    if numeric > CN_NEUTRAL_UPPER:
+        return "dup"
+    return "neutral"
+
+
 def annotate_copy_number_bins(bins_df, final_events):
     frame = bins_df.copy()
-    frame["copy_number"] = 2.0
-    frame["copy_number_source"] = "neutral_diploid_baseline"
+    z = pd.to_numeric(frame["z"], errors="coerce").replace([np.inf, -np.inf], np.nan)
+    frame["copy_number"] = (2.0 + z * CN_Z_TO_COPY_NUMBER_SCALE).clip(
+        lower=CN_COPY_NUMBER_MIN,
+        upper=CN_COPY_NUMBER_MAX,
+    )
+    frame["report_state"] = frame["copy_number"].map(classify_copy_number_state)
+    frame["event_report_state"] = "neutral"
+    frame["copy_number_source"] = CN_BIN_COPY_NUMBER_SOURCE
+    frame.loc[~np.isfinite(frame["copy_number"]), "copy_number_source"] = "calibrated_z_missing"
     frame["is_structure_gap_blank"] = structural_gap_mask(frame)
     frame.loc[frame["is_structure_gap_blank"], "copy_number"] = np.nan
+    frame.loc[frame["is_structure_gap_blank"], "report_state"] = "neutral"
     frame.loc[frame["is_structure_gap_blank"], "copy_number_source"] = "structure_gap_blank"
     if final_events.empty:
         return frame
     for row in final_events.itertuples(index=False):
         row_dict = row._asdict()
-        copy_number, source = event_copy_number(row_dict)
         mask = (
             frame["chrom"].astype(str).eq(str(row_dict["chrom"]))
             & frame["end"].astype(int).gt(int(row_dict["start"]))
             & frame["start"].astype(int).lt(int(row_dict["end"]))
             & ~frame["is_structure_gap_blank"]
+            & frame["event_report_state"].eq("neutral")
         )
-        event_bins = frame.loc[mask].copy()
-        if event_bins.empty:
-            continue
-        event_z = pd.to_numeric(event_bins["z"], errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
-        median_abs_z = float(event_z.abs().median()) if not event_z.empty else np.nan
-        frame.loc[mask, "report_state"] = str(row_dict["report_state"])
-        if np.isfinite(median_abs_z) and median_abs_z > 0.0:
-            denominator = max(median_abs_z, 0.25)
-            amplitude = abs(copy_number - 2.0)
-            scaled = 2.0 + (pd.to_numeric(frame.loc[mask, "z"], errors="coerce") * amplitude / denominator)
-            frame.loc[mask, "copy_number"] = scaled.astype(float)
-            frame.loc[mask, "copy_number_source"] = "event_calibrated_z_scaled_to_cn_proxy"
-        else:
-            frame.loc[mask, "copy_number"] = copy_number
-            frame.loc[mask, "copy_number_source"] = "event_cn_uniform_median_z_uninformative"
+        frame.loc[mask, "event_report_state"] = str(row_dict["report_state"])
     return frame
 
 
@@ -473,7 +487,19 @@ def write_copy_number_bins_tsv(path_value, bins_df, layout):
         center = int(row.start + ((row.end - row.start) / 2))
         genome_positions.append(int(genome_position(row.chrom, center, layout)))
     output["genome_pos"] = genome_positions
-    output = output[["chrom", "start", "end", "genome_pos", "z", "copy_number", "report_state", "copy_number_source"]].copy()
+    output = output[
+        [
+            "chrom",
+            "start",
+            "end",
+            "genome_pos",
+            "z",
+            "copy_number",
+            "report_state",
+            "event_report_state",
+            "copy_number_source",
+        ]
+    ].copy()
     path = Path(path_value)
     path.parent.mkdir(parents=True, exist_ok=True)
     output.to_csv(path, sep="\t", index=False)
@@ -541,13 +567,6 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         svg.append(f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" y2="{y:.2f}" stroke="{color}" stroke-width="1" stroke-dasharray="4,4"/>')
         svg.append(svg_text(18, y + 4, f"CN={cn}", size=11, fill="#64748b"))
 
-    for row in final_events.itertuples(index=False):
-        row_dict = row._asdict()
-        state = str(row_dict.get("report_state", "")).lower()
-        color = CN_REPORT_STATE_COLOR.get(state, NEUTRAL_COLOR)
-        label = f"{state} {row_dict.get('chrom')}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}"
-        svg.append(render_event_region(row_dict, cn_layout, cn_total_span, left, plot_width, signal_top, signal_height, color, label))
-
     plot_bins = downsample_bins(cn_bins, max_points=max_points)
     for row in plot_bins.itertuples(index=False):
         if getattr(row, "is_structure_gap_blank", False) or not np.isfinite(float(row.copy_number)):
@@ -555,7 +574,7 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         x = scale_x(genome_position(row.chrom, int(row.start + ((row.end - row.start) / 2)), cn_layout), cn_total_span, left, plot_width)
         y = scale_copy_number_y(row.copy_number, mid_y, half_h)
         color = CN_REPORT_STATE_COLOR.get(str(row.report_state), NEUTRAL_COLOR)
-        opacity = 0.82 if row.report_state in {"dup", "del"} else 0.62
+        opacity = 0.78 if row.report_state in {"dup", "del"} else 0.58
         svg.append(
             f'<circle class="cn-bin-scatter" cx="{x:.2f}" cy="{y:.2f}" '
             f'r="{CN_SCATTER_RADIUS:.2f}" fill="{color}" opacity="{opacity:.2f}" '

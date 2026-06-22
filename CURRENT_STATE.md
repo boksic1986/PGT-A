@@ -1,9 +1,9 @@
 # CURRENT_STATE.md
 
-## 2026-06-22 Copy Number CNV Plot Bin-Z Scatter Fix
+## 2026-06-22 Copy Number CNV Plot Bin-CN Threshold Scatter Fix
 
 Current handoff:
-`docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md`.
+`docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
@@ -22,21 +22,28 @@ CN scatter correction:
   drawn.
 - grey blanks remain restricted to centromere visualization fallback regions.
 - chromosome separators and 50Mb ticks remain present.
-- every non-centromere bin is drawn as `class="cn-bin-scatter"` with radius
-  `2.00`.
-- final report-event bins now use the bin's own `calibrated_z` to compute a
+- every non-centromere 1Mb bin is drawn as `class="cn-bin-scatter"` with radius
+  `1.35`.
+- every non-centromere bin uses its own `calibrated_z` to compute a bounded
   visual CN proxy:
-  `CN_proxy = 2 + calibrated_z * abs(event_cn - 2) / max(median(abs(event_z)), 0.25)`.
-- `plot_bins_cn.tsv` now includes a `z` column, so the CN scatter source can be
-  audited per 1Mb bin.
-- `copy_number_source=event_calibrated_z_scaled_to_cn_proxy` marks event bins
-  that use per-bin `calibrated_z`.
-- neutral bins outside final report events remain `CN=2`, because no event-level
-  CN scale exists for them.
+  `CN_proxy = clip(2 + calibrated_z * 0.05, 0, 4)`.
+- `plot_bins_cn.tsv` includes `z`, `copy_number`, `report_state`,
+  `event_report_state`, and `copy_number_source`.
+- `copy_number_source=calibrated_z_mosaic30_cn_proxy` marks bins using the
+  current per-bin proxy.
+- scatter color is based only on the bin CN proxy, not on the event interval:
+  `CN < 1.7` is `del`, `1.7 <= CN <= 2.3` is `neutral`, and `CN > 2.3` is
+  `dup`.
+- `event_report_state` records overlap with final report events for audit, but
+  it does not color the scatter.
 - the event-level horizontal CN trend line is still the region-level CN
   estimate and remains separate from the per-bin scatter.
 - the CN proxy is for visual review only; it is not a bin-level CN caller and
   must not be used for filtering or performance metrics.
+- the previously observed extreme CN values came from the superseded
+  event-anchored scaling formula. Example: sample 56 had a bin with
+  `calibrated_z=37.920977`, which was amplified to `CN=14.923469`; this was a
+  visualization proxy artifact, not a real copy-number estimate.
 
 Remote validation:
 
@@ -44,30 +51,30 @@ Remote validation:
   `tests/unit/test_branch_b_plot.py`,
   `tests/unit/test_branch_ab_phase12_workflow_contract.py`,
   `tests/unit/test_cnv_report.py`, and
-  `tests/unit/test_current_context_index.py`: `39 passed in 1.16s`.
+  `tests/unit/test_current_context_index.py`: `40 passed in 1.19s`.
 - 0615 dry-run planned only 5 `cnv_branch_ab_plot` jobs plus report/runtime
   refresh; no mapping or reference rebuild jobs were requested.
 - 0615 materialization completed: `9 of 9 steps (100%) done`,
-  log `.snakemake/log/2026-06-22T125623.897147.snakemake.log`.
+  log `.snakemake/log/2026-06-22T132746.835251.snakemake.log`.
 
 Materialized 0615 acceptance:
 
 - 5/5 `.final_cnv_cn.svg` files exist.
 - 5/5 `.plot_bins_cn.tsv` files exist.
 - 5/5 CN SVGs contain 4024 `cn-bin-scatter` points, 120 centromere blanks, and
-  24 chromosome separators; `chrom-background` is absent.
-- 5/5 CN TSVs contain a `z` column.
-- 0615 event-bin CN proxy sources are now per-bin z based:
-  - `JZ26125843-56-56`: 501 event bins with
-    `event_calibrated_z_scaled_to_cn_proxy`, 2 centromere blanks.
-  - `JZ26125844-59-59`: 922 event bins with
-    `event_calibrated_z_scaled_to_cn_proxy`, 1 centromere blank.
-  - `JZ26125845-60-60`: 1273 event bins with
-    `event_calibrated_z_scaled_to_cn_proxy`, 1 centromere blank.
-  - `JZ26125846-61-61`: 1191 event bins with
-    `event_calibrated_z_scaled_to_cn_proxy`, 2 centromere blanks.
-  - `JZ26125847-62-62`: 1014 event bins with
-    `event_calibrated_z_scaled_to_cn_proxy`, 2 centromere blanks.
+  24 chromosome separators; `chrom-background` is absent and scatter radius is
+  `1.35`.
+- 5/5 CN TSVs contain `z`, `copy_number`, `report_state`,
+  `event_report_state`, and `copy_number_source`.
+- 5/5 CN TSVs have 4024 bins with
+  `copy_number_source=calibrated_z_mosaic30_cn_proxy` and 120 bins with
+  `copy_number_source=structure_gap_blank`.
+- Current 0615 CN proxy ranges:
+  - `JZ26125843-56-56`: CN 1.894-4.000; neutral=3678, dup=346.
+  - `JZ26125844-59-59`: CN 1.911-4.000; neutral=3679, dup=345.
+  - `JZ26125845-60-60`: CN 0.000-2.188; neutral=3766, del=258.
+  - `JZ26125846-61-61`: CN 1.823-4.000; neutral=3682, dup=342.
+  - `JZ26125847-62-62`: CN 1.891-4.000; neutral=3679, dup=345.
 
 Local synced path:
 
