@@ -854,7 +854,7 @@ def test_report_layer_filters_only_combined_technical_risk_not_single_indicators
     classified = classify_branch_b_v2_candidates(frame).set_index("candidate_id")
 
     assert set(classified["v2_report_layer_class"]) == {"internal_review_event"}
-    assert set(classified["v2_report_visibility"]) == {"internal_review"}
+    assert set(classified["v2_report_visibility"]) == {"internal_review_event"}
     assert "filtered_event" not in set(classified["v2_report_layer_class"])
 
 
@@ -884,7 +884,7 @@ def test_report_layer_combined_technical_risk_filters_to_audit_only():
     row = classify_branch_b_v2_candidates(frame).iloc[0]
 
     assert row["v2_report_layer_class"] == "filtered_event"
-    assert row["v2_report_visibility"] == "audit_only"
+    assert row["v2_report_visibility"] == "filtered_event"
     assert row["v2_filter_action"] == "filter_report_layer_combined_technical_risk"
     assert row["v2_filter_hard_suppression_allowed"] == 0
     assert "short_or_focal" in row["v2_report_filter_rule_tags"]
@@ -919,7 +919,7 @@ def test_report_layer_filters_sensitive_b_unsupported_gc_attenuated_candidate():
 
     assert row["v2_signal_strength_tier"] == "A_SENSITIVE_Z_5_TO_10"
     assert row["v2_report_layer_class"] == "filtered_event"
-    assert row["v2_report_visibility"] == "audit_only"
+    assert row["v2_report_visibility"] == "filtered_event"
     assert row["v2_filter_action"] == "filter_report_layer_combined_technical_risk"
     assert row["v2_filter_hard_suppression_allowed"] == 0
     assert "b_signal_not_supportive" in row["v2_report_filter_rule_tags"]
@@ -950,7 +950,7 @@ def test_report_layer_promotes_strong_supported_autosomal_candidate_to_report_ev
     row = classify_branch_b_v2_candidates(frame).iloc[0]
 
     assert row["v2_report_layer_class"] == "report_event"
-    assert row["v2_report_visibility"] == "final_report"
+    assert row["v2_report_visibility"] == "report_strong_event"
     assert row["v2_report_filter_reason"] == "strong_a_supported_report_layer_event"
 
 
@@ -980,7 +980,7 @@ def test_report_layer_strong_a_b_unsupported_gc_attenuated_stays_review_not_filt
 
     assert row["v2_signal_strength_tier"] == "A_STRONG_Z_GE_10"
     assert row["v2_report_layer_class"] == "internal_review_event"
-    assert row["v2_report_visibility"] == "internal_review"
+    assert row["v2_report_visibility"] == "internal_review_event"
     assert row["v2_filter_action"] != "filter_report_layer_combined_technical_risk"
 
 
@@ -1009,7 +1009,7 @@ def test_report_layer_keeps_h6_chr21_truth_sensitive_candidate_visible():
     row = classify_branch_b_v2_candidates(frame).iloc[0]
 
     assert row["v2_report_layer_class"] == "internal_review_event"
-    assert row["v2_report_visibility"] == "internal_review"
+    assert row["v2_report_visibility"] == "internal_review_event"
     assert row["v2_filter_action"] != "filter_report_layer_combined_technical_risk"
 
 
@@ -1037,7 +1037,7 @@ def test_report_layer_matched_background_outlier_can_be_report_event():
     row = classify_branch_b_v2_candidates(frame).iloc[0]
 
     assert row["v2_report_layer_class"] == "report_event"
-    assert row["v2_report_visibility"] == "final_report"
+    assert row["v2_report_visibility"] == "report_strong_event"
 
 
 def test_report_layer_routes_sex_chromosome_to_branch_s_event():
@@ -1061,7 +1061,7 @@ def test_report_layer_routes_sex_chromosome_to_branch_s_event():
     row = classify_branch_b_v2_candidates(frame).iloc[0]
 
     assert row["v2_report_layer_class"] == "branch_s_event"
-    assert row["v2_report_visibility"] == "branch_s_report_section"
+    assert row["v2_report_visibility"] == "branch_s_event"
 
 
 def test_report_layer_pass2_does_not_demote_candidate_from_sample_report_burden():
@@ -1120,7 +1120,7 @@ def test_report_layer_pass2_does_not_demote_candidate_from_sample_report_burden(
     assert classified.loc["S1.anchor", "v2_report_layer_class"] == "report_event"
     assert classified.loc["S1.stable", "v2_report_layer_class"] == "report_event"
     assert classified.loc["S1.demote", "v2_report_layer_class"] == "report_event"
-    assert classified.loc["S1.demote", "v2_report_visibility"] == "final_report"
+    assert classified.loc["S1.demote", "v2_report_visibility"] == "report_strong_event"
     assert classified.loc["S1.demote", "v2_filter_action"] != (
         "downgrade_report_to_internal_review_multi_event_uncertain_context"
     )
@@ -1154,7 +1154,7 @@ def test_report_layer_pass2_single_unstable_unknown_background_signal_stays_repo
     assert row["v2_gc_rc_context_label"] == "GC_RC_AMPLIFIED"
     assert row["v2_background_context_label"] == "UNKNOWN_BACKGROUND_NO_NULL_SUPPORT"
     assert row["v2_report_layer_class"] == "report_event"
-    assert row["v2_report_visibility"] == "final_report"
+    assert row["v2_report_visibility"] == "report_strong_event"
 
 
 def test_report_layer_pass2_missing_a_zscore_uses_candidate_level_contract_risk_only():
@@ -1210,7 +1210,7 @@ def test_report_layer_pass2_missing_a_zscore_uses_candidate_level_contract_risk_
     classified = classify_branch_b_v2_candidates(frame).set_index("candidate_id")
 
     assert classified.loc["S1.missing_z", "v2_report_layer_class"] == "internal_review_event"
-    assert classified.loc["S1.missing_z", "v2_report_visibility"] == "internal_review"
+    assert classified.loc["S1.missing_z", "v2_report_visibility"] == "internal_review_event"
     assert "multi_report_sample" not in classified.loc["S1.missing_z", "v2_report_filter_rule_tags"]
     assert classified.loc["S1.missing_z", "v2_filter_hard_suppression_allowed"] == 0
 
@@ -1243,5 +1243,94 @@ def test_lowres_no_support_is_context_not_single_candidate_filter():
     assert row["v2_lowres_context_label"] == "LOWRES_NO_SUPPORT_INFORMATIVE_BUT_NOT_FILTER"
     assert row["v2_ref_stability_context"] == "REF_STABILITY_STABLE"
     assert row["v2_report_layer_class"] == "report_event"
-    assert row["v2_report_visibility"] == "final_report"
+    assert row["v2_report_visibility"] == "report_strong_event"
     assert row["v2_filter_action"] == "keep_report_layer_event"
+
+
+def test_report_layer_visibility_distinguishes_strong_and_weak_report_events():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "Y1",
+                "candidate_id": "Y1_chr21_loss",
+                "chrom": "chr21",
+                "start": 1_000_000,
+                "end": 42_000_000,
+                "state": "loss",
+                "a_abs_zscore": 112.0,
+                "same_direction_fraction": 0.92,
+                "attenuation_ratio": 1.0,
+                "clean_bin_fraction": 0.85,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            },
+            {
+                "sample_id": "H6",
+                "candidate_id": "H6_chr21_gain",
+                "chrom": "chr21",
+                "start": 20_700_000,
+                "end": 22_300_000,
+                "state": "gain",
+                "a_abs_zscore": 7.11,
+                "same_direction_fraction": 0.92,
+                "attenuation_ratio": 0.92,
+                "clean_bin_fraction": 0.85,
+                "high_risk_bin_fraction": 0.05,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+                "lowres_consensus_label": "LOWRES_2MB_3MB_SAME_DIRECTION_SUPPORT",
+                "ref_stability_context": "REF_STABILITY_STABLE",
+            },
+        ]
+    )
+
+    classified = classify_branch_b_v2_candidates(frame).set_index("candidate_id")
+
+    assert classified.loc["Y1_chr21_loss", "v2_report_layer_class"] == "report_event"
+    assert classified.loc["Y1_chr21_loss", "v2_report_visibility"] == "report_strong_event"
+    assert classified.loc["H6_chr21_gain", "v2_report_layer_class"] == "report_event"
+    assert classified.loc["H6_chr21_gain", "v2_report_visibility"] == "report_weak_event"
+    assert classified.loc["H6_chr21_gain", "v2_filter_action"] == "keep_report_layer_event"
+
+
+def test_report_layer_visibility_uses_explicit_non_report_labels():
+    frame = pd.DataFrame(
+        [
+            {
+                "sample_id": "S1",
+                "candidate_id": "S1.filtered",
+                "chrom": "chr16",
+                "start": 500_000,
+                "end": 1_800_000,
+                "state": "loss",
+                "a_abs_zscore": 6.1,
+                "same_direction_fraction": 0.10,
+                "corrected_amplitude": 2.6,
+                "attenuation_ratio": 0.35,
+                "clean_bin_fraction": 0.10,
+                "high_risk_bin_fraction": 0.85,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+                "calibration_null_status": "NO_NULL_SUPPORT",
+            },
+            {
+                "sample_id": "H5",
+                "candidate_id": "H5_chrX_loss",
+                "chrom": "chrX",
+                "start": 1,
+                "end": 155_000_000,
+                "state": "loss",
+                "a_abs_zscore": 62.0,
+                "same_direction_fraction": 0.80,
+                "corrected_amplitude": -2.1,
+                "matched_negative_background_status": "UNKNOWN_BACKGROUND",
+            },
+        ]
+    )
+
+    classified = classify_branch_b_v2_candidates(frame).set_index("candidate_id")
+
+    assert classified.loc["S1.filtered", "v2_report_layer_class"] == "filtered_event"
+    assert classified.loc["S1.filtered", "v2_report_visibility"] == "filtered_event"
+    assert classified.loc["H5_chrX_loss", "v2_report_layer_class"] == "branch_s_event"
+    assert classified.loc["H5_chrX_loss", "v2_report_visibility"] == "branch_s_event"

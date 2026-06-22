@@ -181,6 +181,7 @@ CNV_BRANCH_S_EVIDENCE = str(Path(CNV_POSTPROCESS_DIR) / "branch_s" / "{sample}.s
 CNV_BRANCH_S_SCORES = str(Path(CNV_POSTPROCESS_DIR) / "branch_s" / "{sample}.sca_state_scores.tsv")
 CNV_BRANCH_S_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "branch_s" / "{sample}.summary.json")
 CNV_B_PLOT_SVG = str(Path(CNV_PLOTS_DIR) / "{sample}.final_cnv.svg")
+CNV_B_PLOT_BINS_TSV = str(Path(CNV_PLOTS_DIR) / "{sample}.plot_bins.tsv")
 CNV_NEGATIVE_BANK_CFG = CNV_CFG.get("negative_bank", {})
 CNV_NEGATIVE_BANK_SAMPLES_TSV = (
     resolve_path(CNV_NEGATIVE_BANK_CFG.get("samples_tsv", ""))

@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_0930_lowres_branch_bs_integration_handoff.md`
+2. `docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,19 +23,23 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_0930_lowres_branch_bs_integration_handoff.md
-previous_handoff: docs/handoff/2026-06-22_0101_branch_s_sca_v2_handoff.md
+active_handoff: docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md
+previous_handoff: docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_lowres_ref_mad_materialized_context_only_not_filter
+branch_b_status: v2_report_visibility_materialized_development_only
 branch_s_status: sex_aware_segment_level_lowres_context_not_final
-report_status: lowres_enabled_report_gate_materialized_development_only
+report_status: 0615_high_confidence_review_candidates_recorded_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`
+- `docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md`
+- `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`
+- `docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`
 - `docs/reports/h7_h16_reference_cohort_decision_2026-06-20.md`
 - `docs/reports/branch_a_validation_h_r0_shadow_2026-06-20.md`
 - `docs/reports/branch_a_burden_optimization_phase1_2026-06-21.md`
@@ -69,6 +73,62 @@ report_status: lowres_enabled_report_gate_materialized_development_only
 - `docs/reports/branch_ab_v2_rnd_constraints_2026-06-18.md`
 
 ## Current Module State
+
+### 0615 High-Confidence Review Candidates
+
+The latest completed loop is
+`docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`.
+
+This is a read-only review of the current 2026-06-15 materialized report output.
+It does not change workflow code, thresholds, reference, Branch A, Branch B V2,
+Branch S, or remote results.
+
+Current 0615 input check:
+
+- `report_events.tsv`: 71 autosomal report rows.
+- plot-bin TSVs: 5/5 samples present.
+- Branch S remains development-only context.
+
+Current conservative high-confidence autosomal review candidates:
+
+- `JZ26125845-60-60`: 10 rows.
+- `JZ26125843-56-56`, `JZ26125844-59-59`,
+  `JZ26125846-61-61`, and `JZ26125847-62-62`: 0 rows under the conservative
+  high-confidence screen.
+
+The current 5/5 batch-shared region `chr4:67.50-101.25Mb gain` is excluded
+from high-confidence interpretation. This cohort still has no locked truth, so
+no TP/FP/FN conclusion is allowed.
+
+### Report Main And CNV Plot
+
+The latest completed loop is
+`docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
+
+`cnv_report` now uses Branch B V2 benchmark report events as the final autosomal
+main-table event source when V2 benchmark is available. The final autosomal
+report event layer is split into `report_strong_event` and
+`report_weak_event`; internal review, filtered audit rows, and Branch S rows
+are kept out of the autosomal main table. The sample report summary is expanded
+from the V2 sample summary, so zero-autosomal-report-event samples remain
+visible.
+
+The CNV plot contract is fixed to `calibrated_z` only. Missing or non-finite
+bin values are skipped, and missing `calibrated_z` is an error. Each sample has
+`{sample}.final_cnv.svg` and `{sample}.plot_bins.tsv`; plot states are limited
+to `dup`, `del`, and `neutral`.
+
+Materialized report-layer acceptance:
+
+- Y1-Y8: truth 10/10, FN=0, report events 40, plots 8/8.
+- H1-H16: truth 10/10, FN=0, H6 chr21 `report_weak_event`, report events
+  23, plots 16/16.
+- G1-G8: truth 10/10, FN=0, G2 truth not filtered, report events 26, plots
+  8/8.
+- 2026-06-15: no locked truth, burden/context only, report events 71, plots
+  5/5.
+
+This remains `development_only_not_final_release`.
 
 ### Reference
 

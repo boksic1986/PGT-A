@@ -233,6 +233,91 @@ class CnvReportRankingTest(unittest.TestCase):
         self.assertEqual(int(row["branch_b_review_tier_events"]), 1)
         self.assertEqual(row["branch_b_top_event"], "chr16:46000001-90000000 gain [review/moderate; reportable]")
 
+    def test_v2_report_events_are_summarized_without_legacy_keep_fields(self):
+        events_df = pd.DataFrame(
+            [
+                {
+                    "sample_id": "H6",
+                    "candidate_id": "H6_chr21_gain",
+                    "chrom": "chr21",
+                    "start": 20_000_000,
+                    "end": 23_000_000,
+                    "state": "gain",
+                    "a_abs_zscore": 7.11,
+                    "v2_report_layer_class": "report_event",
+                    "v2_report_visibility": "report_weak_event",
+                    "v2_length_tier": "reportable_candidate_ge2mb",
+                },
+                {
+                    "sample_id": "H6",
+                    "candidate_id": "H6_chr16_filtered",
+                    "chrom": "chr16",
+                    "start": 500_000,
+                    "end": 1_800_000,
+                    "state": "loss",
+                    "a_abs_zscore": 6.0,
+                    "v2_report_layer_class": "filtered_event",
+                    "v2_report_visibility": "filtered_event",
+                    "v2_length_tier": "subreportable_lt1mb",
+                },
+            ]
+        )
+
+        sample_df, top_branch_b = summarize_branch_b_events(events_df)
+        merged = sample_df.merge(top_branch_b, on="sample_id", how="left")
+        row = merged.iloc[0]
+
+        self.assertEqual(int(row["branch_b_total_events"]), 1)
+        self.assertEqual(int(row["branch_b_kept_events"]), 1)
+        self.assertEqual(int(row["branch_b_review_events"]), 1)
+        self.assertEqual(int(row["branch_b_reportable_events"]), 1)
+        self.assertEqual(row["branch_b_top_event"], "chr21:20000000-23000000 gain [review/weak; reportable]")
+
+    def test_v2_sample_summary_keeps_zero_report_event_samples_in_report_universe(self):
+        sample_df = pd.DataFrame(
+            [
+                {
+                    "sample_id": "H6",
+                    "branch_b_total_events": 1,
+                    "branch_b_kept_events": 1,
+                    "branch_b_pass_events": 0,
+                    "branch_b_review_events": 1,
+                    "branch_b_reportable_events": 1,
+                    "branch_b_review_tier_events": 0,
+                    "branch_b_subreportable_events": 0,
+                    "branch_b_top_priority_score": 7.11,
+                    "branch_b_suppressed_sex_review_events": 0,
+                }
+            ]
+        )
+        branch_b_v2_df = pd.DataFrame(
+            [
+                {
+                    "sample_id": "H6",
+                    "branch_b_v2_report_event_count": 1,
+                    "branch_b_v2_internal_review_event_count": 0,
+                    "branch_b_v2_filtered_event_count": 0,
+                    "branch_b_v2_branch_s_event_count": 2,
+                },
+                {
+                    "sample_id": "H10",
+                    "branch_b_v2_report_event_count": 0,
+                    "branch_b_v2_internal_review_event_count": 0,
+                    "branch_b_v2_filtered_event_count": 0,
+                    "branch_b_v2_branch_s_event_count": 3,
+                },
+            ]
+        )
+
+        expanded = report_module.ensure_branch_b_v2_sample_universe(sample_df, branch_b_v2_df)
+        h10 = expanded.loc[expanded["sample_id"].eq("H10")].iloc[0]
+
+        self.assertEqual(set(expanded["sample_id"].tolist()), {"H6", "H10"})
+        self.assertEqual(int(h10["branch_b_total_events"]), 0)
+        self.assertEqual(int(h10["branch_b_kept_events"]), 0)
+        self.assertEqual(int(h10["branch_b_reportable_events"]), 0)
+        self.assertEqual(int(h10["branch_b_suppressed_sex_review_events"]), 0)
+
     def test_report_loads_p3_and_p5_summary_only_status(self):
         with tempfile.TemporaryDirectory() as temp_dir_value:
             temp_dir = Path(temp_dir_value)

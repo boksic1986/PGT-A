@@ -13,6 +13,7 @@ from pgta.core.logging import setup_logger
 AUTOSOME_ORDER = {f"chr{index}": index for index in range(1, 23)}
 CHROM_ORDER = {**AUTOSOME_ORDER, "chrX": 23, "chrY": 24}
 STATE_COLOR = {"gain": "#dc2626", "loss": "#2563eb", "neutral": "#64748b"}
+REPORT_STATE_COLOR = {"dup": "#dc2626", "del": "#2563eb", "neutral": "#64748b"}
 NEUTRAL_COLOR = "#64748b"
 TREND_COLOR = "#b91c1c"
 
@@ -28,6 +29,7 @@ def parse_args():
     parser.add_argument("--input-events", required=True)
     parser.add_argument("--input-a-branch", default="")
     parser.add_argument("--output-svg", required=True)
+    parser.add_argument("--output-bins-tsv", default="")
     parser.add_argument("--max-points", type=int, default=8000)
     parser.add_argument("--log", default="")
     return parser.parse_args()
@@ -66,10 +68,9 @@ def chrom_sort_key(chrom):
 
 
 def choose_signal_column(bins_df):
-    for column in ("calibrated_z", "robust_z", "raw_robust_z", "normalized_signal"):
-        if column in bins_df.columns:
-            return column
-    raise ValueError("Input bins must contain one of calibrated_z, robust_z, raw_robust_z, normalized_signal.")
+    if "calibrated_z" not in bins_df.columns:
+        raise ValueError("Input bins must contain calibrated_z; robust_z/raw_robust_z/normalized_signal fallback is disabled.")
+    return "calibrated_z"
 
 
 def coerce_bins(bins_df):
@@ -84,9 +85,10 @@ def coerce_bins(bins_df):
     for column in ("bin_index", "start", "end"):
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
     signal_column = choose_signal_column(frame)
-    frame["plot_signal"] = pd.to_numeric(frame[signal_column], errors="coerce").fillna(0.0)
-    frame["plot_signal"] = frame["plot_signal"].clip(lower=-12.0, upper=12.0)
-    frame = frame.dropna(subset=["bin_index", "start", "end"]).copy()
+    frame["z"] = pd.to_numeric(frame[signal_column], errors="coerce")
+    frame = frame.dropna(subset=["bin_index", "start", "end", "z"]).copy()
+    frame = frame[np.isfinite(frame["z"].astype(float))].copy()
+    frame["plot_signal"] = frame["z"].clip(lower=-12.0, upper=12.0)
     frame["bin_index"] = frame["bin_index"].astype(int)
     frame["start"] = frame["start"].astype(int)
     frame["end"] = frame["end"].astype(int)
@@ -98,10 +100,21 @@ def coerce_bins(bins_df):
     )
 
 
-def coerce_final_events(events_df):
+def normalize_report_state(value):
+    text = str(value or "").strip().lower()
+    if text in {"gain", "dup", "duplication"}:
+        return "dup"
+    if text in {"loss", "del", "deletion"}:
+        return "del"
+    return ""
+
+
+def coerce_final_events(events_df, sample_id=""):
     if events_df.empty:
         return events_df
     frame = events_df.copy()
+    if sample_id and "sample_id" in frame.columns:
+        frame = frame[frame["sample_id"].astype(str).eq(str(sample_id))].copy()
     frame["chrom"] = frame["chrom"].map(normalize_chrom)
     frame = frame[frame["chrom"].isin(CHROM_ORDER)].copy()
     for column in ("start", "end", "keep_event", "priority_score"):
@@ -117,11 +130,42 @@ def coerce_final_events(events_df):
             frame[column] = default
         frame[column] = frame[column].fillna(default).astype(str)
     frame = frame.dropna(subset=["start", "end"]).copy()
-    if "keep_event" in frame.columns:
+    has_v2_report_contract = "v2_report_layer_class" in frame.columns or "v2_report_visibility" in frame.columns
+    if has_v2_report_contract:
+        report_class = frame.get("v2_report_layer_class", pd.Series("", index=frame.index)).fillna("").astype(str)
+        visibility = frame.get("v2_report_visibility", pd.Series("", index=frame.index)).fillna("").astype(str)
+        frame = frame[
+            report_class.eq("report_event")
+            | visibility.isin({"report_strong_event", "report_weak_event", "final_report"})
+        ].copy()
+    elif "keep_event" in frame.columns:
         frame = frame[pd.to_numeric(frame["keep_event"], errors="coerce").fillna(0).astype(int).eq(1)].copy()
-    if "artifact_status" in frame.columns:
+    if not has_v2_report_contract and "artifact_status" in frame.columns:
         frame = frame[~frame["artifact_status"].str.lower().eq("artifact")].copy()
-    frame = frame[frame["state"].str.lower().isin({"gain", "loss"})].copy()
+    frame["report_state"] = frame["state"].map(normalize_report_state)
+    frame = frame[frame["report_state"].isin({"dup", "del"})].copy()
+    for column in ("priority_score", "a_abs_zscore"):
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    sort_columns = [column for column in ["priority_score", "a_abs_zscore", "end"] if column in frame.columns]
+    if sort_columns:
+        frame = frame.sort_values(sort_columns, ascending=[False] * len(sort_columns)).copy()
+    return frame
+
+
+def annotate_report_states(bins_df, final_events):
+    frame = bins_df.copy()
+    frame["report_state"] = "neutral"
+    if final_events.empty:
+        return frame
+    for row in final_events.itertuples(index=False):
+        mask = (
+            frame["chrom"].astype(str).eq(str(row.chrom))
+            & frame["end"].astype(int).gt(int(row.start))
+            & frame["start"].astype(int).lt(int(row.end))
+            & frame["report_state"].eq("neutral")
+        )
+        frame.loc[mask, "report_state"] = str(row.report_state)
     return frame
 
 
@@ -228,17 +272,35 @@ def render_smooth_polylines(frame, layout, total_span, left, plot_width, mid_y, 
     return chunks
 
 
+def write_plot_bins_tsv(path_value, bins_df, layout):
+    if not path_value:
+        return
+    output = bins_df.copy()
+    genome_positions = []
+    for row in output.itertuples(index=False):
+        center = int(row.start + ((row.end - row.start) / 2))
+        genome_positions.append(int(genome_position(row.chrom, center, layout)))
+    output["genome_pos"] = genome_positions
+    output = output[["chrom", "start", "end", "genome_pos", "z", "report_state"]].copy()
+    path = Path(path_value)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    output.to_csv(path, sep="\t", index=False)
+
+
 def build_cnv_plot_svg(
     sample_id,
     bins_df,
     branch_b_events_df,
     a_branch_df,
     output_svg,
+    output_bins_tsv="",
     max_points=8000,
 ):
     bins = coerce_bins(bins_df)
-    final_events = coerce_final_events(branch_b_events_df)
+    final_events = coerce_final_events(branch_b_events_df, sample_id=sample_id)
     layout, total_span = build_chrom_layout(bins)
+    bins = annotate_report_states(bins, final_events)
+    write_plot_bins_tsv(output_bins_tsv, bins, layout)
 
     width = 1280
     height = 620
@@ -255,7 +317,7 @@ def build_cnv_plot_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         svg_text(24, 34, f"CNV final profile - {sample_id}", size=24, weight="bold"),
-        svg_text(24, 58, "Final reported gain/loss regions over genome-wide CNV signal", size=13, fill="#475569"),
+        svg_text(24, 58, "Final reported dup/del regions over genome-wide calibrated z signal", size=13, fill="#475569"),
     ]
 
     # Chromosome background and labels.
@@ -278,9 +340,10 @@ def build_cnv_plot_svg(
 
     for row in final_events.itertuples(index=False):
         row_dict = row._asdict()
-        state = str(row_dict.get("state", "")).lower()
+        state = str(row_dict.get("report_state", "")).lower()
         color = STATE_COLOR.get(state, NEUTRAL_COLOR)
-        label = f"Final {state} {row_dict.get('chrom')}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}"
+        color = REPORT_STATE_COLOR.get(state, NEUTRAL_COLOR)
+        label = f"{state} {row_dict.get('chrom')}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}"
         svg.append(render_event_region(row_dict, layout, total_span, left, plot_width, signal_top, signal_height, color, label))
 
     plot_bins = downsample_bins(bins, max_points=max_points)
@@ -289,8 +352,8 @@ def build_cnv_plot_svg(
     for row in plot_bins.itertuples(index=False):
         x = scale_x(genome_position(row.chrom, int(row.start + ((row.end - row.start) / 2)), layout), total_span, left, plot_width)
         y = scale_y(row.plot_signal, mid_y, half_h)
-        color = NEUTRAL_COLOR
-        opacity = 0.62
+        color = REPORT_STATE_COLOR.get(str(row.report_state), NEUTRAL_COLOR)
+        opacity = 0.82 if row.report_state in {"dup", "del"} else 0.62
         point_chunks.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="1.25" fill="{color}" opacity="{opacity:.2f}"/>')
     svg.extend(point_chunks)
     svg.extend(render_smooth_polylines(smooth_bins, layout, total_span, left, plot_width, mid_y, half_h))
@@ -298,10 +361,10 @@ def build_cnv_plot_svg(
     legend_x = left
     legend_y = height - 62
     legend_items = [
-        ("Final gain", STATE_COLOR["gain"]),
-        ("Final loss", STATE_COLOR["loss"]),
-        ("Neutral signal", NEUTRAL_COLOR),
-        ("Smoothed signal trend", TREND_COLOR),
+        ("dup", REPORT_STATE_COLOR["dup"]),
+        ("del", REPORT_STATE_COLOR["del"]),
+        ("neutral bin", NEUTRAL_COLOR),
+        ("smooth z trend", TREND_COLOR),
     ]
     for idx, (label, color) in enumerate(legend_items):
         x = legend_x + idx * 180
@@ -327,6 +390,7 @@ def main():
         branch_b_events_df=events_df,
         a_branch_df=a_branch_df,
         output_svg=args.output_svg,
+        output_bins_tsv=args.output_bins_tsv,
         max_points=args.max_points,
     )
     logger.info(

@@ -193,10 +193,26 @@ def test_branch_b_v2_benchmark_is_v2_only_and_report_safe():
     report_rule = workflow.split('if "cnv_report" in AVAILABLE_TARGETS:', 1)[1]
     assert "CNV_B_V2_BENCHMARK_SUMMARY" in report_rule
     assert "CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY" in report_rule
+    assert 'if "branch_b_v2_benchmark" in AVAILABLE_TARGETS' in report_rule
     assert "--branch-b-v2-benchmark-summary" in report_rule
     assert "--branch-b-v2-sample-summary" in report_rule
     v2_report_input_block = report_rule.split("branch_b_v2_benchmark_summary", 1)[1].split("evaluation_summary", 1)[0]
+    assert "REQUESTED_TARGETS" not in v2_report_input_block
     assert "CNV_B_FINAL_EVENTS" not in v2_report_input_block
+
+
+def test_cnv_plot_uses_v2_report_events_and_writes_plot_bins():
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+
+    assert "CNV_B_PLOT_BINS_TSV" in layout
+    assert "{sample}.plot_bins.tsv" in layout
+
+    plot_rule = workflow.split("rule cnv_branch_ab_plot:", 1)[1].split("if CNV_NEGATIVE_BANK_SAMPLES_TSV:", 1)[0]
+    assert "events=CNV_B_V2_BENCHMARK_REPORT_EVENTS" in plot_rule
+    assert "CNV_B_FINAL_EVENTS" not in plot_rule
+    assert "bins_tsv=CNV_B_PLOT_BINS_TSV" in plot_rule
+    assert "--output-bins-tsv" in plot_rule
 
 
 def test_negative_bank_rule_is_config_gated_and_not_automatic_n0():
