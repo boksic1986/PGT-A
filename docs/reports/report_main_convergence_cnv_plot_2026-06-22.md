@@ -622,6 +622,99 @@ Complete log: .snakemake/log/2026-06-22T115301.719875.snakemake.log
 | JZ26125846-61-61 | true | true | true | 3600 | true | 544 | 0 | false |
 | JZ26125847-62-62 | true | true | true | 3600 | true | 544 | 0 | false |
 
+## 2026-06-22 CN Plot Centromere Scatter Fix
+
+Follow-up review found that the previous CN plot still looked non-white in
+practice because the materialized 0615 calibrated-bin input lacks separate
+centromere-only columns. The code therefore fell back to the combined
+`is_gap_centromere_telomere` / `gap_centromere_telomere_overlap_fraction`
+fields, which also shaded telomere and small gap bins. That was too broad for a
+visual background layer.
+
+This update is still visualization-only. It does not change Branch A, Branch B
+V2, Branch S, report-event classification, filtering, reference, mapping, or
+thresholds.
+
+Changes:
+
+- CN plot background remains white.
+- Alternating chromosome background remains disabled.
+- Combined gap/telomere fields are no longer used for CN plot grey shading.
+- Grey blanks now use centromere-only columns when present, otherwise hg19
+  centromere coordinates from the same project resource BED are used as a
+  visualization fallback.
+- CN scatter points are larger (`r=2.00`) and have a white stroke so each bin is
+  easier to see.
+- CN chromosome layout uses a larger inter-chromosome gap and explicit
+  `chrom-separator` lines.
+
+TDD red run:
+
+```text
+PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
+/biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
+  tests/unit/test_branch_b_plot.py -q
+```
+
+Result:
+
+```text
+2 failed, 3 passed
+```
+
+Expected failures:
+
+- old implementation emitted scatter points with `r=1.25`;
+- old implementation shaded non-centromere telomere/gap bins through the
+  combined structure fallback.
+
+Final remote tests:
+
+```text
+PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
+/biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
+  tests/unit/test_branch_b_plot.py \
+  tests/unit/test_cnv_report.py \
+  tests/unit/test_branch_ab_phase12_workflow_contract.py \
+  tests/unit/test_current_context_index.py -q
+```
+
+Result:
+
+```text
+38 passed in 1.05s
+```
+
+0615 materialization:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 4 --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+9 of 9 steps (100%) done
+Complete log: .snakemake/log/2026-06-22T123237.156721.snakemake.log
+```
+
+Materialized 0615 CN SVG check:
+
+| sample | scatter count | scatter radius | centromere blanks | chrom separators | chrom background | alternating fill |
+|---|---:|---:|---:|---:|---|---|
+| JZ26125843-56-56 | 4024 | 2.00 | 120 | 24 | false | false |
+| JZ26125844-59-59 | 4024 | 2.00 | 120 | 24 | false | false |
+| JZ26125845-60-60 | 4024 | 2.00 | 120 | 24 | false | false |
+| JZ26125846-61-61 | 4024 | 2.00 | 120 | 24 | false | false |
+| JZ26125847-62-62 | 4024 | 2.00 | 120 | 24 | false | false |
+
+Local synced outputs:
+
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+
 Local synced outputs:
 
 - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`

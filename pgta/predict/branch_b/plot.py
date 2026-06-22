@@ -17,6 +17,34 @@ REPORT_STATE_COLOR = {"dup": "#facc15", "del": "#2563eb", "neutral": "#64748b"}
 CN_REPORT_STATE_COLOR = {"dup": "#1d4ed8", "del": "#ef4444", "neutral": "#64748b"}
 NEUTRAL_COLOR = "#64748b"
 TREND_COLOR = "#dc2626"
+CN_CHROM_GAP_BP = 20_000_000
+CN_SCATTER_RADIUS = 2.0
+HG19_CENTROMERES = {
+    "chr1": (121_535_434, 124_535_434),
+    "chr2": (92_326_171, 95_326_171),
+    "chr3": (90_504_854, 93_504_854),
+    "chr4": (49_660_117, 52_660_117),
+    "chr5": (46_405_641, 49_405_641),
+    "chr6": (58_830_166, 61_830_166),
+    "chr7": (58_054_331, 61_054_331),
+    "chr8": (43_838_887, 46_838_887),
+    "chr9": (47_367_679, 50_367_679),
+    "chr10": (39_254_935, 42_254_935),
+    "chr11": (51_644_205, 54_644_205),
+    "chr12": (34_856_694, 37_856_694),
+    "chr13": (16_000_000, 19_000_000),
+    "chr14": (16_000_000, 19_000_000),
+    "chr15": (17_000_000, 20_000_000),
+    "chr16": (35_335_801, 38_335_801),
+    "chr17": (22_263_006, 25_263_006),
+    "chr18": (15_460_898, 18_460_898),
+    "chr19": (24_681_782, 27_681_782),
+    "chr20": (26_369_569, 29_369_569),
+    "chr21": (11_288_129, 14_288_129),
+    "chr22": (13_000_000, 16_000_000),
+    "chrX": (58_632_012, 61_632_012),
+    "chrY": (10_104_553, 13_104_553),
+}
 
 # Plot idiom reference: cnvpro/cnvseqpipe/CNVcalling.R keeps neutral points subdued
 # and highlights final gain/loss segments. The runtime implementation stays here
@@ -257,13 +285,14 @@ def structural_gap_mask(bins_df):
     if centromere_columns_seen:
         return centromere_mask
 
-    mask = pd.Series(False, index=bins_df.index)
-    if "is_gap_centromere_telomere" in bins_df.columns:
-        mask = mask | boolean_like_series(bins_df["is_gap_centromere_telomere"])
-    if "gap_centromere_telomere_overlap_fraction" in bins_df.columns:
-        overlap = pd.to_numeric(bins_df["gap_centromere_telomere_overlap_fraction"], errors="coerce").fillna(0.0)
-        mask = mask | overlap.ge(0.5)
-    return mask
+    starts = pd.to_numeric(bins_df.get("start", pd.Series(index=bins_df.index, dtype=float)), errors="coerce")
+    ends = pd.to_numeric(bins_df.get("end", pd.Series(index=bins_df.index, dtype=float)), errors="coerce")
+    chroms = bins_df.get("chrom", pd.Series(index=bins_df.index, dtype=str)).map(normalize_chrom)
+    for chrom, (centromere_start, centromere_end) in HG19_CENTROMERES.items():
+        centromere_mask = centromere_mask | (
+            chroms.eq(chrom) & starts.lt(centromere_end) & ends.gt(centromere_start)
+        )
+    return centromere_mask
 
 
 def build_chrom_layout(bins_df, gap_bp=2_000_000):
@@ -452,7 +481,7 @@ def write_copy_number_bins_tsv(path_value, bins_df, layout):
 
 def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span, output_svg, output_bins_tsv="", max_points=8000):
     cn_bins = annotate_copy_number_bins(bins, final_events)
-    cn_layout, cn_total_span = build_chrom_layout(cn_bins, gap_bp=5_000_000)
+    cn_layout, cn_total_span = build_chrom_layout(cn_bins, gap_bp=CN_CHROM_GAP_BP)
     write_copy_number_bins_tsv(output_bins_tsv, cn_bins, cn_layout)
 
     width = 2560
@@ -480,7 +509,9 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         x1 = scale_x(item["offset"], cn_total_span, left, plot_width)
         x2 = scale_x(item["offset"] + item["span"], cn_total_span, left, plot_width)
         svg.append(
-            f'<line x1="{x1:.2f}" y1="{signal_top:.2f}" x2="{x1:.2f}" y2="{signal_top + signal_height:.2f}" stroke="#cbd5e1" stroke-width="0.8"/>'
+            f'<line class="chrom-separator" x1="{x1:.2f}" y1="{signal_top:.2f}" '
+            f'x2="{x1:.2f}" y2="{signal_top + signal_height:.2f}" '
+            f'stroke="#94a3b8" stroke-width="1.1" opacity="0.95"/>'
         )
         svg.append(svg_text((x1 + x2) / 2.0, signal_top + signal_height + 18, chrom, size=10, fill="#334155", anchor="middle"))
         tick = ((int(item["start"]) // 50_000_000) + 1) * 50_000_000
@@ -527,7 +558,8 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         opacity = 0.82 if row.report_state in {"dup", "del"} else 0.62
         svg.append(
             f'<circle class="cn-bin-scatter" cx="{x:.2f}" cy="{y:.2f}" '
-            f'r="1.25" fill="{color}" opacity="{opacity:.2f}"/>'
+            f'r="{CN_SCATTER_RADIUS:.2f}" fill="{color}" opacity="{opacity:.2f}" '
+            f'stroke="#ffffff" stroke-width="0.35"/>'
         )
     svg.extend(render_report_event_cn_trend_lines(cn_bins, final_events, cn_layout, cn_total_span, left, plot_width, mid_y, half_h))
 

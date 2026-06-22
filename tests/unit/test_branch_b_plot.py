@@ -145,8 +145,9 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
             "start": starts,
             "end": [start + 1_000_000 for start in starts],
             "calibrated_z": [3.0 + (idx % 6) * 0.4 for idx in range(60)],
-            "is_gap_centromere_telomere": [idx == 30 for idx in range(60)],
-            "gap_centromere_telomere_overlap_fraction": [1.0 if idx == 30 else 0.0 for idx in range(60)],
+            "is_gap_centromere_telomere": [idx == 10 for idx in range(60)],
+            "gap_centromere_telomere_overlap_fraction": [1.0 if idx == 10 else 0.0 for idx in range(60)],
+            "is_near_centromere": [idx == 30 for idx in range(60)],
         }
     )
     events = pd.DataFrame(
@@ -182,11 +183,15 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
     assert 'class="structure-gap-blank"' in cn_svg
     assert re.search(r'<rect[^>]+class="structure-gap-blank"[^>]+fill="#cbd5e1"', cn_svg)
     assert 'class="structure-gap-blank" x="' in cn_svg
+    assert cn_svg.count('class="structure-gap-blank"') == 1
     assert 'fill="#0f172a" opacity="0.96"' not in cn_svg
     assert "50Mb" in cn_svg
     assert cn_svg.count('class="cn-bin-scatter"') == 59
+    assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+r="2\.00"', cn_svg)
     assert cn_svg.count('class="report-cn-trend"') == 2
     assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#1d4ed8"', cn_svg)
+    non_centromere_gap_row = cn_bins.loc[cn_bins["start"].eq(10_000_000)].iloc[0]
+    assert non_centromere_gap_row["copy_number_source"] != "structure_gap_blank"
     assert pd.isna(gap_row["copy_number"])
     assert gap_row["copy_number_source"] == "structure_gap_blank"
     assert cn_bins.loc[cn_bins["copy_number_source"].eq("event_scaled_calibrated_z_proxy"), "copy_number"].nunique() > 1
@@ -194,7 +199,57 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
     assert 'class="chrom-background"' not in cn_svg
     assert 'fill="#f8fafc"' not in cn_svg
     assert 'fill="#eef2f7"' not in cn_svg
+    assert 'class="chrom-separator"' in cn_svg
     assert not re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#ef4444"', cn_svg)
+
+
+def test_copy_number_plot_uses_hg19_centromere_fallback_without_telomere_gap_shading(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chr1", "chr1"],
+            "bin_index": [0, 1, 2],
+            "start": [0, 121_500_000, 200_000_000],
+            "end": [1_000_000, 122_500_000, 201_000_000],
+            "calibrated_z": [0.1, 3.0, 0.2],
+            "is_gap_centromere_telomere": [1, 1, 0],
+            "gap_centromere_telomere_overlap_fraction": [1.0, 1.0, 0.0],
+        }
+    )
+    events = pd.DataFrame(
+        {
+            "sample_id": ["Y1"],
+            "chrom": ["chr1"],
+            "start": [121_000_000],
+            "end": [123_000_000],
+            "state": ["gain"],
+            "v2_report_layer_class": ["report_event"],
+            "v2_report_visibility": ["report_strong_event"],
+            "copy_number_estimate": [2.5],
+        }
+    )
+
+    output_cn_svg = tmp_path / "Y1.final_cnv_cn.svg"
+    output_cn_bins = tmp_path / "Y1.plot_bins_cn.tsv"
+    build_cnv_plot_svg(
+        sample_id="Y1",
+        bins_df=bins,
+        branch_b_events_df=events,
+        a_branch_df=pd.DataFrame(),
+        output_svg=tmp_path / "Y1.final_cnv.svg",
+        output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
+        output_copy_number_svg=output_cn_svg,
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    cn_svg = output_cn_svg.read_text(encoding="utf-8")
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    telomere_like_row = cn_bins.loc[cn_bins["start"].eq(0)].iloc[0]
+    centromere_row = cn_bins.loc[cn_bins["start"].eq(121_500_000)].iloc[0]
+
+    assert cn_svg.count('class="structure-gap-blank"') == 1
+    assert telomere_like_row["copy_number_source"] != "structure_gap_blank"
+    assert centromere_row["copy_number_source"] == "structure_gap_blank"
+    assert cn_svg.count('class="cn-bin-scatter"') == 2
 
 
 def test_copy_number_plot_falls_back_to_a_ratio_and_refuses_missing_cn(tmp_path):

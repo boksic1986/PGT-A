@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_1155_copy_number_cnv_plot_scatter_background_handoff.md`
+2. `docs/handoff/2026-06-22_1234_copy_number_cnv_plot_centromere_scatter_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,20 +23,21 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_1155_copy_number_cnv_plot_scatter_background_handoff.md
-previous_handoff: docs/handoff/2026-06-22_1130_copy_number_cnv_plot_background_fix_handoff.md
+active_handoff: docs/handoff/2026-06-22_1234_copy_number_cnv_plot_centromere_scatter_handoff.md
+previous_handoff: docs/handoff/2026-06-22_1155_copy_number_cnv_plot_scatter_background_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_visibility_materialized_development_only
 branch_s_status: sex_aware_segment_level_lowres_context_not_final
-report_status: cnv_z_and_copy_number_proxy_plots_v2_scatter_white_background_materialized_development_only
+report_status: cnv_z_and_copy_number_proxy_plots_v2_centromere_scatter_white_background_materialized_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
 - `docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`
+- `docs/handoff/2026-06-22_1234_copy_number_cnv_plot_centromere_scatter_handoff.md`
 - `docs/handoff/2026-06-22_1155_copy_number_cnv_plot_scatter_background_handoff.md`
 - `docs/handoff/2026-06-22_1130_copy_number_cnv_plot_background_fix_handoff.md`
 - `docs/handoff/2026-06-22_1100_copy_number_cnv_plot_v2_handoff.md`

@@ -3,7 +3,7 @@
 ## 2026-06-22 CN Plot V2 Review Next Gate
 
 Current handoff:
-`docs/handoff/2026-06-22_1155_copy_number_cnv_plot_scatter_background_handoff.md`.
+`docs/handoff/2026-06-22_1234_copy_number_cnv_plot_centromere_scatter_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
@@ -11,11 +11,11 @@ Current report:
 CN plot V2 is materialized for 0615 as a visualization-only supplement:
 
 - `*.final_cnv_cn.svg` is now 2560px wide with a white plotting panel, no
-  alternating chromosome background rectangles, wider chromosome gaps, 50Mb
-  ticks, grey structure blank regions, per-bin `cn-bin-scatter` points, and a
-  dup/del-only legend.
+  alternating chromosome background rectangles, wider chromosome gaps, explicit
+  chromosome separators, 50Mb ticks, centromere-only grey regions, visible
+  per-bin `cn-bin-scatter` points, and a dup/del-only legend.
 - `*.plot_bins_cn.tsv` now records event-anchored CN proxy values and source
-  labels, including structural gap blanks.
+  labels, including centromere blank bins.
 - The proxy is not an independent bin-level CN caller and must not be used to
   change Branch B V2 filtering or report-event status.
 - CN trend lines are horizontal event-level segments colored by event direction:
@@ -28,9 +28,10 @@ Immediate next steps:
 2. Compare the red event-level CN trend against the per-bin CN proxy scatter to
    identify events driven by sparse bins versus events with coherent bin-level
    support.
-3. Treat grey structure blank regions as visual caution zones, not automatic
+3. Treat grey centromere regions as visual caution zones, not automatic
    filters. Current 0615 inputs still lack centromere-only columns, so these
-   grey blanks use the existing structure gap/centromere/telomere fallback.
+   grey blanks use hg19 centromere coordinates as visualization fallback; the
+   combined gap/telomere field is no longer used for CN plot background.
 4. Any candidate-level filter/demotion proposal still requires Y/H/G locked
    truth ablation with FN=0, H6 chr21 retained, and G2 truth visible.
 
