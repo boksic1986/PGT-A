@@ -105,7 +105,14 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
     assert "smooth" not in cn_svg.lower()
     assert "<polyline" not in cn_svg
     assert cn_svg.count('class="report-cn-trend"') == 2
-    assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#dc2626"', cn_svg)
+    assert 'fill="#1f2937"' not in cn_svg
+    assert 'fill="#263244"' not in cn_svg
+    assert 'fill="#202b3a"' not in cn_svg
+    assert re.search(r'<rect[^>]+class="chrom-background"[^>]+fill="#f8fafc"', cn_svg)
+    assert re.search(r'<rect[^>]+class="chrom-background"[^>]+fill="#eef2f7"', cn_svg)
+    assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#1d4ed8"', cn_svg)
+    assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#ef4444"', cn_svg)
+    assert not re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#dc2626"', cn_svg)
     assert re.search(r'<circle[^>]+fill="#1d4ed8"', cn_svg)
     assert re.search(r'<circle[^>]+fill="#ef4444"', cn_svg)
     assert re.search(r'<circle[^>]+fill="#64748b"', cn_svg)
@@ -171,9 +178,13 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
     gap_row = cn_bins.loc[cn_bins["start"].eq(30_000_000)].iloc[0]
 
     assert 'class="structure-gap-blank"' in cn_svg
+    assert re.search(r'<rect[^>]+class="structure-gap-blank"[^>]+fill="#cbd5e1"', cn_svg)
+    assert 'class="structure-gap-blank" x="' in cn_svg
+    assert 'fill="#0f172a" opacity="0.96"' not in cn_svg
     assert "50Mb" in cn_svg
     assert cn_svg.count("<circle") == 59
     assert cn_svg.count('class="report-cn-trend"') == 2
+    assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#1d4ed8"', cn_svg)
     assert pd.isna(gap_row["copy_number"])
     assert gap_row["copy_number_source"] == "structure_gap_blank"
     assert cn_bins.loc[cn_bins["copy_number_source"].eq("event_scaled_calibrated_z_proxy"), "copy_number"].nunique() > 1

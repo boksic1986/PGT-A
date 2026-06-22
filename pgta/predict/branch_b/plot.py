@@ -392,9 +392,11 @@ def render_cn_trend_chunk(chunk_rows, row_dict, trend_value, layout, total_span,
         f"{chrom}:{int(chunk_rows[0].start)}-{int(chunk_rows[-1].end)}; "
         f"event CN={trend_value:.3f}"
     )
+    state = str(row_dict.get("report_state", "")).lower()
+    trend_color = CN_REPORT_STATE_COLOR.get(state, TREND_COLOR)
     return [
         f'<line class="report-cn-trend" x1="{x1:.2f}" y1="{y:.2f}" '
-        f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{TREND_COLOR}" '
+        f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{trend_color}" '
         f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
         f"<title>{html.escape(label)}</title></line>"
     ]
@@ -452,19 +454,19 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         svg_text(24, 34, f"CNV final copy-number profile - {sample_id}", size=24, weight="bold"),
         svg_text(24, 58, "Final reported dup/del regions over event-level copy-number proxy", size=13, fill="#475569"),
         svg_text(20, signal_top - 18, "Copy number", size=12, fill="#334155"),
-        f'<rect x="{left:.2f}" y="{signal_top:.2f}" width="{plot_width:.2f}" height="{signal_height:.2f}" fill="#1f2937"/>',
+        f'<rect x="{left:.2f}" y="{signal_top:.2f}" width="{plot_width:.2f}" height="{signal_height:.2f}" fill="#ffffff"/>',
     ]
 
     for idx, chrom in enumerate(sorted(cn_layout, key=chrom_sort_key)):
         item = cn_layout[chrom]
         x1 = scale_x(item["offset"], cn_total_span, left, plot_width)
         x2 = scale_x(item["offset"] + item["span"], cn_total_span, left, plot_width)
-        fill = "#263244" if idx % 2 == 0 else "#202b3a"
+        fill = "#f8fafc" if idx % 2 == 0 else "#eef2f7"
         svg.append(
             f'<rect class="chrom-background" x="{x1:.2f}" y="{signal_top:.2f}" width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="{fill}"/>'
         )
         svg.append(
-            f'<line x1="{x1:.2f}" y1="{signal_top:.2f}" x2="{x1:.2f}" y2="{signal_top + signal_height:.2f}" stroke="#475569" stroke-width="0.8"/>'
+            f'<line x1="{x1:.2f}" y1="{signal_top:.2f}" x2="{x1:.2f}" y2="{signal_top + signal_height:.2f}" stroke="#cbd5e1" stroke-width="0.8"/>'
         )
         svg.append(svg_text((x1 + x2) / 2.0, signal_top + signal_height + 18, chrom, size=10, fill="#334155", anchor="middle"))
         tick = ((int(item["start"]) // 50_000_000) + 1) * 50_000_000
@@ -485,12 +487,12 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         x2 = scale_x(genome_position(row.chrom, int(row.end), cn_layout), cn_total_span, left, plot_width)
         svg.append(
             f'<rect class="structure-gap-blank" x="{x1:.2f}" y="{signal_top:.2f}" '
-            f'width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="#0f172a" opacity="0.96"/>'
+            f'width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="#cbd5e1" opacity="0.82"/>'
         )
 
     for cn in (1, 2, 3):
         y = scale_copy_number_y(cn, mid_y, half_h)
-        color = "#94a3b8" if cn == 2 else "#475569"
+        color = "#94a3b8" if cn == 2 else "#cbd5e1"
         svg.append(f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" y2="{y:.2f}" stroke="{color}" stroke-width="1" stroke-dasharray="4,4"/>')
         svg.append(svg_text(18, y + 4, f"CN={cn}", size=11, fill="#64748b"))
 

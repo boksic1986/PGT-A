@@ -464,3 +464,64 @@ Local synced CN V2 outputs:
 
 - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
 - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+
+## 2026-06-22 CN Plot V2 Background Fix
+
+This follow-up supersedes the dark CN plotting panel from the previous CN V2
+rendering. The change is visualization-only and does not alter Branch A, Branch
+B V2, Branch S, report-event classification, filtering, mapping, or reference
+outputs.
+
+Updated rendering:
+
+- overall CN SVG background and plotting panel are white/light;
+- chromosome backgrounds use the calibrated-z plot style:
+  `#f8fafc` / `#eef2f7`;
+- only structural gap / centromere-telomere bins are grey blanks
+  (`#cbd5e1`);
+- CN trend lines are horizontal event-level segments colored by state:
+  `dup=#1d4ed8`, `del=#ef4444`;
+- the old all-red CN trend color `#dc2626` is no longer used in the CN plot;
+- legend remains limited to `dup` and `del`.
+
+Remote validation:
+
+```text
+PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
+/biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
+  tests/unit/test_branch_b_plot.py \
+  tests/unit/test_branch_ab_phase12_workflow_contract.py \
+  tests/unit/test_cnv_report.py \
+  tests/unit/test_current_context_index.py -q
+```
+
+Result:
+
+```text
+37 passed in 1.01s
+```
+
+0615 materialization:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 4 --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+9 of 9 steps (100%) done
+Complete log: .snakemake/log/2026-06-22T112510.010306.snakemake.log
+```
+
+0615 CN SVG check:
+
+| sample | width 2560 | light backgrounds | grey gap blanks | trend chunks | dup trend | del trend | old red CN trend | polyline |
+|---|---|---|---|---:|---:|---:|---:|---|
+| JZ26125843-56-56 | true | true | true | 15 | 11 | 4 | 0 | false |
+| JZ26125844-59-59 | true | true | true | 26 | 16 | 10 | 0 | false |
+| JZ26125845-60-60 | true | true | true | 47 | 28 | 19 | 0 | false |
+| JZ26125846-61-61 | true | true | true | 42 | 20 | 22 | 0 | false |
+| JZ26125847-62-62 | true | true | true | 34 | 23 | 11 | 0 | false |

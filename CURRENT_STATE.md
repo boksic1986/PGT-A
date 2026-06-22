@@ -1,9 +1,9 @@
 # CURRENT_STATE.md
 
-## 2026-06-22 Copy Number CNV Plot V2
+## 2026-06-22 Copy Number CNV Plot V2 Background Fix
 
 Current handoff:
-`docs/handoff/2026-06-22_1100_copy_number_cnv_plot_v2_handoff.md`.
+`docs/handoff/2026-06-22_1130_copy_number_cnv_plot_background_fix_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
@@ -19,13 +19,16 @@ CN V2 visualization contract:
 - CN plot remains `{sample}.final_cnv_cn.svg`, with
   `{sample}.plot_bins_cn.tsv`.
 - CN SVG width is now `2560` to improve chromosome readability.
-- CN plot uses a dark plotting background, wider chromosome gaps, and 50Mb
-  intra-chromosome ticks.
+- CN plot uses a white/light plotting background like the calibrated-z plot,
+  wider chromosome gaps, and 50Mb intra-chromosome ticks.
 - structural gap / centromere-telomere bins are blanked in the CN plot when
   `is_gap_centromere_telomere` is true or
   `gap_centromere_telomere_overlap_fraction >= 0.5`.
-- report CN trend remains a red horizontal event-level line and is split across
-  non-gap contiguous chunks.
+- only structural gap / centromere-telomere bins are filled grey; the rest of
+  the chromosome background remains light.
+- report CN trend remains a horizontal event-level line, is split across
+  non-gap contiguous chunks, and is colored by report direction:
+  `dup=#1d4ed8`, `del=#ef4444`.
 - CN scatter points are shown per bin:
   - event outside: neutral baseline `CN=2`
   - final dup event: dark blue
@@ -44,8 +47,9 @@ Remote validation:
   structure-gap blank, and CN V2 behavior.
 - Remote pytest:
   `tests/unit/test_branch_b_plot.py`,
-  `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
-  `tests/unit/test_cnv_report.py`: `34 passed in 0.89s`.
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`,
+  `tests/unit/test_cnv_report.py`, and
+  `tests/unit/test_current_context_index.py`: `37 passed in 1.01s`.
 - 0615 dry-run planned only 5 `cnv_branch_ab_plot` jobs plus report/runtime
   refresh; no mapping or reference rebuild jobs were requested.
 - 0615 materialization completed: `9 of 9 steps (100%) done`,
@@ -56,7 +60,8 @@ Materialized 0615 acceptance:
 - 5/5 `.final_cnv_cn.svg` files exist.
 - 5/5 `.plot_bins_cn.tsv` files exist.
 - 5/5 CN SVGs are width `2560`, contain 50Mb ticks, structural gap blanks,
-  dark background, dup/del-only legend, no polyline, and red trend chunks.
+  light chromosome backgrounds, grey structural gap blanks,
+  dup/del-only legend, no polyline, and state-colored CN trend chunks.
 - CN TSVs contain 4144 rows each and 544 structural-gap blank bins each.
 - Report summary still links 5/5 samples to `.final_cnv_cn.svg`.
 

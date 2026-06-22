@@ -3,19 +3,22 @@
 ## 2026-06-22 CN Plot V2 Review Next Gate
 
 Current handoff:
-`docs/handoff/2026-06-22_1100_copy_number_cnv_plot_v2_handoff.md`.
+`docs/handoff/2026-06-22_1130_copy_number_cnv_plot_background_fix_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
 
 CN plot V2 is materialized for 0615 as a visualization-only supplement:
 
-- `*.final_cnv_cn.svg` is now 2560px wide with dark plotting background,
-  chromosome gaps, 50Mb ticks, structural gap blanks, and dup/del-only legend.
+- `*.final_cnv_cn.svg` is now 2560px wide with a white/light plotting
+  background, wider chromosome gaps, 50Mb ticks, grey structural gap blanks,
+  and dup/del-only legend.
 - `*.plot_bins_cn.tsv` now records event-anchored CN proxy values and source
   labels, including structural gap blanks.
 - The proxy is not an independent bin-level CN caller and must not be used to
   change Branch B V2 filtering or report-event status.
+- CN trend lines are horizontal event-level segments colored by event direction:
+  `dup=#1d4ed8`, `del=#ef4444`.
 
 Immediate next steps:
 
