@@ -1,5 +1,71 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Sex-Aware CN/Z Plot And Branch S Overlay
+
+Current handoff:
+`docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`.
+
+Current report:
+`docs/reports/sex_aware_cn_z_plot_branch_s_overlay_2026-06-22.md`.
+
+This loop supersedes the plot-layer limitations in
+`docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md`. It updates
+only visualization inputs and sex-aware CN scatter interpretation. It does not
+modify Branch A, autosomal Branch B V2 filtering, Branch S classifier,
+reference, mapping, or report-event classification.
+
+Active plot contract:
+
+- z plot remains bin-level `calibrated_z`; Branch A `a_zscore` and Branch S
+  `state_score` are event-level support labels only.
+- Branch S summary JSON, score TSV, and evidence TSV are now consumed by
+  `cnv_branch_ab_plot`.
+- Branch S `sca_report_review_event` intervals are drawn on chrX/chrY in the
+  combined z and CN plots.
+- CN scatter is sex-aware:
+  - autosomes expected CN = 2;
+  - XX chrX expected CN = 2;
+  - XY chrX expected CN = 1;
+  - XY chrY expected CN = 1 only if chrY reference context is interpretable;
+  - XX chrY is absent/neutral.
+- `plot_bins_cn.tsv` now includes `sex_call`, `expected_copy_number`,
+  `copy_number_delta`, `cn_scatter_state_sex_aware`,
+  `copy_number_interpretation_status`, `sex_chrom_region_class`,
+  `event_layer`, and `chrom_ref_cpm_median`.
+- chrY bins with chromosome-level low/zero reference denominator are marked
+  `sex_chrom_ref_ratio_not_interpretable` and do not produce huge dup points.
+
+Remote validation:
+
+- Remote pytest:
+  `tests/unit/test_branch_b_plot.py`,
+  `tests/unit/test_branch_s_shadow.py`,
+  `tests/unit/test_cnv_report.py`, and
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`: `56 passed in
+  1.86s`.
+- G1-G8 dry-run for `cnv_branch_s_shadow cnv_branch_ab_plot cnv_report`
+  parsed successfully and did not request mapping/reference rebuild.
+- 0615 dry-run for `cnv_branch_s_shadow cnv_branch_ab_plot cnv_report` parsed
+  successfully and did not request mapping/reference rebuild.
+- G1-G8 materialization completed: `20 of 20 steps (100%) done`.
+- 0615 materialization completed: `14 of 14 steps (100%) done`.
+
+Materialized acceptance:
+
+- G3/G5 X-loss Branch S events are visible on chrX in both z and CN plots.
+- G3/G5 CN TSV marks chrX non-PAR bins as `event_layer=branch_s_review`.
+- G7 XX chrY is `sex_aware_absent_expected` and neutral.
+- G8 XY chrX is interpreted against expected CN = 1, not diploid CN = 2.
+- G8 chrY is `sex_chrom_ref_ratio_not_interpretable` for all chrY bins because
+  chrY `chrom_ref_cpm_median=0`.
+- 0615 5/5 samples have refreshed z SVG, CN SVG, and CN TSV outputs. 0615
+  remains no-truth burden/context only.
+
+Local synced outputs:
+
+- `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
 ## 2026-06-22 CN Centering And Branch S Fix
 
 Current handoff:

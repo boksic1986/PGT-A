@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md`
+2. `docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,19 +23,21 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md
-previous_handoff: docs/handoff/2026-06-22_1425_copy_number_ratio_cnv_plot_handoff.md
+active_handoff: docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md
+previous_handoff: docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_visibility_materialized_development_only
-branch_s_status: sex_aware_median_segment_support_not_final
-report_status: cnv_z_and_centered_ratio_cn_plots_materialized_development_only
+branch_s_status: sex_aware_branch_s_overlay_not_final
+report_status: cnv_z_and_sex_aware_cn_plots_materialized_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/sex_aware_cn_z_plot_branch_s_overlay_2026-06-22.md`
+- `docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`
 - `docs/reports/copy_number_centering_and_sca_fix_2026-06-22.md`
 - `docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md`
 - `docs/reports/copy_number_ratio_cnv_plot_2026-06-22.md`

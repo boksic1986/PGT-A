@@ -1,6 +1,7 @@
 #!/biosoftware/miniconda/envs/snakemake_env/bin/python
 import argparse
 import html
+import json
 import math
 from pathlib import Path
 
@@ -21,6 +22,9 @@ CN_CHROM_GAP_BP = 20_000_000
 CN_SCATTER_RADIUS = 1.35
 CN_NEUTRAL_LOWER = 1.7
 CN_NEUTRAL_UPPER = 2.3
+CN_HAPLOID_NEUTRAL_LOWER = 0.85
+CN_HAPLOID_NEUTRAL_UPPER = 1.15
+SEX_CHROM_REF_MIN_CPM = 1.0
 CN_COPY_NUMBER_MIN = 0.0
 CN_COPY_NUMBER_MAX = 4.0
 CN_LOG2R_PSEUDOCOUNT = 1e-3
@@ -64,6 +68,10 @@ def parse_args():
     parser.add_argument("--input-events", required=True)
     parser.add_argument("--input-a-branch", default="")
     parser.add_argument("--input-ref-bins", default="")
+    parser.add_argument("--gender-tsv", default="")
+    parser.add_argument("--branch-s-summary", default="")
+    parser.add_argument("--branch-s-scores", default="")
+    parser.add_argument("--branch-s-evidence", default="")
     parser.add_argument("--output-svg", required=True)
     parser.add_argument("--output-bins-tsv", default="")
     parser.add_argument("--output-copy-number-svg", default="")
@@ -84,6 +92,13 @@ def read_table(path_value, empty_ok=True):
         raise FileNotFoundError(path)
     if path.stat().st_size == 0:
         return pd.DataFrame()
+    if path.suffix.lower() == ".json":
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(payload, list):
+            return pd.DataFrame(payload)
+        if isinstance(payload, dict):
+            return pd.DataFrame([payload])
+        raise ValueError(f"Unsupported JSON payload for table input: {path}")
     return pd.read_csv(path, sep="\t")
 
 
@@ -146,6 +161,124 @@ def normalize_report_state(value):
     if text in {"loss", "del", "deletion"}:
         return "del"
     return ""
+
+
+def sample_sex_call(gender_df, branch_s_summary_df=None, sample_id=""):
+    for frame in (gender_df, branch_s_summary_df):
+        if frame is None or frame.empty or "sex_call" not in frame.columns:
+            continue
+        rows = frame
+        if sample_id and "sample_id" in frame.columns:
+            rows = frame[frame["sample_id"].astype(str).eq(str(sample_id))]
+        if rows.empty:
+            continue
+        value = str(rows.iloc[0].get("sex_call", "") or "").strip().upper()
+        if value in {"XX", "XY"}:
+            return value
+    return ""
+
+
+def sex_chrom_region_class(chrom, is_par=False):
+    normalized = normalize_chrom(chrom)
+    if normalized == "chrX":
+        return "X_PAR" if bool(is_par) else "X_NONPAR"
+    if normalized == "chrY":
+        return "Y_PAR" if bool(is_par) else "Y_NONPAR"
+    return "AUTOSOME"
+
+
+def expected_copy_number_for_bin(chrom, sex_call, is_par=False):
+    normalized = normalize_chrom(chrom)
+    sex = str(sex_call or "").strip().upper()
+    if normalized in AUTOSOME_ORDER:
+        return 2.0
+    if bool(is_par):
+        return np.nan
+    if normalized == "chrX":
+        if sex == "XX":
+            return 2.0
+        if sex == "XY":
+            return 1.0
+    if normalized == "chrY":
+        if sex == "XX":
+            return 0.0
+        if sex == "XY":
+            return 1.0
+    return np.nan
+
+
+def branch_s_state_to_report_state(state):
+    text = str(state or "").strip().upper()
+    if text.endswith("_GAIN"):
+        return "dup"
+    if text.endswith("_LOSS"):
+        return "del"
+    return ""
+
+
+def branch_s_axis_from_state(state):
+    text = str(state or "").strip().upper()
+    if text.startswith("X_"):
+        return "X"
+    if text.startswith("Y_"):
+        return "Y"
+    return ""
+
+
+def coerce_branch_s_review_events(summary_df=None, scores_df=None, evidence_df=None, sample_id=""):
+    if summary_df is None or summary_df.empty:
+        return pd.DataFrame()
+    frame = summary_df.copy()
+    if sample_id and "sample_id" in frame.columns:
+        frame = frame[frame["sample_id"].astype(str).eq(str(sample_id))].copy()
+    if frame.empty or "sca_report_layer_class" not in frame.columns:
+        return pd.DataFrame()
+    frame = frame[frame["sca_report_layer_class"].astype(str).eq("sca_report_review_event")].copy()
+    if frame.empty:
+        return pd.DataFrame()
+    scores = scores_df.copy() if scores_df is not None else pd.DataFrame()
+    if not scores.empty and sample_id and "sample_id" in scores.columns:
+        scores = scores[scores["sample_id"].astype(str).eq(str(sample_id))].copy()
+    evidence = evidence_df.copy() if evidence_df is not None else pd.DataFrame()
+    if not evidence.empty and sample_id and "sample_id" in evidence.columns:
+        evidence = evidence[evidence["sample_id"].astype(str).eq(str(sample_id))].copy()
+    rows = []
+    for _, summary in frame.iterrows():
+        state = str(summary.get("sca_candidate_state", "") or "")
+        report_state = branch_s_state_to_report_state(state)
+        axis = branch_s_axis_from_state(state)
+        if not report_state or not axis:
+            continue
+        region = pd.DataFrame()
+        if not evidence.empty and "region_class" in evidence.columns:
+            region = evidence[evidence["region_class"].astype(str).eq(f"{axis}_NONPAR")].copy()
+        if region.empty:
+            continue
+        start = int(pd.to_numeric(region["start"], errors="coerce").min())
+        end = int(pd.to_numeric(region["end"], errors="coerce").max())
+        score = np.nan
+        reason = ""
+        if not scores.empty and "sca_state" in scores.columns:
+            matched = scores[scores["sca_state"].astype(str).eq(state)].copy()
+            if not matched.empty:
+                score = pd.to_numeric(matched.iloc[0].get("state_score", np.nan), errors="coerce")
+                reason = str(matched.iloc[0].get("state_score_reason", "") or "")
+        rows.append(
+            {
+                "sample_id": str(summary.get("sample_id", sample_id) or sample_id),
+                "chrom": f"chr{axis}",
+                "start": start,
+                "end": end,
+                "state": "gain" if report_state == "dup" else "loss",
+                "report_state": report_state,
+                "event_layer": "branch_s_review",
+                "branch_s_state": state,
+                "branch_s_score": float(score) if np.isfinite(score) else np.nan,
+                "branch_s_score_reason": reason,
+                "branch_s_report_layer_reason": str(summary.get("sca_report_layer_reason", "") or ""),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def coerce_final_events(events_df, sample_id=""):
@@ -261,6 +394,8 @@ def derive_ratio_copy_number(frame, ref_bins_df=None):
     input_log2r = pd.to_numeric(result["log2r"], errors="coerce") if "log2r" in result.columns else None
     result["log2r"] = np.nan
     result["raw_log2r"] = np.nan
+    result["raw_ratio"] = np.nan
+    result["ref_cpm"] = np.nan
     result["copy_number"] = np.nan
     result["copy_number_centering_log2_shift"] = np.nan
     result["copy_number_source"] = ""
@@ -271,6 +406,7 @@ def derive_ratio_copy_number(frame, ref_bins_df=None):
         result.loc[valid, "copy_number"] = copy_number[valid]
         result.loc[valid, "log2r"] = np.log2(copy_number[valid] / 2.0)
         result.loc[valid, "raw_log2r"] = result.loc[valid, "log2r"]
+        result.loc[valid, "raw_ratio"] = copy_number[valid] / 2.0
         result.loc[valid, "copy_number_centering_log2_shift"] = 0.0
         result.loc[valid, "copy_number_source"] = "explicit_copy_number"
         if valid.any():
@@ -281,6 +417,7 @@ def derive_ratio_copy_number(frame, ref_bins_df=None):
         valid = np.isfinite(log2r)
         result.loc[valid, "log2r"] = log2r[valid]
         result.loc[valid, "raw_log2r"] = log2r[valid]
+        result.loc[valid, "raw_ratio"] = np.power(2.0, log2r[valid])
         result.loc[valid, "copy_number"] = 2.0 * np.power(2.0, log2r[valid])
         result.loc[valid, "copy_number_centering_log2_shift"] = 0.0
         result.loc[valid, "copy_number_source"] = "explicit_log2r"
@@ -297,12 +434,14 @@ def derive_ratio_copy_number(frame, ref_bins_df=None):
     result = result.merge(ref_bins, on=["chrom", "bin_index"], how="left")
     sample_cpm = _expm1_series(result["normalized_signal"])
     ref_cpm = _expm1_series(result["ref_median"])
+    result.loc[np.isfinite(ref_cpm), "ref_cpm"] = ref_cpm.loc[np.isfinite(ref_cpm)]
     valid = np.isfinite(sample_cpm) & np.isfinite(ref_cpm) & (ref_cpm > 0.0)
     ratio = pd.Series(np.nan, index=result.index, dtype=float)
     ratio.loc[valid] = (sample_cpm.loc[valid] + CN_LOG2R_PSEUDOCOUNT) / (
         ref_cpm.loc[valid] + CN_LOG2R_PSEUDOCOUNT
     )
     valid_ratio = np.isfinite(ratio) & (ratio > 0.0)
+    result.loc[valid_ratio, "raw_ratio"] = ratio.loc[valid_ratio]
     raw_log2r = pd.Series(np.nan, index=result.index, dtype=float)
     raw_log2r.loc[valid_ratio] = np.log2(ratio.loc[valid_ratio])
     centering_mask = (
@@ -337,22 +476,141 @@ def classify_copy_number_state(value):
     return "neutral"
 
 
-def annotate_copy_number_bins(bins_df, final_events, ref_bins_df=None):
+def classify_sex_aware_copy_number_state(
+    copy_number,
+    expected_copy_number,
+    chrom,
+    sex_call,
+    ref_cpm=np.nan,
+    chrom_ref_cpm_median=np.nan,
+):
+    normalized = normalize_chrom(chrom)
+    sex = str(sex_call or "").strip().upper()
+    try:
+        expected = float(expected_copy_number)
+        value = float(copy_number)
+    except (TypeError, ValueError):
+        return "neutral", "copy_number_unavailable"
+    if normalized == "chrY" and sex == "XY":
+        try:
+            ref_value = float(ref_cpm)
+        except (TypeError, ValueError):
+            ref_value = np.nan
+        try:
+            chrom_ref_value = float(chrom_ref_cpm_median)
+        except (TypeError, ValueError):
+            chrom_ref_value = np.nan
+        if (
+            not np.isfinite(ref_value)
+            or ref_value < SEX_CHROM_REF_MIN_CPM
+            or not np.isfinite(chrom_ref_value)
+            or chrom_ref_value < SEX_CHROM_REF_MIN_CPM
+        ):
+            return "neutral", "sex_chrom_ref_ratio_not_interpretable"
+    if not np.isfinite(expected):
+        return "neutral", "sex_chrom_context_only"
+    if expected == 0.0:
+        return "neutral", "sex_aware_absent_expected"
+    if not np.isfinite(value):
+        return "neutral", "copy_number_unavailable"
+    if expected <= 1.0:
+        lower = expected * (CN_HAPLOID_NEUTRAL_LOWER / 1.0)
+        upper = expected * (CN_HAPLOID_NEUTRAL_UPPER / 1.0)
+    else:
+        lower = expected * (CN_NEUTRAL_LOWER / 2.0)
+        upper = expected * (CN_NEUTRAL_UPPER / 2.0)
+    if value < lower:
+        return "del", "sex_aware_interpretable"
+    if value > upper:
+        return "dup", "sex_aware_interpretable"
+    return "neutral", "sex_aware_interpretable"
+
+
+def annotate_copy_number_bins(bins_df, final_events, branch_s_events=None, ref_bins_df=None, sex_call=""):
     frame = derive_ratio_copy_number(bins_df.copy(), ref_bins_df=ref_bins_df)
     frame["cn_scatter_state"] = frame["copy_number"].map(classify_copy_number_state)
-    frame["report_state"] = frame["cn_scatter_state"]
+    if "is_par_region" in frame.columns:
+        par_flag = boolean_like_series(frame["is_par_region"])
+    elif "is_PAR" in frame.columns:
+        par_flag = boolean_like_series(frame["is_PAR"])
+    elif "par_overlap_fraction" in frame.columns:
+        par_flag = pd.to_numeric(frame["par_overlap_fraction"], errors="coerce").fillna(0.0).gt(0.0)
+    else:
+        par_flag = pd.Series(False, index=frame.index)
+    frame["sex_call"] = str(sex_call or "")
+    frame["sex_chrom_region_class"] = [
+        sex_chrom_region_class(chrom, is_par)
+        for chrom, is_par in zip(frame["chrom"], par_flag)
+    ]
+    frame["expected_copy_number"] = [
+        expected_copy_number_for_bin(chrom, sex_call, is_par)
+        for chrom, is_par in zip(frame["chrom"], par_flag)
+    ]
+    raw_ratio = pd.to_numeric(frame.get("raw_ratio", pd.Series(np.nan, index=frame.index)), errors="coerce")
+    ref_cpm = pd.to_numeric(frame.get("ref_cpm", pd.Series(np.nan, index=frame.index)), errors="coerce")
+    frame["chrom_ref_cpm_median"] = frame.groupby("chrom")["ref_cpm"].transform(
+        lambda values: pd.to_numeric(values, errors="coerce").dropna().median()
+    )
+    chrom_ref_cpm_median = pd.to_numeric(frame["chrom_ref_cpm_median"], errors="coerce")
+    expected_numeric = pd.to_numeric(frame["expected_copy_number"], errors="coerce")
+    y_haploid_interpretable = (
+        frame["chrom"].astype(str).eq("chrY")
+        & expected_numeric.eq(1.0)
+        & raw_ratio.notna()
+        & ref_cpm.ge(SEX_CHROM_REF_MIN_CPM)
+        & chrom_ref_cpm_median.ge(SEX_CHROM_REF_MIN_CPM)
+    )
+    frame.loc[y_haploid_interpretable, "copy_number"] = raw_ratio.loc[y_haploid_interpretable] * expected_numeric.loc[
+        y_haploid_interpretable
+    ]
+    frame.loc[y_haploid_interpretable, "log2r"] = np.log2(
+        frame.loc[y_haploid_interpretable, "copy_number"] / expected_numeric.loc[y_haploid_interpretable]
+    )
+    frame.loc[y_haploid_interpretable, "copy_number_source"] = (
+        "normalized_signal_ref_median_log2r_y_haploid_centered"
+    )
+    frame["copy_number_delta"] = pd.to_numeric(frame["copy_number"], errors="coerce") - pd.to_numeric(
+        frame["expected_copy_number"], errors="coerce"
+    )
+    sex_aware = [
+        classify_sex_aware_copy_number_state(cn, expected, chrom, sex_call, ref_cpm, chrom_ref)
+        for cn, expected, chrom, ref_cpm, chrom_ref in zip(
+            frame["copy_number"],
+            frame["expected_copy_number"],
+            frame["chrom"],
+            frame.get("ref_cpm", pd.Series(np.nan, index=frame.index)),
+            frame.get("chrom_ref_cpm_median", pd.Series(np.nan, index=frame.index)),
+        )
+    ]
+    frame["cn_scatter_state_sex_aware"] = [item[0] for item in sex_aware]
+    frame["copy_number_interpretation_status"] = [item[1] for item in sex_aware]
+    not_interpretable = frame["copy_number_interpretation_status"].eq("sex_chrom_ref_ratio_not_interpretable")
+    frame.loc[not_interpretable, "copy_number"] = np.nan
+    frame.loc[not_interpretable, "log2r"] = np.nan
+    frame.loc[not_interpretable, "copy_number_delta"] = np.nan
+    frame.loc[not_interpretable, "copy_number_source"] = "sex_chrom_ref_ratio_not_interpretable"
+    frame["report_state"] = frame["cn_scatter_state_sex_aware"]
     frame["event_report_state"] = "neutral"
+    frame["event_layer"] = "neutral"
     missing_source = frame["copy_number_source"].fillna("").astype(str).eq("")
     frame.loc[~np.isfinite(frame["copy_number"]) & missing_source, "copy_number_source"] = "copy_number_unavailable"
     frame["is_structure_gap_blank"] = structural_gap_mask(frame)
     frame.loc[frame["is_structure_gap_blank"], "copy_number"] = np.nan
     frame.loc[frame["is_structure_gap_blank"], "log2r"] = np.nan
     frame.loc[frame["is_structure_gap_blank"], "cn_scatter_state"] = "neutral"
+    frame.loc[frame["is_structure_gap_blank"], "cn_scatter_state_sex_aware"] = "neutral"
     frame.loc[frame["is_structure_gap_blank"], "report_state"] = "neutral"
+    frame.loc[frame["is_structure_gap_blank"], "event_layer"] = "neutral"
     frame.loc[frame["is_structure_gap_blank"], "copy_number_source"] = "structure_gap_blank"
-    if final_events.empty:
+    event_frames = []
+    if final_events is not None and not final_events.empty:
+        event_frames.append(final_events.assign(event_layer="autosomal_report"))
+    if branch_s_events is not None and not branch_s_events.empty:
+        event_frames.append(branch_s_events)
+    if not event_frames:
         return frame
-    for row in final_events.itertuples(index=False):
+    events = pd.concat(event_frames, ignore_index=True, sort=False)
+    for row in events.itertuples(index=False):
         row_dict = row._asdict()
         mask = (
             frame["chrom"].astype(str).eq(str(row_dict["chrom"]))
@@ -362,6 +620,7 @@ def annotate_copy_number_bins(bins_df, final_events, ref_bins_df=None):
             & frame["event_report_state"].eq("neutral")
         )
         frame.loc[mask, "event_report_state"] = str(row_dict["report_state"])
+        frame.loc[mask, "event_layer"] = str(row_dict.get("event_layer", "autosomal_report"))
     return frame
 
 
@@ -691,11 +950,21 @@ def write_copy_number_bins_tsv(path_value, bins_df, layout):
             "z",
             "raw_log2r",
             "log2r",
+            "raw_ratio",
+            "ref_cpm",
+            "chrom_ref_cpm_median",
             "copy_number",
             "copy_number_centering_log2_shift",
             "cn_scatter_state",
+            "cn_scatter_state_sex_aware",
             "report_state",
             "event_report_state",
+            "event_layer",
+            "sex_call",
+            "expected_copy_number",
+            "copy_number_delta",
+            "sex_chrom_region_class",
+            "copy_number_interpretation_status",
             "is_structure_gap_blank",
             "copy_number_source",
         ]
@@ -709,15 +978,23 @@ def build_copy_number_plot_svg(
     sample_id,
     bins,
     final_events,
+    branch_s_events,
     layout,
     total_span,
     output_svg,
     output_bins_tsv="",
     output_event_support_tsv="",
     ref_bins_df=None,
+    sex_call="",
     max_points=8000,
 ):
-    cn_bins = annotate_copy_number_bins(bins, final_events, ref_bins_df=ref_bins_df)
+    cn_bins = annotate_copy_number_bins(
+        bins,
+        final_events,
+        branch_s_events=branch_s_events,
+        ref_bins_df=ref_bins_df,
+        sex_call=sex_call,
+    )
     cn_layout, cn_total_span = build_chrom_layout(cn_bins, gap_bp=CN_CHROM_GAP_BP)
     write_copy_number_bins_tsv(output_bins_tsv, cn_bins, cn_layout)
     write_copy_number_event_support_tsv(
@@ -798,6 +1075,29 @@ def build_copy_number_plot_svg(
         )
         if region:
             svg.append(region)
+    if branch_s_events is not None and not branch_s_events.empty:
+        for row in branch_s_events.to_dict("records"):
+            color = CN_REPORT_STATE_COLOR.get(str(row.get("report_state", "")), NEUTRAL_COLOR)
+            score = row.get("branch_s_score", np.nan)
+            score_text = f"; event-level score={float(score):.3f}" if np.isfinite(float(score)) else ""
+            region = render_event_region(
+                row,
+                cn_layout,
+                cn_total_span,
+                left,
+                plot_width,
+                signal_top,
+                signal_height,
+                color,
+                (
+                    f"Branch S review {row.get('branch_s_state')} "
+                    f"{row.get('chrom')}:{int(row.get('start'))}-{int(row.get('end'))}"
+                    f"{score_text}; not a bin-level CN value"
+                ),
+                class_name="branch-s-cn-region",
+            )
+            if region:
+                svg.append(region)
 
     plot_bins = downsample_bins(cn_bins, max_points=max_points)
     for row in plot_bins.itertuples(index=False):
@@ -805,8 +1105,8 @@ def build_copy_number_plot_svg(
             continue
         x = scale_x(genome_position(row.chrom, int(row.start + ((row.end - row.start) / 2)), cn_layout), cn_total_span, left, plot_width)
         y = scale_copy_number_y(row.copy_number, mid_y, half_h)
-        color = CN_REPORT_STATE_COLOR.get(str(row.cn_scatter_state), NEUTRAL_COLOR)
-        opacity = 0.78 if row.cn_scatter_state in {"dup", "del"} else 0.58
+        color = CN_REPORT_STATE_COLOR.get(str(row.cn_scatter_state_sex_aware), NEUTRAL_COLOR)
+        opacity = 0.78 if row.cn_scatter_state_sex_aware in {"dup", "del"} else 0.58
         out_of_range_attr = (
             ' data-copy-number-out-of-range="true"'
             if float(row.copy_number) < CN_COPY_NUMBER_MIN or float(row.copy_number) > CN_COPY_NUMBER_MAX
@@ -843,6 +1143,10 @@ def build_cnv_plot_svg(
     branch_b_events_df,
     a_branch_df,
     output_svg,
+    gender_df=None,
+    branch_s_summary_df=None,
+    branch_s_scores_df=None,
+    branch_s_evidence_df=None,
     ref_bins_df=None,
     output_bins_tsv="",
     output_copy_number_svg="",
@@ -852,6 +1156,13 @@ def build_cnv_plot_svg(
 ):
     bins = coerce_bins(bins_df)
     final_events = coerce_final_events(branch_b_events_df, sample_id=sample_id)
+    sex_call = sample_sex_call(gender_df, branch_s_summary_df, sample_id=sample_id)
+    branch_s_events = coerce_branch_s_review_events(
+        branch_s_summary_df,
+        scores_df=branch_s_scores_df,
+        evidence_df=branch_s_evidence_df,
+        sample_id=sample_id,
+    )
     layout, total_span = build_chrom_layout(bins)
     bins = annotate_report_states(bins, final_events)
     write_plot_bins_tsv(output_bins_tsv, bins, layout)
@@ -899,6 +1210,30 @@ def build_cnv_plot_svg(
         color = REPORT_STATE_COLOR.get(state, NEUTRAL_COLOR)
         label = f"{state} {row_dict.get('chrom')}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}"
         svg.append(render_event_region(row_dict, layout, total_span, left, plot_width, signal_top, signal_height, color, label))
+    if not branch_s_events.empty:
+        for row in branch_s_events.to_dict("records"):
+            color = REPORT_STATE_COLOR.get(str(row.get("report_state", "")), NEUTRAL_COLOR)
+            score = row.get("branch_s_score", np.nan)
+            score_text = f"; event-level score={float(score):.3f}" if np.isfinite(float(score)) else ""
+            label = (
+                f"Branch S review {row.get('branch_s_state')} "
+                f"{row.get('chrom')}:{int(row.get('start'))}-{int(row.get('end'))}"
+                f"{score_text}; calibrated-z points remain bin-level"
+            )
+            svg.append(
+                render_event_region(
+                    row,
+                    layout,
+                    total_span,
+                    left,
+                    plot_width,
+                    signal_top,
+                    signal_height,
+                    color,
+                    label,
+                    class_name="branch-s-review-region",
+                )
+            )
 
     plot_bins = downsample_bins(bins, max_points=max_points)
     point_chunks = []
@@ -934,12 +1269,14 @@ def build_cnv_plot_svg(
             sample_id=sample_id,
             bins=bins,
             final_events=final_events,
+            branch_s_events=branch_s_events,
             layout=layout,
             total_span=total_span,
             output_svg=output_copy_number_svg,
             output_bins_tsv=output_copy_number_bins_tsv,
             output_event_support_tsv=output_copy_number_event_support_tsv,
             ref_bins_df=ref_bins_df,
+            sex_call=sex_call,
             max_points=max_points,
         )
 
@@ -951,11 +1288,19 @@ def main():
     events_df = read_table(args.input_events, empty_ok=True)
     a_branch_df = read_table(args.input_a_branch, empty_ok=True)
     ref_bins_df = read_table(args.input_ref_bins, empty_ok=True)
+    gender_df = read_table(args.gender_tsv, empty_ok=True)
+    branch_s_summary_df = read_table(args.branch_s_summary, empty_ok=True)
+    branch_s_scores_df = read_table(args.branch_s_scores, empty_ok=True)
+    branch_s_evidence_df = read_table(args.branch_s_evidence, empty_ok=True)
     build_cnv_plot_svg(
         sample_id=args.sample_id,
         bins_df=bins_df,
         branch_b_events_df=events_df,
         a_branch_df=a_branch_df,
+        gender_df=gender_df,
+        branch_s_summary_df=branch_s_summary_df,
+        branch_s_scores_df=branch_s_scores_df,
+        branch_s_evidence_df=branch_s_evidence_df,
         ref_bins_df=ref_bins_df,
         output_svg=args.output_svg,
         output_bins_tsv=args.output_bins_tsv,

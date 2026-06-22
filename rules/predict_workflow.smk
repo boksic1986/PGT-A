@@ -712,6 +712,10 @@ if CNV_ENABLED:
                 events=CNV_B_V2_BENCHMARK_REPORT_EVENTS,
                 a_branch=([CNV_A_ABERRATIONS_BED] if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
                 ref_bins=([CNV_B_REF_STABILITY_BINS] if CNV_LOWRES_EVIDENCE_ENABLE else []),
+                gender_tsv=([CNV_GENDER_TSV] if PREDICT_BY_SEX_ENABLED else []),
+                branch_s_summary=CNV_BRANCH_S_SUMMARY,
+                branch_s_scores=CNV_BRANCH_S_SCORES,
+                branch_s_evidence=CNV_BRANCH_S_EVIDENCE,
                 metadata=RUN_METADATA
             output:
                 svg=CNV_B_PLOT_SVG,
@@ -745,6 +749,15 @@ if CNV_ENABLED:
                     command.extend(["--input-a-branch", input.a_branch[0]])
                 if input.ref_bins:
                     command.extend(["--input-ref-bins", input.ref_bins[0]])
+                if input.gender_tsv:
+                    command.extend(["--gender-tsv", input.gender_tsv[0]])
+                command.extend(
+                    [
+                        "--branch-s-summary", input.branch_s_summary,
+                        "--branch-s-scores", input.branch_s_scores,
+                        "--branch-s-evidence", input.branch_s_evidence,
+                    ]
+                )
                 subprocess.run(command, check=True)
 
     if CNV_NEGATIVE_BANK_SAMPLES_TSV:

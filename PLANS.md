@@ -1,5 +1,43 @@
 # PLANS.md
 
+## 2026-06-22 Sex-Aware CN/Z Plot Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1535_sex_aware_cn_z_plot_branch_s_overlay_handoff.md`.
+
+Current report:
+`docs/reports/sex_aware_cn_z_plot_branch_s_overlay_2026-06-22.md`.
+
+The active combined genome plot now includes sex-aware CN scatter and Branch S
+review overlays. This is a visualization/report-support update only. It is not
+a Branch B filter change and does not promote Branch S to final SCA calling.
+
+Current outputs:
+
+- G1-G8:
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins_cn.tsv`
+- 2026-06-15:
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+
+Immediate next steps:
+
+1. Review G1-G8 first because it has locked truth.
+2. Confirm G3/G5 X-loss visibility on both z and CN plots; use Branch S
+   summary/scores/evidence for the SCA interpretation, not chrY ratio-CN.
+3. Treat G8 chrY as `sex_chrom_ref_ratio_not_interpretable`; do not infer Y
+   copy number from the current mixed/low chrY reference denominator.
+4. Use 0615 plots only for burden/context review. 0615 has no truth and must
+   not be used to derive new thresholds.
+5. If report-event reduction is resumed, any CN/SCA-derived demotion must be
+   benchmarked against Y1-Y8, H1-H6, and G1-G8 with FN=0, H6 chr21 visible, and
+   G2 truth not filtered.
+6. If a final SCA report section is needed, design a separate Branch S truth
+   gate. Do not promote the current Branch S review overlay to final SCA status.
+
 ## 2026-06-22 CN Centering And Branch S Review Next Gate
 
 Current handoff:

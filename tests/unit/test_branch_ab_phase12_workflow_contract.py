@@ -217,6 +217,10 @@ def test_cnv_plot_uses_v2_report_events_and_writes_plot_bins():
     plot_rule = workflow.split("rule cnv_branch_ab_plot:", 1)[1].split("if CNV_NEGATIVE_BANK_SAMPLES_TSV:", 1)[0]
     assert "events=CNV_B_V2_BENCHMARK_REPORT_EVENTS" in plot_rule
     assert "ref_bins=([CNV_B_REF_STABILITY_BINS] if CNV_LOWRES_EVIDENCE_ENABLE else [])" in plot_rule
+    assert "gender_tsv=([CNV_GENDER_TSV] if PREDICT_BY_SEX_ENABLED else [])" in plot_rule
+    assert "branch_s_summary=CNV_BRANCH_S_SUMMARY" in plot_rule
+    assert "branch_s_scores=CNV_BRANCH_S_SCORES" in plot_rule
+    assert "branch_s_evidence=CNV_BRANCH_S_EVIDENCE" in plot_rule
     assert "CNV_B_FINAL_EVENTS" not in plot_rule
     assert "bins_tsv=CNV_B_PLOT_BINS_TSV" in plot_rule
     assert "cn_svg=CNV_B_PLOT_CN_SVG" in plot_rule
@@ -224,6 +228,10 @@ def test_cnv_plot_uses_v2_report_events_and_writes_plot_bins():
     assert "cn_event_support_tsv=CNV_B_PLOT_CN_EVENT_SUPPORT_TSV" in plot_rule
     assert "--output-bins-tsv" in plot_rule
     assert "--input-ref-bins" in plot_rule
+    assert "--gender-tsv" in plot_rule
+    assert "--branch-s-summary" in plot_rule
+    assert "--branch-s-scores" in plot_rule
+    assert "--branch-s-evidence" in plot_rule
     assert "--output-copy-number-svg" in plot_rule
     assert "--output-copy-number-bins-tsv" in plot_rule
     assert "--output-copy-number-event-support-tsv" in plot_rule

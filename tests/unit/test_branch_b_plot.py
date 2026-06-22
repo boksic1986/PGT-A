@@ -607,3 +607,271 @@ def test_build_cnv_plot_svg_requires_calibrated_z_without_fallback(tmp_path):
             output_svg=tmp_path / "Y1.final_cnv.svg",
             output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
         )
+
+
+def test_copy_number_scatter_is_sex_aware_for_xy_chrx_and_chry(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chrX", "chrY"],
+            "bin_index": [0, 0, 0],
+            "start": [0, 0, 0],
+            "end": [1_000_000, 1_000_000, 1_000_000],
+            "calibrated_z": [0.0, -0.1, 0.1],
+            "normalized_signal": [_norm_signal(100), _norm_signal(50), _norm_signal(50)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chrX", 0, 0, 1_000_000, 100),
+            ("chrY", 0, 0, 1_000_000, 50),
+        ]
+    )
+    gender = pd.DataFrame(
+        {
+            "sample_id": ["XY1"],
+            "sex_call": ["XY"],
+            "predict_gender": ["M"],
+            "sex_call_source": ["unit_test"],
+        }
+    )
+    output_cn_svg = tmp_path / "XY1.final_cnv_cn.svg"
+    output_cn_bins = tmp_path / "XY1.plot_bins_cn.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="XY1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        gender_df=gender,
+        ref_bins_df=ref_bins,
+        output_svg=tmp_path / "XY1.final_cnv.svg",
+        output_bins_tsv=tmp_path / "XY1.plot_bins.tsv",
+        output_copy_number_svg=output_cn_svg,
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    assert set(
+        [
+            "sex_call",
+            "expected_copy_number",
+            "copy_number_delta",
+            "cn_scatter_state_sex_aware",
+            "sex_chrom_region_class",
+            "copy_number_interpretation_status",
+            "event_layer",
+        ]
+    ).issubset(cn_bins.columns)
+    chr_x = cn_bins.loc[cn_bins["chrom"].eq("chrX")].iloc[0]
+    chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")].iloc[0]
+    assert chr_x["expected_copy_number"] == pytest.approx(1.0)
+    assert chr_y["expected_copy_number"] == pytest.approx(1.0)
+    assert chr_x["copy_number"] == pytest.approx(1.0, abs=0.02)
+    assert chr_y["copy_number"] == pytest.approx(1.0, abs=0.02)
+    assert chr_x["cn_scatter_state_sex_aware"] == "neutral"
+    assert chr_y["cn_scatter_state_sex_aware"] == "neutral"
+    assert chr_x["report_state"] == "neutral"
+    assert chr_y["report_state"] == "neutral"
+    assert chr_x["copy_number_interpretation_status"] == "sex_aware_interpretable"
+    assert chr_y["copy_number_interpretation_status"] == "sex_aware_interpretable"
+
+
+def test_copy_number_scatter_does_not_turn_xx_absent_chry_into_deletion(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chrY"],
+            "bin_index": [0, 0],
+            "start": [0, 0],
+            "end": [1_000_000, 1_000_000],
+            "calibrated_z": [0.0, -0.1],
+            "normalized_signal": [_norm_signal(100), _norm_signal(0.01)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chrY", 0, 0, 1_000_000, 50),
+        ]
+    )
+    gender = pd.DataFrame({"sample_id": ["XX1"], "sex_call": ["XX"], "predict_gender": ["F"]})
+    output_cn_bins = tmp_path / "XX1.plot_bins_cn.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="XX1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        gender_df=gender,
+        ref_bins_df=ref_bins,
+        output_svg=tmp_path / "XX1.final_cnv.svg",
+        output_bins_tsv=tmp_path / "XX1.plot_bins.tsv",
+        output_copy_number_svg=tmp_path / "XX1.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")].iloc[0]
+    assert chr_y["expected_copy_number"] == pytest.approx(0.0)
+    assert chr_y["cn_scatter_state_sex_aware"] == "neutral"
+    assert chr_y["report_state"] == "neutral"
+    assert chr_y["copy_number_interpretation_status"] == "sex_aware_absent_expected"
+
+
+def test_copy_number_scatter_marks_chry_zero_ref_as_not_interpretable(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chrY"],
+            "bin_index": [0, 0],
+            "start": [0, 0],
+            "end": [1_000_000, 1_000_000],
+            "calibrated_z": [0.0, 0.1],
+            "normalized_signal": [_norm_signal(100), _norm_signal(50)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chrY", 0, 0, 1_000_000, 0),
+        ]
+    )
+    gender = pd.DataFrame({"sample_id": ["XY1"], "sex_call": ["XY"], "predict_gender": ["M"]})
+    output_cn_bins = tmp_path / "XY1.plot_bins_cn.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="XY1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        gender_df=gender,
+        ref_bins_df=ref_bins,
+        output_svg=tmp_path / "XY1.final_cnv.svg",
+        output_bins_tsv=tmp_path / "XY1.plot_bins.tsv",
+        output_copy_number_svg=tmp_path / "XY1.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")].iloc[0]
+    assert pd.isna(chr_y["copy_number"])
+    assert chr_y["cn_scatter_state_sex_aware"] == "neutral"
+    assert chr_y["report_state"] == "neutral"
+    assert chr_y["copy_number_interpretation_status"] == "sex_chrom_ref_ratio_not_interpretable"
+
+
+def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chrY", "chrY", "chrY"],
+            "bin_index": [0, 0, 1, 2],
+            "start": [0, 0, 1_000_000, 2_000_000],
+            "end": [1_000_000, 1_000_000, 2_000_000, 3_000_000],
+            "calibrated_z": [0.0, 0.1, 0.2, 0.1],
+            "normalized_signal": [_norm_signal(100), _norm_signal(50), _norm_signal(50), _norm_signal(50)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chrY", 0, 0, 1_000_000, 0),
+            ("chrY", 1, 1_000_000, 2_000_000, 0),
+            ("chrY", 2, 2_000_000, 3_000_000, 5),
+        ]
+    )
+    gender = pd.DataFrame({"sample_id": ["XY1"], "sex_call": ["XY"], "predict_gender": ["M"]})
+    output_cn_bins = tmp_path / "XY1.plot_bins_cn.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="XY1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        gender_df=gender,
+        ref_bins_df=ref_bins,
+        output_svg=tmp_path / "XY1.final_cnv.svg",
+        output_bins_tsv=tmp_path / "XY1.plot_bins.tsv",
+        output_copy_number_svg=tmp_path / "XY1.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")]
+    assert chr_y["copy_number"].isna().all()
+    assert set(chr_y["cn_scatter_state_sex_aware"]) == {"neutral"}
+    assert set(chr_y["copy_number_interpretation_status"]) == {"sex_chrom_ref_ratio_not_interpretable"}
+
+
+def test_branch_s_report_review_event_is_overlaid_in_combined_genome_plot(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chrX", "chrX", "chrX"],
+            "bin_index": [0, 1, 2],
+            "start": [0, 1_000_000, 2_000_000],
+            "end": [1_000_000, 2_000_000, 3_000_000],
+            "calibrated_z": [-0.1, -0.2, -0.1],
+            "normalized_signal": [_norm_signal(85), _norm_signal(84), _norm_signal(86)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chrX", 0, 0, 1_000_000, 100),
+            ("chrX", 1, 1_000_000, 2_000_000, 100),
+            ("chrX", 2, 2_000_000, 3_000_000, 100),
+        ]
+    )
+    gender = pd.DataFrame({"sample_id": ["G3"], "sex_call": ["XX"], "predict_gender": ["F"]})
+    branch_s_summary = pd.DataFrame(
+        {
+            "sample_id": ["G3"],
+            "sex_call": ["XX"],
+            "sca_candidate_state": ["X_LOSS"],
+            "sca_report_layer_class": ["sca_report_review_event"],
+            "sca_report_layer_reason": ["sca_review_weak_report_visible_with_branch_a_support"],
+        }
+    )
+    branch_s_scores = pd.DataFrame(
+        {
+            "sample_id": ["G3"],
+            "sca_state": ["X_LOSS"],
+            "state_score": [24.16],
+            "state_score_reason": ["branch_a_candidate_zscore_sex_call_compatible_uncorroborated_review"],
+        }
+    )
+    branch_s_evidence = pd.DataFrame(
+        {
+            "sample_id": ["G3"],
+            "region_class": ["X_NONPAR"],
+            "chrom": ["chrX"],
+            "start": [0],
+            "end": [3_000_000],
+            "bin_count": [3],
+            "median_calibrated_z": [-0.1],
+        }
+    )
+    output_svg = tmp_path / "G3.final_cnv.svg"
+    output_cn_svg = tmp_path / "G3.final_cnv_cn.svg"
+    output_cn_bins = tmp_path / "G3.plot_bins_cn.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="G3",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        gender_df=gender,
+        branch_s_summary_df=branch_s_summary,
+        branch_s_scores_df=branch_s_scores,
+        branch_s_evidence_df=branch_s_evidence,
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=tmp_path / "G3.plot_bins.tsv",
+        output_copy_number_svg=output_cn_svg,
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    svg = output_svg.read_text(encoding="utf-8")
+    cn_svg = output_cn_svg.read_text(encoding="utf-8")
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    assert 'class="branch-s-review-region"' in svg
+    assert 'class="branch-s-cn-region"' in cn_svg
+    assert "event-level score=24.160" in svg
+    assert set(cn_bins["event_layer"]) == {"branch_s_review"}
