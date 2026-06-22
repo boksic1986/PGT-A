@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md`
+2. `docs/handoff/2026-06-22_2235_report_table_ablation_audit_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,19 +23,21 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md
-previous_handoff: docs/handoff/2026-06-22_1938_sex_specific_ref_cnv_plot_handoff.md
+active_handoff: docs/handoff/2026-06-22_2235_report_table_ablation_audit_handoff.md
+previous_handoff: docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
-branch_b_status: v2_plot_manifest_low_confidence_ablation_development_only
+branch_b_status: v2_report_table_ablation_audit_development_only
 branch_s_status: branch_s_review_manifest_visible_not_final
-report_status: plot_event_manifest_low_confidence_ablation_materialized_development_only
+report_status: report_table_ablation_audit_materialized_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/branch_b_v2_report_table_ablation_audit_2026-06-22.md`
+- `docs/handoff/2026-06-22_2235_report_table_ablation_audit_handoff.md`
 - `docs/reports/plot_event_manifest_low_confidence_ablation_2026-06-22.md`
 - `docs/handoff/2026-06-22_2145_plot_event_manifest_low_confidence_handoff.md`
 - `docs/reports/sex_specific_ref_cnv_plot_2026-06-22.md`
@@ -97,6 +99,55 @@ report_status: plot_event_manifest_low_confidence_ablation_materialized_developm
 - `docs/reports/branch_ab_v2_rnd_constraints_2026-06-18.md`
 
 ## Current Module State
+
+### Report-Table Ablation Audit
+
+The active Branch B V2 report-table ablation audit is documented in
+`docs/reports/branch_b_v2_report_table_ablation_audit_2026-06-22.md`.
+
+This loop adds the formal workflow target `branch_b_v2_report_ablation`. It
+materializes `report_table_ablation_audit.tsv`,
+`report_table_ablation_summary.json`, and
+`report_table_ablation_audit.md` for the active Y/H/G/0615 gap2m lowres
+configs.
+
+The only audited candidate rule is:
+
+```text
+autosomal report_event
+AND plot_support_class = Z_SUPPORTED_CN_NOT_SUPPORTED
+=> downgrade_to_internal_review_candidate
+```
+
+This remains an audit only. The report table is not changed by this loop.
+Locked truth candidates are protected; `CN_DIRECTION_WEAK_OR_MIXED` and
+`Z_AND_CN_NOT_SUPPORTED` are not automatically demoted.
+
+Remote validation on `fengxian`:
+
+- pytest `test_plot_manifest_ablation_audit.py test_branch_b_plot.py
+  test_cnv_report.py test_branch_ab_phase12_workflow_contract.py
+  test_branch_s_shadow.py`: `73 passed in 4.25s`.
+- `branch_b_v2_report_ablation` materialized for Y1-Y8, H1-H16, G1-G8, and
+  0615.
+
+Materialized summary:
+
+- Y1-Y8: report events 40 -> 40 proposed; demotions=0; truth 10/10; FN=0.
+- H1-H16: report events 23 -> 22 proposed; demotions=1; H1-H6 truth 10/10;
+  FN=0.
+- G1-G8: report events 26 -> 26 proposed; demotions=0; truth 10/10; FN=0.
+- 0615: report events 71 -> 68 proposed; demotions=3; context only.
+
+Current proposed demotion candidates:
+
+- H8 `chr4:10.50-48.75Mb gain`, `H8.A0004`.
+- JZ26125846-61-61 `chr4:52.50-101.25Mb gain`,
+  `JZ26125846-61-61.A0022`.
+- JZ26125847-62-62 `chr10:49.50-135.00Mb gain`,
+  `JZ26125847-62-62.A0019`.
+- JZ26125847-62-62 `chr8:46.50-141.75Mb gain`,
+  `JZ26125847-62-62.A0012`.
 
 ### Plot Event Manifest And Low-Confidence Ablation
 

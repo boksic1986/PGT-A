@@ -1009,6 +1009,45 @@ if CNV_ENABLED:
                         command.extend(["--classification-tsv", path_value])
                     subprocess.run(command, check=True)
 
+        if "branch_b_v2_report_ablation" in AVAILABLE_TARGETS:
+            rule cnv_branch_b_v2_report_ablation_audit:
+                input:
+                    report_events=CNV_B_V2_BENCHMARK_REPORT_EVENTS,
+                    truth_metrics=CNV_B_V2_BENCHMARK_TRUTH_METRICS,
+                    sample_summary=CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY,
+                    plot_manifests=expand(CNV_B_PLOT_EVENT_MANIFEST_TSV, sample=SAMPLES),
+                    plot_supports=expand(CNV_B_PLOT_CN_EVENT_SUPPORT_TSV, sample=SAMPLES),
+                    metadata=RUN_METADATA
+                output:
+                    audit=CNV_B_V2_REPORT_ABLATION_AUDIT,
+                    summary=CNV_B_V2_REPORT_ABLATION_SUMMARY,
+                    md=CNV_B_V2_REPORT_ABLATION_MD
+                log:
+                    project_path("logs", "cnv", "branch_b_v2_report_ablation.log")
+                threads: 1
+                run:
+                    from pgta.core.logging import write_rule_audit_log
+                    import subprocess
+
+                    write_rule_audit_log(log[0], input.metadata)
+                    command = [
+                        config["biosoft"]["python"],
+                        SCRIPT_PLOT_MANIFEST_AUDIT,
+                        SCRIPT_PLOT_MANIFEST_AUDIT_ACTION,
+                        "--reference-id", CNV_REFERENCE_ID,
+                        "--report-events-tsv", input.report_events,
+                        "--truth-metrics-tsv", input.truth_metrics,
+                        "--sample-summary-tsv", input.sample_summary,
+                        "--output-audit-tsv", output.audit,
+                        "--output-summary-json", output.summary,
+                        "--output-report-md", output.md,
+                    ]
+                    for path_value in input.plot_manifests:
+                        command.extend(["--plot-manifest-tsv", path_value])
+                    for path_value in input.plot_supports:
+                        command.extend(["--plot-support-tsv", path_value])
+                    subprocess.run(command, check=True)
+
         rule cnv_branch_s_shadow:
             input:
                 bins=CNV_B_CALIBRATED_BINS,

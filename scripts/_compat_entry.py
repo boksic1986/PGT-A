@@ -26,6 +26,7 @@ DISPATCHER_MODULE_MAP = {
         "branch_b_v2_benchmark": "pgta.predict.branch_b.v2_benchmark",
         "branch_b_lowres_evidence": "pgta.predict.branch_b.lowres_evidence",
         "branch_b_ref_stability": "pgta.predict.branch_b.ref_stability",
+        "plot_manifest_audit": "pgta.predict.branch_b.plot_manifest_audit",
         "branch_s_shadow": "pgta.predict.branch_s",
         "matched_negative_percentile": "pgta.predict.branch_b.matched_negative",
         "cnv_ml": "pgta.predict.ml",

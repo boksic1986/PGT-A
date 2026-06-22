@@ -239,6 +239,13 @@ if "branch_b_v2_benchmark" in REQUESTED_TARGETS and CNV_ENABLED:
             CNV_B_V2_BENCHMARK_REPORT_EVENTS_JSON,
             CNV_B_V2_BENCHMARK_SUMMARY,
         ]
+if "branch_b_v2_report_ablation" in REQUESTED_TARGETS and CNV_ENABLED:
+    if CNV_POSTPROCESS_ENABLE_BRANCH_B:
+        ALL_TARGET_FILES += [
+            CNV_B_V2_REPORT_ABLATION_AUDIT,
+            CNV_B_V2_REPORT_ABLATION_SUMMARY,
+            CNV_B_V2_REPORT_ABLATION_MD,
+        ]
 if "reference_audit" in REQUESTED_TARGETS and CNV_ENABLED:
     ALL_TARGET_FILES += [CNV_REFERENCE_AUDIT_TSV, CNV_REFERENCE_AUDIT_SUMMARY]
 if "branch_a_validation" in REQUESTED_TARGETS and CNV_ENABLED:

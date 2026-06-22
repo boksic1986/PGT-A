@@ -1,5 +1,66 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Report-Table Ablation Audit
+
+Current handoff:
+`docs/handoff/2026-06-22_2235_report_table_ablation_audit_handoff.md`.
+
+Current report:
+`docs/reports/branch_b_v2_report_table_ablation_audit_2026-06-22.md`.
+
+This loop adds a formal Branch B V2 report-table ablation audit target. It does
+not modify Branch A, Branch B V2 classifier decisions, Branch S, reference,
+sex calling, report-event classification, or production filtering.
+
+Active audit contract:
+
+- New Snakemake target: `branch_b_v2_report_ablation`.
+- New outputs under each active cohort:
+  - `report_table_ablation_audit.tsv`;
+  - `report_table_ablation_summary.json`;
+  - `report_table_ablation_audit.md`.
+- The only candidate rule under audit is:
+  `autosomal report_event + Z_SUPPORTED_CN_NOT_SUPPORTED ->
+  downgrade_to_internal_review_candidate`.
+- Locked-truth overlap candidates remain protected.
+- `CN_DIRECTION_WEAK_OR_MIXED` is not demoted.
+- `Z_AND_CN_NOT_SUPPORTED` is not automatically demoted in this first audit.
+- 0615 remains context-only; no TP/FN/FP is computed.
+
+Remote validation:
+
+- Remote pytest:
+  `tests/unit/test_plot_manifest_ablation_audit.py`,
+  `tests/unit/test_branch_b_plot.py`, `tests/unit/test_cnv_report.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
+  `tests/unit/test_branch_s_shadow.py`: `73 passed in 4.25s`.
+- Y/H/G/0615 active gap2m lowres configs materialized
+  `branch_b_v2_report_ablation` on `fengxian`.
+
+Materialized audit summary:
+
+- Y1-Y8: report events 40 -> 40 proposed; demotions=0; truth 10/10; FN=0.
+- H1-H16: report events 23 -> 22 proposed; demotions=1; H1-H6 truth 10/10;
+  FN=0.
+- G1-G8: report events 26 -> 26 proposed; demotions=0; truth 10/10; FN=0.
+- 0615: report events 71 -> 68 proposed; demotions=3; context-only.
+
+Proposed demotion candidates:
+
+- H8 `chr4:10.50-48.75Mb gain`, `H8.A0004`.
+- JZ26125846-61-61 `chr4:52.50-101.25Mb gain`,
+  `JZ26125846-61-61.A0022`.
+- JZ26125847-62-62 `chr10:49.50-135.00Mb gain`,
+  `JZ26125847-62-62.A0019`.
+- JZ26125847-62-62 `chr8:46.50-141.75Mb gain`,
+  `JZ26125847-62-62.A0012`.
+
+Remaining boundary:
+
+- This is an ablation audit only. The report table has not yet been changed.
+- Any future promotion must be a separate code change with Y/H/G locked-truth
+  rerun and H6 chr21/G2 truth protection.
+
 ## 2026-06-22 Plot Event Manifest And Low-Confidence Ablation
 
 Current handoff:

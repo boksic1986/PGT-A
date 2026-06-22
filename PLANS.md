@@ -1,5 +1,46 @@
 # PLANS.md
 
+## 2026-06-22 Report-Table Ablation Audit Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_2235_report_table_ablation_audit_handoff.md`.
+
+Current report:
+`docs/reports/branch_b_v2_report_table_ablation_audit_2026-06-22.md`.
+
+Current status:
+
+- `branch_b_v2_report_ablation` is now a formal workflow target.
+- It audits whether autosomal `report_event` rows with
+  `plot_support_class=Z_SUPPORTED_CN_NOT_SUPPORTED` can be proposed for
+  `report_event -> internal_review_event_candidate` demotion.
+- It does not change the report table, Branch A, Branch B V2 classifier,
+  Branch S, reference, sex calling, or production filtering.
+- Y/H/G truth gates remain FN=0 under the audit.
+- 0615 remains context-only.
+
+Current proposed demotion candidates:
+
+1. H8 `chr4:10.50-48.75Mb gain`, `H8.A0004`.
+2. JZ26125846-61-61 `chr4:52.50-101.25Mb gain`,
+   `JZ26125846-61-61.A0022`.
+3. JZ26125847-62-62 `chr10:49.50-135.00Mb gain`,
+   `JZ26125847-62-62.A0019`.
+4. JZ26125847-62-62 `chr8:46.50-141.75Mb gain`,
+   `JZ26125847-62-62.A0012`.
+
+Immediate next steps:
+
+1. Manually review these four rows against z plot, CN plot, and
+   `plot_event_support.tsv`.
+2. Decide whether to implement a separate report-table demotion rule.
+3. If implemented, keep it as demotion only, not hard filtering.
+4. Rerun Y1-Y8, H1-H6, and G1-G8 truth gates with FN=0, H6 chr21 visible, G2
+   truth visible, and truth hard-filtered count=0.
+5. Keep `Z_AND_CN_NOT_SUPPORTED` and `CN_DIRECTION_WEAK_OR_MIXED` out of
+   automatic demotion until separate ablation proves they are safe.
+6. Keep Branch S separate from autosomal report-table demotion.
+
 ## 2026-06-22 Plot Manifest Low-Confidence Review Next Gate
 
 Current handoff:
