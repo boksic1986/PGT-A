@@ -23,19 +23,21 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md
-previous_handoff: docs/handoff/2026-06-22_0930_lowres_branch_bs_integration_handoff.md
+active_handoff: docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md
+previous_handoff: docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_visibility_materialized_development_only
 branch_s_status: sex_aware_segment_level_lowres_context_not_final
-report_status: main_table_converged_with_calibrated_z_cnv_plots_development_only
+report_status: 0615_high_confidence_review_candidates_recorded_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`
+- `docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md`
 - `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`
 - `docs/handoff/2026-06-22_0437_report_main_cnv_plot_handoff.md`
 - `docs/reports/h7_h16_reference_cohort_decision_2026-06-20.md`
@@ -71,6 +73,32 @@ report_status: main_table_converged_with_calibrated_z_cnv_plots_development_only
 - `docs/reports/branch_ab_v2_rnd_constraints_2026-06-18.md`
 
 ## Current Module State
+
+### 0615 High-Confidence Review Candidates
+
+The latest completed loop is
+`docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`.
+
+This is a read-only review of the current 2026-06-15 materialized report output.
+It does not change workflow code, thresholds, reference, Branch A, Branch B V2,
+Branch S, or remote results.
+
+Current 0615 input check:
+
+- `report_events.tsv`: 71 autosomal report rows.
+- plot-bin TSVs: 5/5 samples present.
+- Branch S remains development-only context.
+
+Current conservative high-confidence autosomal review candidates:
+
+- `JZ26125845-60-60`: 10 rows.
+- `JZ26125843-56-56`, `JZ26125844-59-59`,
+  `JZ26125846-61-61`, and `JZ26125847-62-62`: 0 rows under the conservative
+  high-confidence screen.
+
+The current 5/5 batch-shared region `chr4:67.50-101.25Mb gain` is excluded
+from high-confidence interpretation. This cohort still has no locked truth, so
+no TP/FP/FN conclusion is allowed.
 
 ### Report Main And CNV Plot
 

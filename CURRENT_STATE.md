@@ -1,5 +1,43 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 0615 High-Confidence Report Candidate Review
+
+Current handoff:
+`docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md`.
+
+Current report:
+`docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`.
+
+This loop only records a read-only review of current 2026-06-15 materialized
+report outputs. It does not modify workflow code, thresholds, Branch A, Branch
+B V2, Branch S, reference, or remote result files.
+
+Remote input check:
+
+- `report_events.tsv`: 71 autosomal report rows.
+- Plot bin TSV files: 5/5 samples present.
+- Current plot bin TSVs expose the report plotting signal as `z` and states as
+  `dup`, `del`, and `neutral`.
+
+Current conservative high-confidence autosomal review candidates:
+
+- `JZ26125845-60-60`: 10 rows.
+- `JZ26125843-56-56`: 0 rows.
+- `JZ26125844-59-59`: 0 rows.
+- `JZ26125846-61-61`: 0 rows.
+- `JZ26125847-62-62`: 0 rows.
+
+Current batch-shared review context:
+
+- `chr4:67.50-101.25Mb gain` is present in 5/5 samples and is excluded from
+  high-confidence interpretation.
+- `chr4:52.50-67.50Mb gain`, `chr4:101.25-121.50Mb gain`, and
+  `chr14:60.75-97.50Mb gain` are 4/5 shared review regions.
+
+This result is development-only review context. 2026-06-15 has no locked truth,
+so no TP/FP/FN conclusion is allowed and these observations must not be used to
+derive production Branch B V2 filters.
+
 ## 2026-06-22 Report Main Convergence And CNV Plot
 
 Current handoff:

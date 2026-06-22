@@ -1,5 +1,29 @@
 # PLANS.md
 
+## 2026-06-22 0615 High-Confidence Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_0907_0615_high_confidence_report_handoff.md`.
+
+Current report:
+`docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`.
+
+The current 0615 high-confidence review is complete as a read-only development
+summary. It identifies 10 conservative autosomal review/report candidates, all
+in `JZ26125845-60-60`, and excludes the 5/5 shared
+`chr4:67.50-101.25Mb gain` region from high-confidence interpretation.
+
+Immediate next steps:
+
+1. Manually inspect the 10 `JZ26125845-60-60` high-confidence rows against the
+   corresponding calibrated-z CNV plots.
+2. Keep chr4 shared gains as batch/context review, not high-confidence report
+   candidates.
+3. Keep Branch S/SCA output as a separate development-only context section.
+4. Do not use 0615 to derive new Branch B V2 thresholds or production filters.
+5. Any future filter/demotion proposal must be ablated against Y1-Y8, H1-H6,
+   and G1-G8 locked truth with FN=0, H6 chr21 retained, and G2 truth visible.
+
 ## 2026-06-22 Report Main And CNV Plot Next Gate
 
 Current handoff:
