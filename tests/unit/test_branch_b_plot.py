@@ -129,10 +129,10 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
     assert cn_bins.loc[cn_bins["report_state"].eq("dup"), "copy_number"].tolist() == pytest.approx([2.672, 2.608], abs=0.001)
     assert cn_bins.loc[cn_bins["report_state"].eq("del"), "copy_number"].tolist() == pytest.approx([1.394, 1.446], abs=0.001)
     assert set(cn_bins.loc[cn_bins["report_state"].eq("dup"), "copy_number_source"]) == {
-        "event_scaled_calibrated_z_proxy"
+        "event_calibrated_z_scaled_to_cn_proxy"
     }
     assert set(cn_bins.loc[cn_bins["report_state"].eq("del"), "copy_number_source"]) == {
-        "event_scaled_calibrated_z_proxy"
+        "event_calibrated_z_scaled_to_cn_proxy"
     }
 
 
@@ -194,7 +194,7 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
     assert non_centromere_gap_row["copy_number_source"] != "structure_gap_blank"
     assert pd.isna(gap_row["copy_number"])
     assert gap_row["copy_number_source"] == "structure_gap_blank"
-    assert cn_bins.loc[cn_bins["copy_number_source"].eq("event_scaled_calibrated_z_proxy"), "copy_number"].nunique() > 1
+    assert cn_bins.loc[cn_bins["copy_number_source"].eq("event_calibrated_z_scaled_to_cn_proxy"), "copy_number"].nunique() > 1
     assert "#1d4ed8" in cn_svg
     assert 'class="chrom-background"' not in cn_svg
     assert 'fill="#f8fafc"' not in cn_svg
@@ -252,6 +252,50 @@ def test_copy_number_plot_uses_hg19_centromere_fallback_without_telomere_gap_sha
     assert cn_svg.count('class="cn-bin-scatter"') == 2
 
 
+def test_copy_number_scatter_uses_bin_z_even_when_direction_discordant(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chr1", "chr1"],
+            "bin_index": [0, 1, 2],
+            "start": [0, 1_000_000, 2_000_000],
+            "end": [1_000_000, 2_000_000, 3_000_000],
+            "calibrated_z": [0.0, 3.0, 4.0],
+        }
+    )
+    events = pd.DataFrame(
+        {
+            "sample_id": ["Y1"],
+            "chrom": ["chr1"],
+            "start": [1_000_000],
+            "end": [3_000_000],
+            "state": ["loss"],
+            "v2_report_layer_class": ["report_event"],
+            "v2_report_visibility": ["report_weak_event"],
+            "copy_number_estimate": [1.5],
+        }
+    )
+
+    output_cn_bins = tmp_path / "Y1.plot_bins_cn.tsv"
+    build_cnv_plot_svg(
+        sample_id="Y1",
+        bins_df=bins,
+        branch_b_events_df=events,
+        a_branch_df=pd.DataFrame(),
+        output_svg=tmp_path / "Y1.final_cnv.svg",
+        output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
+        output_copy_number_svg=tmp_path / "Y1.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    event_bins = cn_bins.loc[cn_bins["report_state"].eq("del")].copy()
+
+    assert event_bins["copy_number"].nunique() == 2
+    assert event_bins["copy_number"].tolist() == pytest.approx([2.4286, 2.5714], abs=0.001)
+    assert set(event_bins["copy_number_source"]) == {"event_calibrated_z_scaled_to_cn_proxy"}
+    assert event_bins["z"].tolist() == [3.0, 4.0]
+
+
 def test_copy_number_plot_falls_back_to_a_ratio_and_refuses_missing_cn(tmp_path):
     bins = pd.DataFrame(
         {
@@ -290,7 +334,7 @@ def test_copy_number_plot_falls_back_to_a_ratio_and_refuses_missing_cn(tmp_path)
     )
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
     assert cn_bins["copy_number"].tolist() == pytest.approx([2.492, 2.508], abs=0.001)
-    assert set(cn_bins["copy_number_source"]) == {"event_scaled_calibrated_z_proxy"}
+    assert set(cn_bins["copy_number_source"]) == {"event_calibrated_z_scaled_to_cn_proxy"}
 
     missing_cn_events = events.drop(columns=["a_ratio"])
     with pytest.raises(ValueError, match="copy_number_estimate|a_ratio"):

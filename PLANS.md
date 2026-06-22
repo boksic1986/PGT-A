@@ -1,5 +1,41 @@
 # PLANS.md
 
+## 2026-06-22 CN Plot Bin-Z Scatter Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md`.
+
+Current report:
+`docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
+
+CN plot bin-z scatter is materialized for 0615 as a visualization-only
+supplement:
+
+- `*.final_cnv_cn.svg` remains 2560px wide with a white plotting panel, no
+  alternating chromosome background rectangles, explicit chromosome separators,
+  50Mb ticks, centromere-only grey regions, and dup/del-only legend.
+- `*.plot_bins_cn.tsv` now includes `z` and records per-bin z-scaled CN proxy
+  values inside final report events.
+- event bins use
+  `copy_number_source=event_calibrated_z_scaled_to_cn_proxy` unless they are
+  centromere blanks.
+- neutral bins outside report events remain `CN=2`; the CN proxy is not an
+  independent bin-level CN caller.
+- event-level horizontal CN trend lines remain the region-level CN estimate and
+  are still separate from the per-bin scatter.
+
+Immediate next steps:
+
+1. Use the updated z/CN plot pair for manual sample review, starting with 56.
+2. Compare the event-level CN trend against per-bin z-scaled CN scatter to find
+   sparse-bin driven events versus coherent region-level support.
+3. Treat very high CN proxy dots as visualized high-z bins, not absolute copy
+   number calls; the y-axis rendering clips the visual range, and the TSV keeps
+   the computed proxy for audit.
+4. Do not use the CN proxy as a filter. Any candidate-level filter/demotion
+   proposal still requires Y/H/G locked-truth ablation with FN=0, H6 chr21
+   retained, and G2 truth visible.
+
 ## 2026-06-22 CN Plot V2 Review Next Gate
 
 Current handoff:

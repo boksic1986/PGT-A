@@ -244,14 +244,14 @@ def annotate_copy_number_bins(bins_df, final_events):
         if event_bins.empty:
             continue
         event_z = pd.to_numeric(event_bins["z"], errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
-        median_z = float(event_z.median()) if not event_z.empty else np.nan
-        state = str(row_dict["report_state"])
-        direction_ok = (state == "dup" and median_z > 0.0) or (state == "del" and median_z < 0.0)
+        median_abs_z = float(event_z.abs().median()) if not event_z.empty else np.nan
         frame.loc[mask, "report_state"] = str(row_dict["report_state"])
-        if np.isfinite(median_z) and abs(median_z) >= 0.25 and direction_ok:
-            scaled = 2.0 + (pd.to_numeric(frame.loc[mask, "z"], errors="coerce") * (copy_number - 2.0) / median_z)
+        if np.isfinite(median_abs_z) and median_abs_z > 0.0:
+            denominator = max(median_abs_z, 0.25)
+            amplitude = abs(copy_number - 2.0)
+            scaled = 2.0 + (pd.to_numeric(frame.loc[mask, "z"], errors="coerce") * amplitude / denominator)
             frame.loc[mask, "copy_number"] = scaled.astype(float)
-            frame.loc[mask, "copy_number_source"] = "event_scaled_calibrated_z_proxy"
+            frame.loc[mask, "copy_number_source"] = "event_calibrated_z_scaled_to_cn_proxy"
         else:
             frame.loc[mask, "copy_number"] = copy_number
             frame.loc[mask, "copy_number_source"] = "event_cn_uniform_median_z_uninformative"
@@ -473,7 +473,7 @@ def write_copy_number_bins_tsv(path_value, bins_df, layout):
         center = int(row.start + ((row.end - row.start) / 2))
         genome_positions.append(int(genome_position(row.chrom, center, layout)))
     output["genome_pos"] = genome_positions
-    output = output[["chrom", "start", "end", "genome_pos", "copy_number", "report_state", "copy_number_source"]].copy()
+    output = output[["chrom", "start", "end", "genome_pos", "z", "copy_number", "report_state", "copy_number_source"]].copy()
     path = Path(path_value)
     path.parent.mkdir(parents=True, exist_ok=True)
     output.to_csv(path, sep="\t", index=False)

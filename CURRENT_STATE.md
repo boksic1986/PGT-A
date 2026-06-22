@@ -1,5 +1,79 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Copy Number CNV Plot Bin-Z Scatter Fix
+
+Current handoff:
+`docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md`.
+
+Current report:
+`docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
+
+This loop updates only copy-number plot visualization. It does not modify
+Branch A, Branch B V2, Branch S, report-event classification, filtering,
+reference, mapping, or any threshold.
+
+CN scatter correction:
+
+- z plot remains unchanged: `{sample}.final_cnv.svg` and
+  `{sample}.plot_bins.tsv`.
+- CN plot remains `{sample}.final_cnv_cn.svg`, with
+  `{sample}.plot_bins_cn.tsv`.
+- CN plot background remains white; no chromosome alternating background is
+  drawn.
+- grey blanks remain restricted to centromere visualization fallback regions.
+- chromosome separators and 50Mb ticks remain present.
+- every non-centromere bin is drawn as `class="cn-bin-scatter"` with radius
+  `2.00`.
+- final report-event bins now use the bin's own `calibrated_z` to compute a
+  visual CN proxy:
+  `CN_proxy = 2 + calibrated_z * abs(event_cn - 2) / max(median(abs(event_z)), 0.25)`.
+- `plot_bins_cn.tsv` now includes a `z` column, so the CN scatter source can be
+  audited per 1Mb bin.
+- `copy_number_source=event_calibrated_z_scaled_to_cn_proxy` marks event bins
+  that use per-bin `calibrated_z`.
+- neutral bins outside final report events remain `CN=2`, because no event-level
+  CN scale exists for them.
+- the event-level horizontal CN trend line is still the region-level CN
+  estimate and remains separate from the per-bin scatter.
+- the CN proxy is for visual review only; it is not a bin-level CN caller and
+  must not be used for filtering or performance metrics.
+
+Remote validation:
+
+- Remote pytest:
+  `tests/unit/test_branch_b_plot.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`,
+  `tests/unit/test_cnv_report.py`, and
+  `tests/unit/test_current_context_index.py`: `39 passed in 1.16s`.
+- 0615 dry-run planned only 5 `cnv_branch_ab_plot` jobs plus report/runtime
+  refresh; no mapping or reference rebuild jobs were requested.
+- 0615 materialization completed: `9 of 9 steps (100%) done`,
+  log `.snakemake/log/2026-06-22T125623.897147.snakemake.log`.
+
+Materialized 0615 acceptance:
+
+- 5/5 `.final_cnv_cn.svg` files exist.
+- 5/5 `.plot_bins_cn.tsv` files exist.
+- 5/5 CN SVGs contain 4024 `cn-bin-scatter` points, 120 centromere blanks, and
+  24 chromosome separators; `chrom-background` is absent.
+- 5/5 CN TSVs contain a `z` column.
+- 0615 event-bin CN proxy sources are now per-bin z based:
+  - `JZ26125843-56-56`: 501 event bins with
+    `event_calibrated_z_scaled_to_cn_proxy`, 2 centromere blanks.
+  - `JZ26125844-59-59`: 922 event bins with
+    `event_calibrated_z_scaled_to_cn_proxy`, 1 centromere blank.
+  - `JZ26125845-60-60`: 1273 event bins with
+    `event_calibrated_z_scaled_to_cn_proxy`, 1 centromere blank.
+  - `JZ26125846-61-61`: 1191 event bins with
+    `event_calibrated_z_scaled_to_cn_proxy`, 2 centromere blanks.
+  - `JZ26125847-62-62`: 1014 event bins with
+    `event_calibrated_z_scaled_to_cn_proxy`, 2 centromere blanks.
+
+Local synced path:
+
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+
 ## 2026-06-22 Copy Number CNV Plot Centromere Background Fix
 
 Current handoff:

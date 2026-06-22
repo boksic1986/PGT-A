@@ -715,6 +715,95 @@ Local synced outputs:
 - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
 - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
 
+## 2026-06-22 CN Plot Bin-Z Scatter Fix
+
+This follow-up fixes the CN scatter interpretation. The previous CN plot still
+made many event bins look like a single event-level block because event bins
+could fall back to uniform event CN when the event median z was uninformative or
+discordant with the event direction. This hid the actual 1Mb bin-level
+`calibrated_z` pattern.
+
+This update is visualization-only. Branch A, Branch B V2, Branch S,
+report-event classification, filtering, mapping, and reference outputs are
+unchanged.
+
+Updated CN scatter contract:
+
+- `plot_bins_cn.tsv` includes `z`.
+- final report-event bins use each bin's own `calibrated_z` to compute the CN
+  proxy:
+  `CN_proxy = 2 + calibrated_z * abs(event_cn - 2) / max(median(abs(event_z)), 0.25)`.
+- event bins using this rule are marked
+  `copy_number_source=event_calibrated_z_scaled_to_cn_proxy`.
+- neutral bins outside final report events remain `CN=2`.
+- event-level horizontal CN trend lines still represent the merged event CN and
+  remain separate from per-bin scatter.
+- the CN proxy remains a visual review layer only and is not an independent
+  copy-number caller.
+
+Remote validation:
+
+```text
+PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
+/biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
+  tests/unit/test_branch_b_plot.py \
+  tests/unit/test_cnv_report.py \
+  tests/unit/test_branch_ab_phase12_workflow_contract.py \
+  tests/unit/test_current_context_index.py -q
+```
+
+Result:
+
+```text
+39 passed in 1.16s
+```
+
+0615 dry-run:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 1 -n --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+Only 5 cnv_branch_ab_plot jobs, cnv_report_summary, cnv_report,
+collect_runtime_tracking, and all were planned. No mapping or reference build
+jobs were requested.
+```
+
+0615 materialization:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 4 --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+9 of 9 steps (100%) done
+Complete log: .snakemake/log/2026-06-22T125623.897147.snakemake.log
+```
+
+0615 CN output check:
+
+| sample | scatter | centromere blanks | separators | has z column | event z-scaled bins | event blank bins |
+|---|---:|---:|---:|---|---:|---:|
+| JZ26125843-56-56 | 4024 | 120 | 24 | true | 501 | 2 |
+| JZ26125844-59-59 | 4024 | 120 | 24 | true | 922 | 1 |
+| JZ26125845-60-60 | 4024 | 120 | 24 | true | 1273 | 1 |
+| JZ26125846-61-61 | 4024 | 120 | 24 | true | 1191 | 2 |
+| JZ26125847-62-62 | 4024 | 120 | 24 | true | 1014 | 2 |
+
+Local synced outputs:
+
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+
 Local synced outputs:
 
 - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
