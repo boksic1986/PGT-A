@@ -1,5 +1,55 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 Copy Number CNV Plot Supplement
+
+Current handoff:
+`docs/handoff/2026-06-22_1025_copy_number_cnv_plot_handoff.md`.
+
+Current report:
+`docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
+
+This loop adds copy-number plots as a visualization supplement only. It does
+not modify Branch A, Branch B V2, Branch S, report-event classification,
+filtering, reference, mapping, or any threshold.
+
+Implemented contract:
+
+- existing calibrated-z plot remains `{sample}.final_cnv.svg`
+- new copy-number plot is `{sample}.final_cnv_cn.svg`
+- new CN bin table is `{sample}.plot_bins_cn.tsv`
+- CN plot uses event-level copy number:
+  - neutral bins are `CN=2`
+  - bins inside final autosomal report events use `copy_number_estimate`
+  - if needed, event CN can fall back to `sex_adjusted_copy_number`, then
+    `CN = 2 * (1 + a_ratio)`
+  - CN is not derived from `calibrated_z` or `normalized_signal`
+- CN plot legend is limited to `dup`, `del`, `neutral bin`,
+  and `report CN trend`
+- report summary includes `copy_number_plot_svg`
+
+Remote validation:
+
+- `tests/unit/test_branch_b_plot.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
+  `tests/unit/test_cnv_report.py`: `33 passed in 1.07s`.
+- 0615 dry-run planned only 5 `cnv_branch_ab_plot` jobs plus report/runtime
+  refresh; no mapping or reference rebuild jobs were requested.
+- 0615 materialization completed: `9 of 9 steps (100%) done`,
+  log `.snakemake/log/2026-06-22T102013.293346.snakemake.log`.
+
+Materialized 0615 acceptance:
+
+- 5/5 `.final_cnv_cn.svg` files exist.
+- 5/5 `.plot_bins_cn.tsv` files exist.
+- 5/5 report rows link to `.final_cnv_cn.svg`.
+- CN SVGs contain `Copy number`, red `report CN trend`, yellow `dup`, blue
+  `del`, grey neutral bins, and no polyline.
+
+Local synced path:
+
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+
 ## 2026-06-22 0615 High-Confidence Report Candidate Review
 
 Current handoff:
@@ -41,7 +91,7 @@ derive production Branch B V2 filters.
 ## 2026-06-22 Report Main Convergence And CNV Plot
 
 Current handoff:
-`docs/handoff/2026-06-22_0941_cnv_plot_wisecondor_style_handoff.md`.
+`docs/handoff/2026-06-22_1025_copy_number_cnv_plot_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
@@ -73,6 +123,9 @@ Implemented contract:
   They draw red horizontal `report-z-trend` lines only over final autosomal
   report event intervals. Duplication bins are yellow, deletion bins are blue,
   and neutral bins remain grey.
+- Copy-number plot SVGs are generated as `{sample}.final_cnv_cn.svg` using
+  event-level CN only. They are report visualization supplements and do not
+  change any calling/filtering logic.
 
 Remote validation:
 

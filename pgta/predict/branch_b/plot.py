@@ -30,6 +30,8 @@ def parse_args():
     parser.add_argument("--input-a-branch", default="")
     parser.add_argument("--output-svg", required=True)
     parser.add_argument("--output-bins-tsv", default="")
+    parser.add_argument("--output-copy-number-svg", default="")
+    parser.add_argument("--output-copy-number-bins-tsv", default="")
     parser.add_argument("--max-points", type=int, default=8000)
     parser.add_argument("--log", default="")
     return parser.parse_args()
@@ -147,6 +149,9 @@ def coerce_final_events(events_df, sample_id=""):
     for column in ("priority_score", "a_abs_zscore"):
         if column in frame.columns:
             frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    for column in ("copy_number_estimate", "sex_adjusted_copy_number", "a_ratio"):
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
     sort_columns = [column for column in ["priority_score", "a_abs_zscore", "end"] if column in frame.columns]
     if sort_columns:
         frame = frame.sort_values(sort_columns, ascending=[False] * len(sort_columns)).copy()
@@ -166,6 +171,45 @@ def annotate_report_states(bins_df, final_events):
             & frame["report_state"].eq("neutral")
         )
         frame.loc[mask, "report_state"] = str(row.report_state)
+    return frame
+
+
+def event_copy_number(row_dict):
+    for column in ("copy_number_estimate", "sex_adjusted_copy_number"):
+        value = row_dict.get(column, np.nan)
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            numeric = np.nan
+        if np.isfinite(numeric):
+            return numeric, column
+    value = row_dict.get("a_ratio", np.nan)
+    try:
+        ratio = float(value)
+    except (TypeError, ValueError):
+        ratio = np.nan
+    if np.isfinite(ratio):
+        return float(2.0 * (1.0 + ratio)), "a_ratio"
+    raise ValueError("Final report event is missing copy_number_estimate, sex_adjusted_copy_number, and a_ratio.")
+
+
+def annotate_copy_number_bins(bins_df, final_events):
+    frame = bins_df.copy()
+    frame["copy_number"] = 2.0
+    frame["copy_number_source"] = "neutral_diploid_baseline"
+    if final_events.empty:
+        return frame
+    for row in final_events.itertuples(index=False):
+        row_dict = row._asdict()
+        copy_number, source = event_copy_number(row_dict)
+        mask = (
+            frame["chrom"].astype(str).eq(str(row_dict["chrom"]))
+            & frame["end"].astype(int).gt(int(row_dict["start"]))
+            & frame["start"].astype(int).lt(int(row_dict["end"]))
+        )
+        frame.loc[mask, "report_state"] = str(row_dict["report_state"])
+        frame.loc[mask, "copy_number"] = copy_number
+        frame.loc[mask, "copy_number_source"] = source
     return frame
 
 
@@ -196,6 +240,11 @@ def scale_x(genome_pos, total_span, left, plot_width):
 def scale_y(value, mid_y, half_height):
     clipped = max(min(float(value), 12.0), -12.0)
     return mid_y - (clipped / 12.0) * half_height
+
+
+def scale_copy_number_y(value, mid_y, half_height):
+    clipped = max(min(float(value), 4.0), 0.0)
+    return mid_y - ((clipped - 2.0) / 2.0) * half_height
 
 
 def downsample_bins(frame, max_points):
@@ -264,6 +313,42 @@ def render_report_event_trend_lines(bins_df, final_events, layout, total_span, l
     return chunks
 
 
+def render_report_event_cn_trend_lines(bins_df, final_events, layout, total_span, left, plot_width, mid_y, half_h):
+    chunks = []
+    if final_events.empty:
+        return chunks
+    for row in final_events.itertuples(index=False):
+        row_dict = row._asdict()
+        chrom = str(row_dict.get("chrom", ""))
+        if chrom not in layout:
+            continue
+        event_bins = bins_df[
+            bins_df["chrom"].astype(str).eq(chrom)
+            & bins_df["end"].astype(int).gt(int(row_dict.get("start")))
+            & bins_df["start"].astype(int).lt(int(row_dict.get("end")))
+        ].copy()
+        if event_bins.empty:
+            continue
+        trend_value = float(event_bins["copy_number"].median())
+        x1 = scale_x(genome_position(chrom, int(row_dict.get("start")), layout), total_span, left, plot_width)
+        x2 = scale_x(genome_position(chrom, int(row_dict.get("end")), layout), total_span, left, plot_width)
+        if x2 <= x1:
+            continue
+        y = scale_copy_number_y(trend_value, mid_y, half_h)
+        label = (
+            f"report CN trend {row_dict.get('report_state')} "
+            f"{chrom}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}; "
+            f"median CN={trend_value:.3f}"
+        )
+        chunks.append(
+            f'<line class="report-cn-trend" x1="{x1:.2f}" y1="{y:.2f}" '
+            f'x2="{x2:.2f}" y2="{y:.2f}" stroke="{TREND_COLOR}" '
+            f'stroke-width="2.4" opacity="0.94" stroke-linecap="round">'
+            f"<title>{html.escape(label)}</title></line>"
+        )
+    return chunks
+
+
 def write_plot_bins_tsv(path_value, bins_df, layout):
     if not path_value:
         return
@@ -279,6 +364,99 @@ def write_plot_bins_tsv(path_value, bins_df, layout):
     output.to_csv(path, sep="\t", index=False)
 
 
+def write_copy_number_bins_tsv(path_value, bins_df, layout):
+    if not path_value:
+        return
+    output = bins_df.copy()
+    genome_positions = []
+    for row in output.itertuples(index=False):
+        center = int(row.start + ((row.end - row.start) / 2))
+        genome_positions.append(int(genome_position(row.chrom, center, layout)))
+    output["genome_pos"] = genome_positions
+    output = output[["chrom", "start", "end", "genome_pos", "copy_number", "report_state", "copy_number_source"]].copy()
+    path = Path(path_value)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    output.to_csv(path, sep="\t", index=False)
+
+
+def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span, output_svg, output_bins_tsv="", max_points=8000):
+    cn_bins = annotate_copy_number_bins(bins, final_events)
+    write_copy_number_bins_tsv(output_bins_tsv, cn_bins, layout)
+
+    width = 1280
+    height = 620
+    left = 70
+    right = 30
+    top = 74
+    plot_width = width - left - right
+    signal_top = top + 72
+    signal_height = 350
+    mid_y = signal_top + signal_height / 2.0
+    half_h = signal_height / 2.0
+
+    svg = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        svg_text(24, 34, f"CNV final copy-number profile - {sample_id}", size=24, weight="bold"),
+        svg_text(24, 58, "Final reported dup/del regions over event-level copy number", size=13, fill="#475569"),
+        svg_text(20, signal_top - 18, "Copy number", size=12, fill="#334155"),
+    ]
+
+    for idx, chrom in enumerate(sorted(layout, key=chrom_sort_key)):
+        item = layout[chrom]
+        x1 = scale_x(item["offset"], total_span, left, plot_width)
+        x2 = scale_x(item["offset"] + item["span"], total_span, left, plot_width)
+        fill = "#f8fafc" if idx % 2 == 0 else "#eef2f7"
+        svg.append(
+            f'<rect x="{x1:.2f}" y="{signal_top:.2f}" width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="{fill}"/>'
+        )
+        svg.append(
+            f'<line x1="{x1:.2f}" y1="{signal_top:.2f}" x2="{x1:.2f}" y2="{signal_top + signal_height:.2f}" stroke="#cbd5e1" stroke-width="0.5"/>'
+        )
+        svg.append(svg_text((x1 + x2) / 2.0, signal_top + signal_height + 18, chrom, size=10, fill="#334155", anchor="middle"))
+
+    for cn in (1, 2, 3):
+        y = scale_copy_number_y(cn, mid_y, half_h)
+        color = "#94a3b8" if cn == 2 else "#cbd5e1"
+        svg.append(f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" y2="{y:.2f}" stroke="{color}" stroke-width="1" stroke-dasharray="4,4"/>')
+        svg.append(svg_text(18, y + 4, f"CN={cn}", size=11, fill="#64748b"))
+
+    for row in final_events.itertuples(index=False):
+        row_dict = row._asdict()
+        state = str(row_dict.get("report_state", "")).lower()
+        color = REPORT_STATE_COLOR.get(state, NEUTRAL_COLOR)
+        label = f"{state} {row_dict.get('chrom')}:{int(row_dict.get('start'))}-{int(row_dict.get('end'))}"
+        svg.append(render_event_region(row_dict, layout, total_span, left, plot_width, signal_top, signal_height, color, label))
+
+    plot_bins = downsample_bins(cn_bins, max_points=max_points)
+    for row in plot_bins.itertuples(index=False):
+        x = scale_x(genome_position(row.chrom, int(row.start + ((row.end - row.start) / 2)), layout), total_span, left, plot_width)
+        y = scale_copy_number_y(row.copy_number, mid_y, half_h)
+        color = REPORT_STATE_COLOR.get(str(row.report_state), NEUTRAL_COLOR)
+        opacity = 0.82 if row.report_state in {"dup", "del"} else 0.62
+        svg.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="1.25" fill="{color}" opacity="{opacity:.2f}"/>')
+    svg.extend(render_report_event_cn_trend_lines(cn_bins, final_events, layout, total_span, left, plot_width, mid_y, half_h))
+
+    legend_x = left
+    legend_y = height - 62
+    legend_items = [
+        ("dup", REPORT_STATE_COLOR["dup"]),
+        ("del", REPORT_STATE_COLOR["del"]),
+        ("neutral bin", NEUTRAL_COLOR),
+        ("report CN trend", TREND_COLOR),
+    ]
+    for idx, (label, color) in enumerate(legend_items):
+        x = legend_x + idx * 180
+        svg.append(f'<rect x="{x:.2f}" y="{legend_y:.2f}" width="14" height="10" fill="{color}" opacity="0.65"/>')
+        svg.append(svg_text(x + 20, legend_y + 10, label, size=12, fill="#334155"))
+
+    svg.append("</svg>")
+
+    output_path = Path(output_svg)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\n".join(svg) + "\n", encoding="utf-8")
+
+
 def build_cnv_plot_svg(
     sample_id,
     bins_df,
@@ -286,6 +464,8 @@ def build_cnv_plot_svg(
     a_branch_df,
     output_svg,
     output_bins_tsv="",
+    output_copy_number_svg="",
+    output_copy_number_bins_tsv="",
     max_points=8000,
 ):
     bins = coerce_bins(bins_df)
@@ -367,6 +547,17 @@ def build_cnv_plot_svg(
     output_path = Path(output_svg)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(svg) + "\n", encoding="utf-8")
+    if output_copy_number_svg or output_copy_number_bins_tsv:
+        build_copy_number_plot_svg(
+            sample_id=sample_id,
+            bins=bins,
+            final_events=final_events,
+            layout=layout,
+            total_span=total_span,
+            output_svg=output_copy_number_svg,
+            output_bins_tsv=output_copy_number_bins_tsv,
+            max_points=max_points,
+        )
 
 
 def main():
@@ -382,6 +573,8 @@ def main():
         a_branch_df=a_branch_df,
         output_svg=args.output_svg,
         output_bins_tsv=args.output_bins_tsv,
+        output_copy_number_svg=args.output_copy_number_svg,
+        output_copy_number_bins_tsv=args.output_copy_number_bins_tsv,
         max_points=args.max_points,
     )
     logger.info(

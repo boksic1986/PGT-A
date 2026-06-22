@@ -72,6 +72,37 @@ Rules:
 - each final autosomal report event gets one red horizontal report-z trend line,
   spanning only that event interval and using the event median `calibrated_z`
 
+### Event-level copy-number plot supplement
+
+Each sample now also gets a copy-number visualization beside the calibrated-z
+plot.
+
+New outputs:
+
+- `wisecondorx/cnv/plots/{sample}.final_cnv_cn.svg`
+- `wisecondorx/cnv/plots/{sample}.plot_bins_cn.tsv`
+
+CN plot contract:
+
+- neutral bins are displayed as `CN=2`
+- bins overlapping final autosomal report events inherit that event's
+  `copy_number_estimate`
+- if `copy_number_estimate` is absent, the plotter can fall back to
+  `sex_adjusted_copy_number`, then `a_ratio` using `CN = 2 * (1 + a_ratio)`
+- if all event-level CN sources are absent, CN plotting fails instead of
+  fabricating CN from `calibrated_z` or `normalized_signal`
+- the y axis is `Copy number`
+- reference lines are `CN=1`, `CN=2`, and `CN=3`
+- `dup` is yellow, `del` is blue, neutral bins are grey, and event CN trend
+  lines are red
+- no genome-wide smooth CN line is drawn
+- the SVG legend is limited to `dup`, `del`, `neutral bin`, and
+  `report CN trend`
+
+The CN plot is an event-level report visualization. It is not a bin-level CN
+caller and does not change Branch A, Branch B V2, Branch S, report visibility,
+or filtering.
+
 ## Remote Validation
 
 Remote path:
@@ -208,6 +239,86 @@ Complete log: .snakemake/log/2026-06-22T093707.721304.snakemake.log
 Local synced SVG path:
 
 `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv.svg`
+
+## 2026-06-22 Copy Number Plot Supplement
+
+This follow-up added event-level copy-number plots while preserving the existing
+calibrated-z plot.
+
+Remote unit tests:
+
+```text
+PYTHONPATH=/data/project/CNV/PGT-A/refactor_validation_20260419 \
+/biosoftware/miniconda/envs/snakemake_env/bin/python -m pytest \
+  tests/unit/test_branch_b_plot.py \
+  tests/unit/test_branch_ab_phase12_workflow_contract.py \
+  tests/unit/test_cnv_report.py -q
+```
+
+Result:
+
+```text
+33 passed in 1.07s
+```
+
+0615 dry-run:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 1 -n --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+DAG planned only 5 cnv_branch_ab_plot jobs, cnv_report_summary, cnv_report,
+collect_runtime_tracking, and all. No mapping or reference build jobs were
+requested.
+```
+
+0615 materialization:
+
+```text
+/biosoftware/miniconda/envs/snakemake_env/bin/snakemake -s Snakefile \
+  --configfile config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml \
+  --cores 4 --forcerun cnv_branch_ab_plot cnv_report
+```
+
+Result:
+
+```text
+9 of 9 steps (100%) done
+Complete log: .snakemake/log/2026-06-22T102013.293346.snakemake.log
+```
+
+0615 CN SVG content check:
+
+| sample | CN trend lines | polyline present | copy-number label | calibrated-z label | dup yellow | del blue | red trend |
+|---|---:|---|---|---|---|---|---|
+| JZ26125843-56-56 | 7 | false | true | false | true | true | true |
+| JZ26125844-59-59 | 11 | false | true | false | true | true | true |
+| JZ26125845-60-60 | 23 | false | true | false | true | true | true |
+| JZ26125846-61-61 | 18 | false | true | false | true | true | true |
+| JZ26125847-62-62 | 12 | false | true | false | true | true | true |
+
+0615 CN bin table checks:
+
+| sample | CN bins | non-neutral CN bins | CN source |
+|---|---:|---:|---|
+| JZ26125843-56-56 | 4144 | 503 | `copy_number_estimate` plus neutral baseline |
+| JZ26125844-59-59 | 4144 | 923 | `copy_number_estimate` plus neutral baseline |
+| JZ26125845-60-60 | 4144 | 1274 | `copy_number_estimate` plus neutral baseline |
+| JZ26125846-61-61 | 4144 | 1193 | `copy_number_estimate` plus neutral baseline |
+| JZ26125847-62-62 | 4144 | 1016 | `copy_number_estimate` plus neutral baseline |
+
+The regenerated `cnv_summary.tsv` contains `copy_number_plot_svg` and links all
+5/5 0615 samples to `.final_cnv_cn.svg`.
+
+Local synced CN outputs:
+
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
 
 ## Interpretation
 

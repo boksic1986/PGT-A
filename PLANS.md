@@ -27,7 +27,7 @@ Immediate next steps:
 ## 2026-06-22 Report Main And CNV Plot Next Gate
 
 Current handoff:
-`docs/handoff/2026-06-22_0941_cnv_plot_wisecondor_style_handoff.md`.
+`docs/handoff/2026-06-22_1025_copy_number_cnv_plot_handoff.md`.
 
 Current report:
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.
@@ -44,6 +44,9 @@ The report layer now has a usable development contract:
 - the current plot style uses yellow duplication bins, blue deletion bins, grey
   neutral bins, and red horizontal `report-z-trend` lines only across final
   report event intervals.
+- every 0615 sample now also has an event-level copy-number plot and CN bin
+  table. The CN plot is a visualization supplement; it is not a bin-level CN
+  caller and does not change report-event logic.
 
 The next gate is candidate-level interpretation of the remaining report burden,
 not another broad threshold.
@@ -58,7 +61,9 @@ Immediate next steps:
    - ref-MAD stability;
    - clean support;
    - acrocentric/telomere/centromere/high-repeat risk;
-   - matching red horizontal report-event trend in the `.final_cnv.svg`.
+   - matching red horizontal report-event trend in the `.final_cnv.svg`;
+   - event-level CN block in `.final_cnv_cn.svg` when copy-number explanation
+     helps sample review.
 2. Use Y1-Y8, H1-H6, and G1-G8 locked truth as the no-FN guardrail.
 3. Keep H6 chr21 and G2 locked truth visible.
 4. Treat 2026-06-15 as burden/context only until locked truth labels exist.
@@ -72,6 +77,9 @@ Current open issue:
 - 2026-06-15 still has 71 autosomal report events across 5 samples. This is too
   high for a final-style report, but broad filtering risks FN. The next
   reduction must be candidate-level and truth-safe.
+- CN plots can make event-level amplitude easier to review, but they must not
+  be used as an independent filter because they are derived from final report
+  event CN estimates.
 
 ## 2026-06-22 Lowres Branch B/S Next Gate
 

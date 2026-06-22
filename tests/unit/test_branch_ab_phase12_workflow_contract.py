@@ -207,12 +207,24 @@ def test_cnv_plot_uses_v2_report_events_and_writes_plot_bins():
 
     assert "CNV_B_PLOT_BINS_TSV" in layout
     assert "{sample}.plot_bins.tsv" in layout
+    assert "CNV_B_PLOT_CN_SVG" in layout
+    assert "{sample}.final_cnv_cn.svg" in layout
+    assert "CNV_B_PLOT_CN_BINS_TSV" in layout
+    assert "{sample}.plot_bins_cn.tsv" in layout
 
     plot_rule = workflow.split("rule cnv_branch_ab_plot:", 1)[1].split("if CNV_NEGATIVE_BANK_SAMPLES_TSV:", 1)[0]
     assert "events=CNV_B_V2_BENCHMARK_REPORT_EVENTS" in plot_rule
     assert "CNV_B_FINAL_EVENTS" not in plot_rule
     assert "bins_tsv=CNV_B_PLOT_BINS_TSV" in plot_rule
+    assert "cn_svg=CNV_B_PLOT_CN_SVG" in plot_rule
+    assert "cn_bins_tsv=CNV_B_PLOT_CN_BINS_TSV" in plot_rule
     assert "--output-bins-tsv" in plot_rule
+    assert "--output-copy-number-svg" in plot_rule
+    assert "--output-copy-number-bins-tsv" in plot_rule
+
+    report_rule = workflow.split("rule cnv_report_summary:", 1)[1].split("if CNV_NEGATIVE_BANK_SAMPLES_TSV:", 1)[0]
+    assert "cn_plots=(expand(CNV_B_PLOT_CN_SVG, sample=SAMPLES)" in report_rule
+    assert "--copy-number-plot-svg" in report_rule
 
 
 def test_negative_bank_rule_is_config_gated_and_not_automatic_n0():

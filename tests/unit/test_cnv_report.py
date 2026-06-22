@@ -36,6 +36,7 @@ class CnvReportRankingTest(unittest.TestCase):
             [
                 "/data/project/CNV/PGT-A/wisecondorx/cnv/plots/Y1.final_cnv.svg",
                 "/data/project/CNV/PGT-A/wisecondorx/cnv/plots/Y2.branch_ab.svg",
+                "/data/project/CNV/PGT-A/wisecondorx/cnv/plots/Y3.final_cnv_cn.svg",
             ]
         )
 
@@ -44,6 +45,7 @@ class CnvReportRankingTest(unittest.TestCase):
             {
                 "Y1": "/data/project/CNV/PGT-A/wisecondorx/cnv/plots/Y1.final_cnv.svg",
                 "Y2": "/data/project/CNV/PGT-A/wisecondorx/cnv/plots/Y2.branch_ab.svg",
+                "Y3": "/data/project/CNV/PGT-A/wisecondorx/cnv/plots/Y3.final_cnv_cn.svg",
             },
         )
 

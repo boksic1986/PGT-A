@@ -55,6 +55,7 @@ def parse_args():
     parser.add_argument("--benchmark-summary", default="")
     parser.add_argument("--truth-validation-summary", default="")
     parser.add_argument("--plot-svg", action="append", default=[])
+    parser.add_argument("--copy-number-plot-svg", action="append", default=[])
     parser.add_argument("--output-tsv", required=True)
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--output-md", required=True)
@@ -469,7 +470,9 @@ def build_plot_lookup(paths):
             continue
         path = Path(path_value)
         name = path.name
-        if name.endswith(".final_cnv.svg"):
+        if name.endswith(".final_cnv_cn.svg"):
+            sample_id = name[: -len(".final_cnv_cn.svg")]
+        elif name.endswith(".final_cnv.svg"):
             sample_id = name[: -len(".final_cnv.svg")]
         elif name.endswith(".branch_ab.svg"):
             sample_id = name[: -len(".branch_ab.svg")]
@@ -480,15 +483,15 @@ def build_plot_lookup(paths):
     return lookup
 
 
-def format_plot_link(sample_id, output_path, plot_lookup, html=False):
+def format_plot_link(sample_id, output_path, plot_lookup, html=False, label="plot"):
     plot_path = plot_lookup.get(str(sample_id), "")
     if not plot_path:
         return ""
     relative = os.path.relpath(plot_path, start=str(Path(output_path).parent))
     if html:
         escaped_href = html_lib.escape(relative)
-        return f"<a href='{escaped_href}'>plot</a>"
-    return f"[plot]({relative})"
+        return f"<a href='{escaped_href}'>{html_lib.escape(label)}</a>"
+    return f"[{label}]({relative})"
 
 
 def is_suppressed_sex_review_event(row):
@@ -937,6 +940,7 @@ def main():
     benchmark_summary = read_optional_json(args.benchmark_summary)
     truth_validation_summary = read_optional_json(args.truth_validation_summary)
     plot_lookup = build_plot_lookup(args.plot_svg)
+    copy_number_plot_lookup = build_plot_lookup(args.copy_number_plot_svg)
     fraction_benchmark = benchmark_summary.get("fraction_estimation", {}) if isinstance(benchmark_summary, dict) else {}
     low_fraction_detection = benchmark_summary.get("low_fraction_detection", []) if isinstance(benchmark_summary, dict) else []
 
@@ -982,6 +986,8 @@ def main():
     sample_df["branch_b_evidence_status"] = sample_df.apply(format_branch_b_evidence_status, axis=1)
     sample_df["branch_b_v2_burden_display"] = sample_df.apply(format_branch_b_v2_burden_status, axis=1)
     sample_df["sca_report_status"] = sample_df.apply(format_sca_report_status, axis=1)
+    sample_df["plot_svg"] = sample_df["sample_id"].map(lambda sample_id: plot_lookup.get(str(sample_id), ""))
+    sample_df["copy_number_plot_svg"] = sample_df["sample_id"].map(lambda sample_id: copy_number_plot_lookup.get(str(sample_id), ""))
     sample_df = sample_df.drop(columns=[column for column in A_BRANCH_INTERNAL_COLUMNS if column in sample_df.columns])
 
     ensure_parent(args.output_tsv)
@@ -1055,8 +1061,8 @@ def main():
         "",
         "## Sample Table",
         "",
-        "| Sample | QC | Sex | Plot | Legacy Branch B Top Event | P3 Evidence | Branch B V2 Burden | SCA Status | Technical Conclusion | Biological Candidate Conclusion |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Sample | QC | Sex | Plot | CN Plot | Legacy Branch B Top Event | P3 Evidence | Branch B V2 Burden | SCA Status | Technical Conclusion | Biological Candidate Conclusion |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     if fraction_benchmark:
         md_lines[8:8] = [
@@ -1085,10 +1091,11 @@ def main():
             + "`",
         )
     for row in sample_df.itertuples(index=False):
-        plot_link = format_plot_link(row.sample_id, args.output_md, plot_lookup, html=False)
+        plot_link = format_plot_link(row.sample_id, args.output_md, plot_lookup, html=False, label="z plot")
+        cn_plot_link = format_plot_link(row.sample_id, args.output_md, copy_number_plot_lookup, html=False, label="CN plot")
         md_lines.append(
             f"| `{row.sample_id}` | `{getattr(row, 'qc_status', 'NA')}` | `{getattr(row, 'sex_call', 'NA')}` | "
-            f"{plot_link or ''} | "
+            f"{plot_link or ''} | {cn_plot_link or ''} | "
             f"{getattr(row, 'branch_b_top_event', '') or 'none'} | "
             f"{getattr(row, 'branch_b_evidence_status', 'not_available')} | "
             f"{getattr(row, 'branch_b_v2_burden_display', 'not_available')} | "
@@ -1099,13 +1106,15 @@ def main():
 
     html_rows = []
     for row in sample_df.itertuples(index=False):
-        plot_link = format_plot_link(row.sample_id, args.output_html, plot_lookup, html=True)
+        plot_link = format_plot_link(row.sample_id, args.output_html, plot_lookup, html=True, label="z plot")
+        cn_plot_link = format_plot_link(row.sample_id, args.output_html, copy_number_plot_lookup, html=True, label="CN plot")
         html_rows.append(
             "<tr>"
             f"<td>{html_lib.escape(str(row.sample_id))}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'qc_status', 'NA')))}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'sex_call', 'NA')))}</td>"
             f"<td>{plot_link}</td>"
+            f"<td>{cn_plot_link}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'branch_b_top_event', '') or 'none'))}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'branch_b_evidence_status', 'not_available')))}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'branch_b_v2_burden_display', 'not_available')))}</td>"
@@ -1129,7 +1138,7 @@ def main():
         f"branch_s={int(report_contract['branch_b_v2_branch_s_event_count'])}; "
         f"sample_report_burden_flags={int(report_contract['branch_b_v2_sample_report_burden_flag_count'])}</p>"
         "<p>Branch B V2 burden display is development_review_only evidence; it is not FP-reduction proof and is not final promotion.</p>"
-        "<table><thead><tr><th>Sample</th><th>QC</th><th>Sex</th><th>Plot</th><th>Legacy Branch B Top Event</th>"
+        "<table><thead><tr><th>Sample</th><th>QC</th><th>Sex</th><th>Plot</th><th>CN Plot</th><th>Legacy Branch B Top Event</th>"
         "<th>P3 Evidence</th><th>Branch B V2 Burden</th><th>SCA Status</th><th>Technical Conclusion</th><th>Biological Candidate Conclusion</th></tr></thead><tbody>"
         + "".join(html_rows)
         + "</tbody></table></body></html>"
