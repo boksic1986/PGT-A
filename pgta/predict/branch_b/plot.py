@@ -21,10 +21,10 @@ CN_CHROM_GAP_BP = 20_000_000
 CN_SCATTER_RADIUS = 1.35
 CN_NEUTRAL_LOWER = 1.7
 CN_NEUTRAL_UPPER = 2.3
-CN_Z_TO_COPY_NUMBER_SCALE = 0.05
 CN_COPY_NUMBER_MIN = 0.0
 CN_COPY_NUMBER_MAX = 4.0
-CN_BIN_COPY_NUMBER_SOURCE = "calibrated_z_mosaic30_cn_proxy"
+CN_LOG2R_PSEUDOCOUNT = 1e-3
+CN_BIN_COPY_NUMBER_SOURCE = "normalized_signal_ref_median_log2r_autosome_centered"
 HG19_CENTROMERES = {
     "chr1": (121_535_434, 124_535_434),
     "chr2": (92_326_171, 95_326_171),
@@ -63,10 +63,12 @@ def parse_args():
     parser.add_argument("--input-bins", required=True)
     parser.add_argument("--input-events", required=True)
     parser.add_argument("--input-a-branch", default="")
+    parser.add_argument("--input-ref-bins", default="")
     parser.add_argument("--output-svg", required=True)
     parser.add_argument("--output-bins-tsv", default="")
     parser.add_argument("--output-copy-number-svg", default="")
     parser.add_argument("--output-copy-number-bins-tsv", default="")
+    parser.add_argument("--output-copy-number-event-support-tsv", default="")
     parser.add_argument("--max-points", type=int, default=8000)
     parser.add_argument("--log", default="")
     return parser.parse_args()
@@ -228,6 +230,99 @@ def event_copy_number(row_dict):
     raise ValueError("Final report event is missing copy_number_estimate, sex_adjusted_copy_number, and a_ratio.")
 
 
+def coerce_ref_bins(ref_bins_df):
+    if ref_bins_df is None or ref_bins_df.empty:
+        return pd.DataFrame()
+    required = {"chrom", "bin_index", "ref_median"}
+    missing = required - set(ref_bins_df.columns)
+    if missing:
+        raise ValueError(f"Reference bin table is missing required columns: {sorted(missing)}")
+    frame = ref_bins_df.copy()
+    frame["chrom"] = frame["chrom"].map(normalize_chrom)
+    frame["bin_index"] = pd.to_numeric(frame["bin_index"], errors="coerce")
+    frame["ref_median"] = pd.to_numeric(frame["ref_median"], errors="coerce")
+    frame = frame.dropna(subset=["chrom", "bin_index", "ref_median"]).copy()
+    frame["bin_index"] = frame["bin_index"].astype(int)
+    keep_columns = ["chrom", "bin_index", "ref_median"]
+    for column in ("ref_sample_count", "ref_mad", "ref_mad_z", "ref_stability_label"):
+        if column in frame.columns:
+            keep_columns.append(column)
+    return frame[keep_columns].drop_duplicates(["chrom", "bin_index"], keep="first")
+
+
+def _expm1_series(series):
+    values = pd.to_numeric(series, errors="coerce").astype(float)
+    return np.expm1(values)
+
+
+def derive_ratio_copy_number(frame, ref_bins_df=None):
+    result = frame.copy()
+    input_copy_number = pd.to_numeric(result["copy_number"], errors="coerce") if "copy_number" in result.columns else None
+    input_log2r = pd.to_numeric(result["log2r"], errors="coerce") if "log2r" in result.columns else None
+    result["log2r"] = np.nan
+    result["raw_log2r"] = np.nan
+    result["copy_number"] = np.nan
+    result["copy_number_centering_log2_shift"] = np.nan
+    result["copy_number_source"] = ""
+
+    if input_copy_number is not None:
+        copy_number = input_copy_number
+        valid = np.isfinite(copy_number)
+        result.loc[valid, "copy_number"] = copy_number[valid]
+        result.loc[valid, "log2r"] = np.log2(copy_number[valid] / 2.0)
+        result.loc[valid, "raw_log2r"] = result.loc[valid, "log2r"]
+        result.loc[valid, "copy_number_centering_log2_shift"] = 0.0
+        result.loc[valid, "copy_number_source"] = "explicit_copy_number"
+        if valid.any():
+            return result
+
+    if input_log2r is not None:
+        log2r = input_log2r
+        valid = np.isfinite(log2r)
+        result.loc[valid, "log2r"] = log2r[valid]
+        result.loc[valid, "raw_log2r"] = log2r[valid]
+        result.loc[valid, "copy_number"] = 2.0 * np.power(2.0, log2r[valid])
+        result.loc[valid, "copy_number_centering_log2_shift"] = 0.0
+        result.loc[valid, "copy_number_source"] = "explicit_log2r"
+        if valid.any():
+            return result
+
+    if "normalized_signal" not in result.columns:
+        raise ValueError("Copy-number plot requires log2r, copy_number, or normalized_signal plus reference bin medians.")
+
+    ref_bins = coerce_ref_bins(ref_bins_df)
+    if ref_bins.empty:
+        raise ValueError("Copy-number plot requires reference bin medians when log2r/copy_number are not present.")
+
+    result = result.merge(ref_bins, on=["chrom", "bin_index"], how="left")
+    sample_cpm = _expm1_series(result["normalized_signal"])
+    ref_cpm = _expm1_series(result["ref_median"])
+    valid = np.isfinite(sample_cpm) & np.isfinite(ref_cpm) & (ref_cpm > 0.0)
+    ratio = pd.Series(np.nan, index=result.index, dtype=float)
+    ratio.loc[valid] = (sample_cpm.loc[valid] + CN_LOG2R_PSEUDOCOUNT) / (
+        ref_cpm.loc[valid] + CN_LOG2R_PSEUDOCOUNT
+    )
+    valid_ratio = np.isfinite(ratio) & (ratio > 0.0)
+    raw_log2r = pd.Series(np.nan, index=result.index, dtype=float)
+    raw_log2r.loc[valid_ratio] = np.log2(ratio.loc[valid_ratio])
+    centering_mask = (
+        valid_ratio
+        & result["chrom"].astype(str).isin(set(AUTOSOME_ORDER))
+        & ~structural_gap_mask(result)
+    )
+    center_shift = float(raw_log2r.loc[centering_mask].median()) if centering_mask.any() else 0.0
+    if not np.isfinite(center_shift):
+        center_shift = 0.0
+    centered_log2r = raw_log2r - center_shift
+    result.loc[valid_ratio, "raw_log2r"] = raw_log2r.loc[valid_ratio]
+    result.loc[valid_ratio, "log2r"] = centered_log2r.loc[valid_ratio]
+    result.loc[valid_ratio, "copy_number"] = 2.0 * np.power(2.0, centered_log2r.loc[valid_ratio])
+    result.loc[valid_ratio, "copy_number_centering_log2_shift"] = center_shift
+    result.loc[valid_ratio, "copy_number_source"] = CN_BIN_COPY_NUMBER_SOURCE
+    result.loc[~valid_ratio, "copy_number_source"] = "ref_median_unavailable"
+    return result
+
+
 def classify_copy_number_state(value):
     try:
         numeric = float(value)
@@ -242,19 +337,17 @@ def classify_copy_number_state(value):
     return "neutral"
 
 
-def annotate_copy_number_bins(bins_df, final_events):
-    frame = bins_df.copy()
-    z = pd.to_numeric(frame["z"], errors="coerce").replace([np.inf, -np.inf], np.nan)
-    frame["copy_number"] = (2.0 + z * CN_Z_TO_COPY_NUMBER_SCALE).clip(
-        lower=CN_COPY_NUMBER_MIN,
-        upper=CN_COPY_NUMBER_MAX,
-    )
-    frame["report_state"] = frame["copy_number"].map(classify_copy_number_state)
+def annotate_copy_number_bins(bins_df, final_events, ref_bins_df=None):
+    frame = derive_ratio_copy_number(bins_df.copy(), ref_bins_df=ref_bins_df)
+    frame["cn_scatter_state"] = frame["copy_number"].map(classify_copy_number_state)
+    frame["report_state"] = frame["cn_scatter_state"]
     frame["event_report_state"] = "neutral"
-    frame["copy_number_source"] = CN_BIN_COPY_NUMBER_SOURCE
-    frame.loc[~np.isfinite(frame["copy_number"]), "copy_number_source"] = "calibrated_z_missing"
+    missing_source = frame["copy_number_source"].fillna("").astype(str).eq("")
+    frame.loc[~np.isfinite(frame["copy_number"]) & missing_source, "copy_number_source"] = "copy_number_unavailable"
     frame["is_structure_gap_blank"] = structural_gap_mask(frame)
     frame.loc[frame["is_structure_gap_blank"], "copy_number"] = np.nan
+    frame.loc[frame["is_structure_gap_blank"], "log2r"] = np.nan
+    frame.loc[frame["is_structure_gap_blank"], "cn_scatter_state"] = "neutral"
     frame.loc[frame["is_structure_gap_blank"], "report_state"] = "neutral"
     frame.loc[frame["is_structure_gap_blank"], "copy_number_source"] = "structure_gap_blank"
     if final_events.empty:
@@ -357,7 +450,7 @@ def svg_text(x, y, text, size=12, fill="#0f172a", weight="normal", anchor="start
     )
 
 
-def render_event_region(row, layout, total_span, left, plot_width, y, height, color, label):
+def render_event_region(row, layout, total_span, left, plot_width, y, height, color, label, class_name=""):
     chrom = str(row["chrom"])
     if chrom not in layout:
         return ""
@@ -365,8 +458,9 @@ def render_event_region(row, layout, total_span, left, plot_width, y, height, co
     x2 = scale_x(genome_position(chrom, row["end"], layout), total_span, left, plot_width)
     width = max(x2 - x1, 1.5)
     title = html.escape(label)
+    class_attr = f' class="{html.escape(str(class_name))}"' if class_name else ""
     return (
-        f'<rect x="{x1:.2f}" y="{y:.2f}" width="{width:.2f}" height="{height:.2f}" '
+        f'<rect{class_attr} x="{x1:.2f}" y="{y:.2f}" width="{width:.2f}" height="{height:.2f}" '
         f'fill="{color}" opacity="0.14" stroke="{color}" stroke-width="1.25">'
         f"<title>{title}</title></rect>"
     )
@@ -463,6 +557,107 @@ def render_cn_trend_chunk(chunk_rows, row_dict, trend_value, layout, total_span,
     ]
 
 
+def cn_support_mask(values, state):
+    if str(state).lower() == "dup":
+        return values > CN_NEUTRAL_UPPER
+    if str(state).lower() == "del":
+        return values < CN_NEUTRAL_LOWER
+    return pd.Series(False, index=values.index)
+
+
+def z_support_mask(values, state):
+    if str(state).lower() == "dup":
+        return values > 0.0
+    if str(state).lower() == "del":
+        return values < 0.0
+    return pd.Series(False, index=values.index)
+
+
+def summarize_copy_number_event_support(cn_bins, final_events):
+    columns = [
+        "sample_id",
+        "chrom",
+        "start",
+        "end",
+        "state",
+        "event_report_state",
+        "valid_bin_count",
+        "cn_support_bin_count",
+        "cn_same_direction_fraction",
+        "median_bin_cn",
+        "mean_bin_cn",
+        "median_log2r",
+        "median_calibrated_z",
+        "z_support_bin_count",
+        "centromere_gap_bin_count",
+        "cn_direction_consistency_status",
+    ]
+    if final_events.empty:
+        return pd.DataFrame(columns=columns)
+    rows = []
+    for event in final_events.itertuples(index=False):
+        row = event._asdict()
+        chrom = str(row.get("chrom", ""))
+        start = int(row.get("start"))
+        end = int(row.get("end"))
+        state = str(row.get("report_state", ""))
+        event_bins = cn_bins[
+            cn_bins["chrom"].astype(str).eq(chrom)
+            & cn_bins["end"].astype(int).gt(start)
+            & cn_bins["start"].astype(int).lt(end)
+        ].copy()
+        gap_count = int(event_bins.get("is_structure_gap_blank", pd.Series(False, index=event_bins.index)).astype(bool).sum())
+        valid = event_bins[
+            ~event_bins.get("is_structure_gap_blank", pd.Series(False, index=event_bins.index)).astype(bool)
+            & pd.to_numeric(event_bins["copy_number"], errors="coerce").notna()
+        ].copy()
+        cn_values = pd.to_numeric(valid["copy_number"], errors="coerce")
+        log2r_values = pd.to_numeric(valid.get("log2r", pd.Series(dtype=float)), errors="coerce")
+        z_values = pd.to_numeric(valid.get("z", pd.Series(dtype=float)), errors="coerce")
+        cn_support = cn_support_mask(cn_values, state)
+        z_support = z_support_mask(z_values, state)
+        valid_count = int(cn_values.notna().sum())
+        support_count = int(cn_support.fillna(False).sum())
+        support_fraction = float(support_count / valid_count) if valid_count else np.nan
+        if valid_count == 0:
+            consistency = "CN_NO_VALID_BINS"
+        elif support_fraction >= 0.50:
+            consistency = "CN_DIRECTION_SUPPORTED"
+        elif support_count > 0:
+            consistency = "CN_DIRECTION_WEAK_OR_MIXED"
+        else:
+            consistency = "CN_DIRECTION_NOT_SUPPORTED"
+        rows.append(
+            {
+                "sample_id": str(row.get("sample_id", "")),
+                "chrom": chrom,
+                "start": start,
+                "end": end,
+                "state": str(row.get("state", "")),
+                "event_report_state": state,
+                "valid_bin_count": valid_count,
+                "cn_support_bin_count": support_count,
+                "cn_same_direction_fraction": round(support_fraction, 6) if np.isfinite(support_fraction) else np.nan,
+                "median_bin_cn": round(float(cn_values.median()), 6) if valid_count else np.nan,
+                "mean_bin_cn": round(float(cn_values.mean()), 6) if valid_count else np.nan,
+                "median_log2r": round(float(log2r_values.median()), 6) if log2r_values.notna().any() else np.nan,
+                "median_calibrated_z": round(float(z_values.median()), 6) if z_values.notna().any() else np.nan,
+                "z_support_bin_count": int(z_support.fillna(False).sum()),
+                "centromere_gap_bin_count": gap_count,
+                "cn_direction_consistency_status": consistency,
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)
+
+
+def write_copy_number_event_support_tsv(path_value, support_df):
+    if not path_value:
+        return
+    path = Path(path_value)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    support_df.to_csv(path, sep="\t", index=False)
+
+
 def write_plot_bins_tsv(path_value, bins_df, layout):
     if not path_value:
         return
@@ -494,9 +689,14 @@ def write_copy_number_bins_tsv(path_value, bins_df, layout):
             "end",
             "genome_pos",
             "z",
+            "raw_log2r",
+            "log2r",
             "copy_number",
+            "copy_number_centering_log2_shift",
+            "cn_scatter_state",
             "report_state",
             "event_report_state",
+            "is_structure_gap_blank",
             "copy_number_source",
         ]
     ].copy()
@@ -505,10 +705,25 @@ def write_copy_number_bins_tsv(path_value, bins_df, layout):
     output.to_csv(path, sep="\t", index=False)
 
 
-def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span, output_svg, output_bins_tsv="", max_points=8000):
-    cn_bins = annotate_copy_number_bins(bins, final_events)
+def build_copy_number_plot_svg(
+    sample_id,
+    bins,
+    final_events,
+    layout,
+    total_span,
+    output_svg,
+    output_bins_tsv="",
+    output_event_support_tsv="",
+    ref_bins_df=None,
+    max_points=8000,
+):
+    cn_bins = annotate_copy_number_bins(bins, final_events, ref_bins_df=ref_bins_df)
     cn_layout, cn_total_span = build_chrom_layout(cn_bins, gap_bp=CN_CHROM_GAP_BP)
     write_copy_number_bins_tsv(output_bins_tsv, cn_bins, cn_layout)
+    write_copy_number_event_support_tsv(
+        output_event_support_tsv,
+        summarize_copy_number_event_support(cn_bins, final_events),
+    )
 
     width = 2560
     height = 620
@@ -525,7 +740,7 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         svg_text(24, 34, f"CNV final copy-number profile - {sample_id}", size=24, weight="bold"),
-        svg_text(24, 58, "Final reported dup/del regions over event-level copy-number proxy", size=13, fill="#475569"),
+        svg_text(24, 58, "Final reported dup/del regions over ratio-derived bin copy number", size=13, fill="#475569"),
         svg_text(20, signal_top - 18, "Copy number", size=12, fill="#334155"),
         f'<rect x="{left:.2f}" y="{signal_top:.2f}" width="{plot_width:.2f}" height="{signal_height:.2f}" fill="#ffffff"/>',
     ]
@@ -567,16 +782,38 @@ def build_copy_number_plot_svg(sample_id, bins, final_events, layout, total_span
         svg.append(f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" y2="{y:.2f}" stroke="{color}" stroke-width="1" stroke-dasharray="4,4"/>')
         svg.append(svg_text(18, y + 4, f"CN={cn}", size=11, fill="#64748b"))
 
+    for row in final_events.to_dict("records"):
+        color = CN_REPORT_STATE_COLOR.get(str(row.get("report_state", "")), NEUTRAL_COLOR)
+        region = render_event_region(
+            row,
+            cn_layout,
+            cn_total_span,
+            left,
+            plot_width,
+            signal_top,
+            signal_height,
+            color,
+            f"report CN region {row.get('report_state')} {row.get('chrom')}:{int(row.get('start'))}-{int(row.get('end'))}",
+            class_name="report-cn-region",
+        )
+        if region:
+            svg.append(region)
+
     plot_bins = downsample_bins(cn_bins, max_points=max_points)
     for row in plot_bins.itertuples(index=False):
         if getattr(row, "is_structure_gap_blank", False) or not np.isfinite(float(row.copy_number)):
             continue
         x = scale_x(genome_position(row.chrom, int(row.start + ((row.end - row.start) / 2)), cn_layout), cn_total_span, left, plot_width)
         y = scale_copy_number_y(row.copy_number, mid_y, half_h)
-        color = CN_REPORT_STATE_COLOR.get(str(row.report_state), NEUTRAL_COLOR)
-        opacity = 0.78 if row.report_state in {"dup", "del"} else 0.58
+        color = CN_REPORT_STATE_COLOR.get(str(row.cn_scatter_state), NEUTRAL_COLOR)
+        opacity = 0.78 if row.cn_scatter_state in {"dup", "del"} else 0.58
+        out_of_range_attr = (
+            ' data-copy-number-out-of-range="true"'
+            if float(row.copy_number) < CN_COPY_NUMBER_MIN or float(row.copy_number) > CN_COPY_NUMBER_MAX
+            else ""
+        )
         svg.append(
-            f'<circle class="cn-bin-scatter" cx="{x:.2f}" cy="{y:.2f}" '
+            f'<circle class="cn-bin-scatter"{out_of_range_attr} cx="{x:.2f}" cy="{y:.2f}" '
             f'r="{CN_SCATTER_RADIUS:.2f}" fill="{color}" opacity="{opacity:.2f}" '
             f'stroke="#ffffff" stroke-width="0.35"/>'
         )
@@ -606,9 +843,11 @@ def build_cnv_plot_svg(
     branch_b_events_df,
     a_branch_df,
     output_svg,
+    ref_bins_df=None,
     output_bins_tsv="",
     output_copy_number_svg="",
     output_copy_number_bins_tsv="",
+    output_copy_number_event_support_tsv="",
     max_points=8000,
 ):
     bins = coerce_bins(bins_df)
@@ -699,6 +938,8 @@ def build_cnv_plot_svg(
             total_span=total_span,
             output_svg=output_copy_number_svg,
             output_bins_tsv=output_copy_number_bins_tsv,
+            output_event_support_tsv=output_copy_number_event_support_tsv,
+            ref_bins_df=ref_bins_df,
             max_points=max_points,
         )
 
@@ -709,15 +950,18 @@ def main():
     bins_df = read_table(args.input_bins, empty_ok=False)
     events_df = read_table(args.input_events, empty_ok=True)
     a_branch_df = read_table(args.input_a_branch, empty_ok=True)
+    ref_bins_df = read_table(args.input_ref_bins, empty_ok=True)
     build_cnv_plot_svg(
         sample_id=args.sample_id,
         bins_df=bins_df,
         branch_b_events_df=events_df,
         a_branch_df=a_branch_df,
+        ref_bins_df=ref_bins_df,
         output_svg=args.output_svg,
         output_bins_tsv=args.output_bins_tsv,
         output_copy_number_svg=args.output_copy_number_svg,
         output_copy_number_bins_tsv=args.output_copy_number_bins_tsv,
+        output_copy_number_event_support_tsv=args.output_copy_number_event_support_tsv,
         max_points=args.max_points,
     )
     logger.info(

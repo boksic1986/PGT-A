@@ -1,5 +1,103 @@
 # CURRENT_STATE.md
 
+## 2026-06-22 CN Centering And Branch S Fix
+
+Current handoff:
+`docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md`.
+
+Current report:
+`docs/reports/copy_number_centering_and_sca_fix_2026-06-22.md`.
+
+This loop supersedes the uncentered ratio-CN plot interpretation from
+`docs/handoff/2026-06-22_1425_copy_number_ratio_cnv_plot_handoff.md`. It updates
+only report visualization/support summaries and Branch S report-layer evidence.
+It does not modify Branch A, autosomal Branch B V2 filtering, reference,
+mapping, or report-event classification.
+
+Active CN estimate:
+
+- z plot remains unchanged and uses `calibrated_z` only.
+- CN plot no longer estimates CN from z.
+- `plot_bins_cn.tsv` derives bin CN from normalized depth ratio and then
+  recenters each sample by the non-gap autosomal median:
+  `sample_cpm = expm1(normalized_signal)`,
+  `ref_cpm = expm1(ref_bin_stability.ref_median)`,
+  `raw_log2R = log2((sample_cpm + 0.001) / (ref_cpm + 0.001))`,
+  `centered_log2R = raw_log2R - median(raw_log2R over non-gap autosomal bins)`,
+  `CN = 2 * 2^centered_log2R`.
+- `copy_number_source=normalized_signal_ref_median_log2r_autosome_centered`
+  marks valid centered ratio-derived bins.
+- `copy_number_source=ref_median_unavailable` marks bins where the reference
+  denominator is unavailable or zero.
+- `copy_number_source=structure_gap_blank` marks centromere/structure blanks.
+- CN TSV values are not clipped. SVG display clips out-of-range points only for
+  drawing and marks them with `data-copy-number-out-of-range="true"`.
+- Scatter color is based on bin CN only: `<1.7` deletion red, `1.7..2.3`
+  neutral grey, `>2.3` duplication blue.
+- Final report intervals remain visible through separate region shading and
+  horizontal event-level CN trend lines.
+
+New support output:
+
+- `{sample}.plot_event_support.tsv` is produced beside each plot.
+- It records `valid_bin_count`, `cn_support_bin_count`,
+  `cn_same_direction_fraction`, `median_bin_cn`, `mean_bin_cn`, `median_log2r`,
+  `median_calibrated_z`, `z_support_bin_count`, `centromere_gap_bin_count`, and
+  `cn_direction_consistency_status`.
+- CN support is based on ratio-derived CN/log2R, not calibrated z. z support is
+  kept as a separate audit field.
+
+Remote validation:
+
+- Remote pytest:
+  `tests/unit/test_branch_b_plot.py`,
+  `tests/unit/test_branch_s_shadow.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
+  `tests/unit/test_cnv_report.py`: `51 passed in 1.50s`.
+- G1-G8, 0615, H1-H16, and Y1-Y8 dry-runs planned only Branch S, plot, report,
+  and runtime refresh jobs; no mapping or reference rebuild jobs were requested.
+- G1-G8 materialization completed: `21 of 21 steps (100%) done`.
+- 0615 materialization completed: `15 of 15 steps (100%) done`.
+
+Materialized acceptance:
+
+- G1-G8: 8/8 z plots, 8/8 CN plots, 8/8 CN bin TSVs, 8/8 event-support TSVs.
+- G1-G8 autosomal median CN after centering: all samples `2.000`.
+- G1-G8 locked truth remains 10/10 preserved, FN=0, hard-suppressed truth=0.
+- G2 chr8 truth remains `internal_review_event`, not filtered; it is not
+  highlighted in the autosomal final report CN main plot because the main plot
+  only highlights final autosomal report events.
+- 2026-06-15: 5/5 z plots, 5/5 CN plots, 5/5 CN bin TSVs, 5/5 event-support
+  TSVs. 0615 remains no-truth burden/context only.
+- 2026-06-15 autosomal median CN after centering: all samples `2.000`.
+
+Branch S acceptance:
+
+- segment-level support no longer uses mean; median/robust-median support is
+  required to avoid sparse-bin XY X-gain artifacts.
+- G3 and G5 are now visible as `X_LOSS`, `SCA_REVIEW_WEAK`,
+  `sca_report_review_event`.
+- G2/G6/G8 XY X-gain-like Branch A signals are `SCA_NO_CALL` with
+  `sca_filtered_or_sex_consistent_event`.
+- 0615 XY X-gain-like Branch A signals are also no-call/sex-consistent audit;
+  0615 remains no-truth context only.
+
+Interpretation notes:
+
+- The previous contradiction where del regions could show blue points was caused
+  by z-derived CN proxy. The active CN scatter now uses ratio-derived bin CN,
+  so discordance between event direction and scatter is exposed as evidence
+  rather than hidden.
+- Extreme CN points can still occur when a bin has a very high sample/reference
+  depth ratio, often in high-ref-MAD or structurally difficult regions. These
+  are shown as out-of-range display points and should be reviewed with
+  `plot_event_support.tsv`, not treated as independent true CN calls.
+
+Local synced paths:
+
+- `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
 ## 2026-06-22 Copy Number CNV Plot Bin-CN Threshold Scatter Fix
 
 Current handoff:

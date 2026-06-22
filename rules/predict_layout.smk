@@ -184,6 +184,7 @@ CNV_B_PLOT_SVG = str(Path(CNV_PLOTS_DIR) / "{sample}.final_cnv.svg")
 CNV_B_PLOT_BINS_TSV = str(Path(CNV_PLOTS_DIR) / "{sample}.plot_bins.tsv")
 CNV_B_PLOT_CN_SVG = str(Path(CNV_PLOTS_DIR) / "{sample}.final_cnv_cn.svg")
 CNV_B_PLOT_CN_BINS_TSV = str(Path(CNV_PLOTS_DIR) / "{sample}.plot_bins_cn.tsv")
+CNV_B_PLOT_CN_EVENT_SUPPORT_TSV = str(Path(CNV_PLOTS_DIR) / "{sample}.plot_event_support.tsv")
 CNV_NEGATIVE_BANK_CFG = CNV_CFG.get("negative_bank", {})
 CNV_NEGATIVE_BANK_SAMPLES_TSV = (
     resolve_path(CNV_NEGATIVE_BANK_CFG.get("samples_tsv", ""))

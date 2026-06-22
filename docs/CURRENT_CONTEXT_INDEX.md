@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md`
+2. `docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,19 +23,23 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md
-previous_handoff: docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md
+active_handoff: docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md
+previous_handoff: docs/handoff/2026-06-22_1425_copy_number_ratio_cnv_plot_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_visibility_materialized_development_only
-branch_s_status: sex_aware_segment_level_lowres_context_not_final
-report_status: cnv_z_and_bin_cn_threshold_proxy_plots_materialized_development_only
+branch_s_status: sex_aware_median_segment_support_not_final
+report_status: cnv_z_and_centered_ratio_cn_plots_materialized_development_only
 
 ## Current Evidence Files
 
 - `docs/reports/p1_p6_result_credibility_audit_2026-06-21.md`
+- `docs/reports/copy_number_centering_and_sca_fix_2026-06-22.md`
+- `docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md`
+- `docs/reports/copy_number_ratio_cnv_plot_2026-06-22.md`
+- `docs/handoff/2026-06-22_1425_copy_number_ratio_cnv_plot_handoff.md`
 - `docs/reports/0615_high_confidence_report_candidates_2026-06-22.md`
 - `docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md`
 - `docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md`
@@ -109,6 +113,52 @@ from high-confidence interpretation. This cohort still has no locked truth, so
 no TP/FP/FN conclusion is allowed.
 
 ### Report Main And CNV Plot
+
+The active CN plot and Branch S correction report is now
+`docs/reports/copy_number_centering_and_sca_fix_2026-06-22.md`.
+
+The previous `calibrated_z_mosaic30_cn_proxy` contract is superseded.
+`calibrated_z` remains the only signal for the z plot, but it is no longer used
+to estimate copy number. The CN plot now derives bin-level CN from the
+sample/reference depth ratio and then recenters each sample by the autosomal
+non-gap median:
+
+`raw_log2R = log2((sample_cpm + 0.001) / (ref_cpm + 0.001))`
+
+`centered_log2R = raw_log2R - median(raw_log2R over non-gap autosomal bins)`
+
+`CN = 2 * 2^centered_log2R`
+
+where `sample_cpm = expm1(normalized_signal)` and
+`ref_cpm = expm1(ref_bin_stability.ref_median)`. `plot_bins_cn.tsv` carries
+`raw_log2r`, centered `log2r`, `copy_number_centering_log2_shift`, and
+`copy_number_source=normalized_signal_ref_median_log2r_autosome_centered`.
+CN values are not clipped in `plot_bins_cn.tsv`; out-of-range points are clipped
+only for SVG display and marked in the SVG. `plot_event_support.tsv` records per-report-event
+`valid_bin_count`, `cn_support_bin_count`, `cn_same_direction_fraction`,
+`median_bin_cn`, `median_log2r`, `median_calibrated_z`, and
+`cn_direction_consistency_status`.
+
+G1-G8 and 2026-06-15 have been re-materialized with this centered ratio-derived
+CN plot. All materialized samples have autosomal median CN = 2.000 after
+centering.
+0615 remains no-truth review/context only. G1-G8 remains the first truth-backed
+visual check: locked truth is 10/10 preserved, FN=0, and G2 chr8 remains
+internal-review visible rather than filtered.
+
+Branch S correction in the same loop:
+
+- segment-level corroboration uses median/robust-median only, not mean;
+- G3 and G5 X-loss are now `sca_report_review_event`;
+- G2/G6/G8 XY X-gain-like Branch A signals are no-call/sex-consistent audit,
+  not strong SCA review.
+
+Local synchronized plot paths:
+
+- `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\`
+- `D:\Pipeline\PGT-A\reports\0615_cnv_plots\`
+
+### Superseded CN Proxy Plot
 
 The latest completed loop is
 `docs/reports/report_main_convergence_cnv_plot_2026-06-22.md`.

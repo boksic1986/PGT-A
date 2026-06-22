@@ -1,5 +1,63 @@
 # PLANS.md
 
+## 2026-06-22 CN Centering And Branch S Review Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md`.
+
+Current report:
+`docs/reports/copy_number_centering_and_sca_fix_2026-06-22.md`.
+
+The active CN plot contract now uses autosome-centered ratio-derived bin copy
+number. The previous `calibrated_z_mosaic30_cn_proxy` and uncentered ratio-CN
+interpretations are superseded and must not be used for interpretation or
+filtering.
+
+Current Branch S correction:
+
+- segment-level corroboration uses median/robust-median only, not mean;
+- G3/G5 X-loss are report-review visible;
+- obvious XY X-gain-like Branch A artifacts in G/0615 are no-call or
+  sex-consistent audit, not strong SCA review.
+
+Current outputs:
+
+- G1-G8:
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_bins_cn.tsv`
+  - `D:\Pipeline\PGT-A\reports\g1_g8_cnv_plots\*.plot_event_support.tsv`
+- 2026-06-15:
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.final_cnv_cn.svg`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_bins_cn.tsv`
+  - `D:\Pipeline\PGT-A\reports\0615_cnv_plots\*.plot_event_support.tsv`
+
+Immediate next steps:
+
+1. Review G1-G8 first because it has locked truth. Confirm that the z plot,
+   centered CN plot, and `plot_event_support.tsv` agree for each truth-visible
+   report event.
+2. Treat G2 chr8 as internal-review truth: it remains preserved but is not
+   highlighted in the autosomal final report CN main plot because the main plot
+   only highlights final autosomal report events.
+3. Use `cn_direction_consistency_status` to separate:
+   - CN-supported report events;
+   - CN weak/mixed report events;
+   - CN-not-supported events that require deeper review before report release.
+4. Review Branch S section separately from autosomal CNV:
+   - G3/G5 X-loss are visible as SCA weak report-review;
+   - XY X-gain-like no-calls remain audit context unless broader SCA truth
+     validation supports promotion.
+5. Do not use 0615 to derive thresholds. 0615 has no locked truth and remains
+   burden/context only.
+6. Any future Branch B V2 demotion/filter proposal must be ablated against
+   Y1-Y8, H1-H6, and G1-G8 with FN=0, H6 chr21 visible, and G2 truth not
+   filtered.
+7. If the user wants truth overlays in plots, implement that as a separate
+   visualization layer. Do not mix internal-review truth events into the final
+   autosomal report main plot without changing the report contract.
+
 ## 2026-06-22 CN Plot Bin-CN Threshold Scatter Review Next Gate
 
 Current handoff:

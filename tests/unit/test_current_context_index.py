@@ -11,14 +11,14 @@ def test_current_context_index_exists_and_pins_active_context():
 
     required_tokens = [
         "status: active_current_index",
-        "active_handoff: docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md",
-        "previous_handoff: docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md",
+        "active_handoff: docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md",
+        "previous_handoff: docs/handoff/2026-06-22_1425_copy_number_ratio_cnv_plot_handoff.md",
         "active_reference_id: h_r0_shadow_ref_20260619",
         "reference_status: fixed_shadow_baseline_not_production",
         "branch_a_status: burden_phase1_gap2m_materialized_default_unchanged",
         "branch_b_status: v2_report_visibility_materialized_development_only",
-        "branch_s_status: sex_aware_segment_level_lowres_context_not_final",
-        "report_status: cnv_z_and_bin_cn_threshold_proxy_plots_materialized_development_only",
+        "branch_s_status: sex_aware_median_segment_support_not_final",
+        "report_status: cnv_z_and_centered_ratio_cn_plots_materialized_development_only",
     ]
     for token in required_tokens:
         assert token in text
@@ -39,10 +39,14 @@ def test_current_context_index_points_to_existing_evidence_docs():
         "docs/reports/branch_b_v2_g1_g8_validation_2026-06-21.md",
         "docs/reports/branch_b_v2_pass2_correction_2026-06-21.md",
         "docs/reports/branch_b_v2_lowres_ref_evidence_2026-06-21.md",
+        "docs/reports/copy_number_centering_and_sca_fix_2026-06-22.md",
+        "docs/reports/copy_number_ratio_cnv_plot_2026-06-22.md",
         "docs/reports/report_main_convergence_cnv_plot_2026-06-22.md",
         "docs/reports/branch_b_s_lowres_integration_2026-06-22.md",
         "docs/reports/branch_s_sca_v2_sex_aware_review_2026-06-22.md",
         "docs/reports/branch_b_v2_report_event_audit_2026-06-21.md",
+        "docs/handoff/2026-06-22_1445_cn_centering_branch_s_fix_handoff.md",
+        "docs/handoff/2026-06-22_1425_copy_number_ratio_cnv_plot_handoff.md",
         "docs/handoff/2026-06-22_1335_copy_number_cnv_plot_cn_threshold_scatter_handoff.md",
         "docs/handoff/2026-06-22_1305_copy_number_cnv_plot_bin_z_scatter_handoff.md",
         "docs/handoff/2026-06-22_1234_copy_number_cnv_plot_centromere_scatter_handoff.md",

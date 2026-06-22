@@ -711,12 +711,14 @@ if CNV_ENABLED:
                 bins=CNV_B_CALIBRATED_BINS,
                 events=CNV_B_V2_BENCHMARK_REPORT_EVENTS,
                 a_branch=([CNV_A_ABERRATIONS_BED] if CNV_POSTPROCESS_PRESERVE_BRANCH_A else []),
+                ref_bins=([CNV_B_REF_STABILITY_BINS] if CNV_LOWRES_EVIDENCE_ENABLE else []),
                 metadata=RUN_METADATA
             output:
                 svg=CNV_B_PLOT_SVG,
                 bins_tsv=CNV_B_PLOT_BINS_TSV,
                 cn_svg=CNV_B_PLOT_CN_SVG,
-                cn_bins_tsv=CNV_B_PLOT_CN_BINS_TSV
+                cn_bins_tsv=CNV_B_PLOT_CN_BINS_TSV,
+                cn_event_support_tsv=CNV_B_PLOT_CN_EVENT_SUPPORT_TSV
             log:
                 project_path("logs", "cnv", "{sample}.branch_ab_plot.log")
             threads: 1
@@ -736,10 +738,13 @@ if CNV_ENABLED:
                     "--output-bins-tsv", output.bins_tsv,
                     "--output-copy-number-svg", output.cn_svg,
                     "--output-copy-number-bins-tsv", output.cn_bins_tsv,
+                    "--output-copy-number-event-support-tsv", output.cn_event_support_tsv,
                     "--log", log[0],
                 ]
                 if input.a_branch:
                     command.extend(["--input-a-branch", input.a_branch[0]])
+                if input.ref_bins:
+                    command.extend(["--input-ref-bins", input.ref_bins[0]])
                 subprocess.run(command, check=True)
 
     if CNV_NEGATIVE_BANK_SAMPLES_TSV:

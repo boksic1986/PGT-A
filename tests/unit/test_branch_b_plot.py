@@ -7,6 +7,24 @@ import pytest
 from pgta.predict.branch_b.plot import build_cnv_plot_svg
 
 
+def _norm_signal(cpm):
+    import numpy as np
+
+    return np.log1p(cpm)
+
+
+def _ref_bins(rows):
+    return pd.DataFrame(
+        {
+            "chrom": [row[0] for row in rows],
+            "bin_index": [row[1] for row in rows],
+            "start": [row[2] for row in rows],
+            "end": [row[3] for row in rows],
+            "ref_median": [_norm_signal(row[4]) for row in rows],
+        }
+    )
+
+
 def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
     bins = pd.DataFrame(
         {
@@ -15,10 +33,28 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
             "start": [0, 1_000_000, 2_000_000, 0, 1_000_000, 2_000_000],
             "end": [1_000_000, 2_000_000, 3_000_000, 1_000_000, 2_000_000, 3_000_000],
             "calibrated_z": [0.1, 7.2, 6.8, -7.1, -6.6, pd.NA],
+            "normalized_signal": [
+                _norm_signal(100),
+                _norm_signal(118),
+                _norm_signal(119),
+                _norm_signal(84),
+                _norm_signal(83),
+                _norm_signal(100),
+            ],
             "robust_z": [9.9, 9.9, 9.9, 9.9, 9.9, 9.9],
             "mask_label": ["pass", "pass", "soft", "pass", "hard", "pass"],
             "region_risk_class": ["clean", "clean", "moderate", "clean", "high", "clean"],
         }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chr1", 1, 1_000_000, 2_000_000, 100),
+            ("chr1", 2, 2_000_000, 3_000_000, 100),
+            ("chr2", 0, 0, 1_000_000, 100),
+            ("chr2", 1, 1_000_000, 2_000_000, 100),
+            ("chr2", 2, 2_000_000, 3_000_000, 100),
+        ]
     )
     events = pd.DataFrame(
         {
@@ -54,6 +90,7 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
         bins_df=bins,
         branch_b_events_df=events,
         a_branch_df=a_branch,
+        ref_bins_df=ref_bins,
         output_svg=output_svg,
         output_bins_tsv=output_bins,
         output_copy_number_svg=output_cn_svg,
@@ -95,11 +132,27 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
 
     cn_svg = output_cn_svg.read_text(encoding="utf-8")
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
-    assert set(["chrom", "start", "end", "genome_pos", "z", "copy_number", "report_state", "event_report_state", "copy_number_source"]).issubset(
-        cn_bins.columns
-    )
+    assert set(
+        [
+            "chrom",
+            "start",
+            "end",
+            "genome_pos",
+            "z",
+            "raw_log2r",
+            "log2r",
+            "copy_number",
+            "copy_number_centering_log2_shift",
+            "copy_number_source",
+            "cn_scatter_state",
+            "report_state",
+            "event_report_state",
+            "is_structure_gap_blank",
+        ]
+    ).issubset(cn_bins.columns)
     assert "Copy number" in cn_svg
     assert "calibrated z" not in cn_svg.lower()
+    assert "ratio-derived" in cn_svg
     assert 'width="2560"' in cn_svg
     assert "report CN trend" in cn_svg
     assert "smooth" not in cn_svg.lower()
@@ -114,6 +167,8 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
     assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#1d4ed8"', cn_svg)
     assert re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#ef4444"', cn_svg)
     assert not re.search(r'<line[^>]+class="report-cn-trend"[^>]+stroke="#dc2626"', cn_svg)
+    assert re.search(r'<rect[^>]+class="report-cn-region"[^>]+fill="#1d4ed8"', cn_svg)
+    assert re.search(r'<rect[^>]+class="report-cn-region"[^>]+fill="#ef4444"', cn_svg)
     assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#1d4ed8"', cn_svg)
     assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#ef4444"', cn_svg)
     assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#64748b"', cn_svg)
@@ -125,17 +180,17 @@ def test_build_cnv_plot_svg_uses_calibrated_z_and_writes_plot_bins(tmp_path):
     assert "cytoband" not in cn_svg.lower()
     assert "neutral bin" not in cn_svg
     assert "report CN trend" not in re.sub(r"<title>.*?</title>", "", cn_svg)
-    assert cn_bins.loc[cn_bins["report_state"].eq("neutral"), "copy_number"].tolist() == pytest.approx([2.005], abs=0.001)
-    assert cn_bins.loc[cn_bins["report_state"].eq("dup"), "copy_number"].tolist() == pytest.approx([2.36, 2.34], abs=0.001)
-    assert cn_bins.loc[cn_bins["report_state"].eq("del"), "copy_number"].tolist() == pytest.approx([1.645, 1.67], abs=0.001)
-    assert set(cn_bins.loc[cn_bins["report_state"].eq("dup"), "copy_number_source"]) == {
-        "calibrated_z_mosaic30_cn_proxy"
+    assert cn_bins.loc[cn_bins["cn_scatter_state"].eq("neutral"), "copy_number"].tolist() == pytest.approx([2.0], abs=0.01)
+    assert cn_bins.loc[cn_bins["cn_scatter_state"].eq("dup"), "copy_number"].tolist() == pytest.approx([2.36, 2.38], abs=0.01)
+    assert cn_bins.loc[cn_bins["cn_scatter_state"].eq("del"), "copy_number"].tolist() == pytest.approx([1.68, 1.66], abs=0.01)
+    assert set(cn_bins.loc[cn_bins["cn_scatter_state"].eq("dup"), "copy_number_source"]) == {
+        "normalized_signal_ref_median_log2r_autosome_centered"
     }
-    assert set(cn_bins.loc[cn_bins["report_state"].eq("del"), "copy_number_source"]) == {
-        "calibrated_z_mosaic30_cn_proxy"
+    assert set(cn_bins.loc[cn_bins["cn_scatter_state"].eq("del"), "copy_number_source"]) == {
+        "normalized_signal_ref_median_log2r_autosome_centered"
     }
-    assert cn_bins["copy_number"].max() <= 4.0
-    assert cn_bins["copy_number"].min() >= 0.0
+    assert cn_bins["copy_number_centering_log2_shift"].dropna().abs().max() == pytest.approx(0.0)
+    assert "calibrated_z_mosaic30_cn_proxy" not in set(cn_bins["copy_number_source"])
 
 
 def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path):
@@ -147,11 +202,13 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
             "start": starts,
             "end": [start + 1_000_000 for start in starts],
             "calibrated_z": [3.0 + (idx % 6) * 0.4 for idx in range(60)],
+            "normalized_signal": [_norm_signal(130 + (idx % 6)) for idx in range(60)],
             "is_gap_centromere_telomere": [idx == 10 for idx in range(60)],
             "gap_centromere_telomere_overlap_fraction": [1.0 if idx == 10 else 0.0 for idx in range(60)],
             "is_near_centromere": [idx == 30 for idx in range(60)],
         }
     )
+    ref_bins = _ref_bins([("chr1", idx, start, start + 1_000_000, 100) for idx, start in enumerate(starts)])
     events = pd.DataFrame(
         {
             "sample_id": ["Y1"],
@@ -172,6 +229,7 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
         bins_df=bins,
         branch_b_events_df=events,
         a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
         output_svg=tmp_path / "Y1.final_cnv.svg",
         output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
         output_copy_number_svg=output_cn_svg,
@@ -197,15 +255,59 @@ def test_copy_number_plot_v2_uses_structural_gap_blanks_and_50mb_ticks(tmp_path)
     assert pd.isna(gap_row["copy_number"])
     assert gap_row["copy_number_source"] == "structure_gap_blank"
     assert set(cn_bins.loc[~cn_bins["copy_number_source"].eq("structure_gap_blank"), "copy_number_source"]) == {
-        "calibrated_z_mosaic30_cn_proxy"
+        "normalized_signal_ref_median_log2r_autosome_centered"
     }
     assert cn_bins.loc[~cn_bins["copy_number_source"].eq("structure_gap_blank"), "copy_number"].nunique() > 1
     assert "#1d4ed8" in cn_svg
     assert 'class="chrom-background"' not in cn_svg
     assert 'fill="#f8fafc"' not in cn_svg
-    assert 'fill="#eef2f7"' not in cn_svg
-    assert 'class="chrom-separator"' in cn_svg
-    assert not re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#ef4444"', cn_svg)
+
+
+def test_copy_number_plot_recenters_ratio_cn_to_autosomal_median(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chr1", "chr1", "chr2", "chr2"],
+            "bin_index": [0, 1, 2, 0, 1],
+            "start": [0, 1_000_000, 2_000_000, 0, 1_000_000],
+            "end": [1_000_000, 2_000_000, 3_000_000, 1_000_000, 2_000_000],
+            "calibrated_z": [0.0, 6.0, -6.0, 0.0, 0.0],
+            "normalized_signal": [
+                _norm_signal(85),
+                _norm_signal(102),
+                _norm_signal(68),
+                _norm_signal(85),
+                _norm_signal(85),
+            ],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chr1", 1, 1_000_000, 2_000_000, 100),
+            ("chr1", 2, 2_000_000, 3_000_000, 100),
+            ("chr2", 0, 0, 1_000_000, 100),
+            ("chr2", 1, 1_000_000, 2_000_000, 100),
+        ]
+    )
+
+    output_cn_svg = tmp_path / "S1.final_cnv_cn.svg"
+    output_cn_bins = tmp_path / "S1.plot_bins_cn.tsv"
+    build_cnv_plot_svg(
+        sample_id="S1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=tmp_path / "S1.final_cnv.svg",
+        output_bins_tsv=tmp_path / "S1.plot_bins.tsv",
+        output_copy_number_svg=output_cn_svg,
+        output_copy_number_bins_tsv=output_cn_bins,
+    )
+
+    cn_bins = pd.read_csv(output_cn_bins, sep="\t")
+    assert cn_bins["copy_number"].median() == pytest.approx(2.0, abs=0.01)
+    assert cn_bins["copy_number_centering_log2_shift"].dropna().iloc[0] < 0.0
+    assert set(cn_bins["copy_number_source"]) == {"normalized_signal_ref_median_log2r_autosome_centered"}
 
 
 def test_copy_number_plot_uses_hg19_centromere_fallback_without_telomere_gap_shading(tmp_path):
@@ -216,9 +318,17 @@ def test_copy_number_plot_uses_hg19_centromere_fallback_without_telomere_gap_sha
             "start": [0, 121_500_000, 200_000_000],
             "end": [1_000_000, 122_500_000, 201_000_000],
             "calibrated_z": [0.1, 3.0, 0.2],
+            "normalized_signal": [_norm_signal(100), _norm_signal(130), _norm_signal(101)],
             "is_gap_centromere_telomere": [1, 1, 0],
             "gap_centromere_telomere_overlap_fraction": [1.0, 1.0, 0.0],
         }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chr1", 1, 121_500_000, 122_500_000, 100),
+            ("chr1", 2, 200_000_000, 201_000_000, 100),
+        ]
     )
     events = pd.DataFrame(
         {
@@ -240,6 +350,7 @@ def test_copy_number_plot_uses_hg19_centromere_fallback_without_telomere_gap_sha
         bins_df=bins,
         branch_b_events_df=events,
         a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
         output_svg=tmp_path / "Y1.final_cnv.svg",
         output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
         output_copy_number_svg=output_cn_svg,
@@ -257,22 +368,29 @@ def test_copy_number_plot_uses_hg19_centromere_fallback_without_telomere_gap_sha
     assert cn_svg.count('class="cn-bin-scatter"') == 2
 
 
-def test_copy_number_scatter_uses_bin_cn_thresholds_independent_of_event_direction(tmp_path):
+def test_copy_number_scatter_uses_ratio_derived_bin_cn_independent_of_event_direction(tmp_path):
     bins = pd.DataFrame(
         {
-            "chrom": ["chr1", "chr1", "chr1"],
-            "bin_index": [0, 1, 2],
-            "start": [0, 1_000_000, 2_000_000],
-            "end": [1_000_000, 2_000_000, 3_000_000],
-            "calibrated_z": [0.0, 7.0, 8.0],
+            "chrom": ["chr1"] * 7,
+            "bin_index": list(range(7)),
+            "start": [idx * 1_000_000 for idx in range(7)],
+            "end": [(idx + 1) * 1_000_000 for idx in range(7)],
+            "calibrated_z": [0.0, 0.0, 0.0, 0.0, 0.0, 7.0, 8.0],
+            "normalized_signal": [_norm_signal(value) for value in [100, 100, 100, 100, 100, 118, 120]],
         }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", idx, idx * 1_000_000, (idx + 1) * 1_000_000, 100)
+            for idx in range(7)
+        ]
     )
     events = pd.DataFrame(
         {
             "sample_id": ["Y1"],
             "chrom": ["chr1"],
-            "start": [1_000_000],
-            "end": [3_000_000],
+            "start": [5_000_000],
+            "end": [7_000_000],
             "state": ["loss"],
             "v2_report_layer_class": ["report_event"],
             "v2_report_visibility": ["report_weak_event"],
@@ -286,6 +404,7 @@ def test_copy_number_scatter_uses_bin_cn_thresholds_independent_of_event_directi
         bins_df=bins,
         branch_b_events_df=events,
         a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
         output_svg=tmp_path / "Y1.final_cnv.svg",
         output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
         output_copy_number_svg=tmp_path / "Y1.final_cnv_cn.svg",
@@ -296,21 +415,29 @@ def test_copy_number_scatter_uses_bin_cn_thresholds_independent_of_event_directi
     event_bins = cn_bins.loc[cn_bins["event_report_state"].eq("del")].copy()
 
     assert event_bins["copy_number"].nunique() == 2
-    assert event_bins["copy_number"].tolist() == pytest.approx([2.35, 2.4], abs=0.001)
-    assert event_bins["report_state"].tolist() == ["dup", "dup"]
-    assert set(event_bins["copy_number_source"]) == {"calibrated_z_mosaic30_cn_proxy"}
+    assert event_bins["copy_number"].tolist() == pytest.approx([2.36, 2.40], abs=0.01)
+    assert event_bins["cn_scatter_state"].tolist() == ["dup", "dup"]
+    assert event_bins["event_report_state"].tolist() == ["del", "del"]
+    assert set(event_bins["copy_number_source"]) == {"normalized_signal_ref_median_log2r_autosome_centered"}
     assert event_bins["z"].tolist() == [7.0, 8.0]
 
 
-def test_copy_number_scatter_covers_all_bins_and_clips_extreme_z_without_events(tmp_path):
+def test_copy_number_scatter_covers_all_bins_and_does_not_clip_tsv_values(tmp_path):
     bins = pd.DataFrame(
         {
-            "chrom": ["chr1", "chr1", "chr1", "chr1"],
-            "bin_index": [0, 1, 2, 3],
-            "start": [0, 1_000_000, 2_000_000, 3_000_000],
-            "end": [1_000_000, 2_000_000, 3_000_000, 4_000_000],
-            "calibrated_z": [-8.0, 0.0, 8.0, 50.0],
+            "chrom": ["chr1"] * 5,
+            "bin_index": [0, 1, 2, 3, 4],
+            "start": [0, 1_000_000, 2_000_000, 3_000_000, 4_000_000],
+            "end": [1_000_000, 2_000_000, 3_000_000, 4_000_000, 5_000_000],
+            "calibrated_z": [-8.0, 0.0, 0.0, 8.0, 50.0],
+            "normalized_signal": [_norm_signal(value) for value in [80, 100, 100, 120, 300]],
         }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", idx, idx * 1_000_000, (idx + 1) * 1_000_000, 100)
+            for idx in range(5)
+        ]
     )
     output_cn_svg = tmp_path / "Y1.final_cnv_cn.svg"
     output_cn_bins = tmp_path / "Y1.plot_bins_cn.tsv"
@@ -320,6 +447,7 @@ def test_copy_number_scatter_covers_all_bins_and_clips_extreme_z_without_events(
         bins_df=bins,
         branch_b_events_df=pd.DataFrame(),
         a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
         output_svg=tmp_path / "Y1.final_cnv.svg",
         output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
         output_copy_number_svg=output_cn_svg,
@@ -329,18 +457,19 @@ def test_copy_number_scatter_covers_all_bins_and_clips_extreme_z_without_events(
     cn_svg = output_cn_svg.read_text(encoding="utf-8")
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
 
-    assert cn_svg.count('class="cn-bin-scatter"') == 4
+    assert cn_svg.count('class="cn-bin-scatter"') == 5
     assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#ef4444"', cn_svg)
     assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#64748b"', cn_svg)
     assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+fill="#1d4ed8"', cn_svg)
-    assert cn_bins["copy_number"].tolist() == pytest.approx([1.6, 2.0, 2.4, 4.0], abs=0.001)
-    assert cn_bins["report_state"].tolist() == ["del", "neutral", "dup", "dup"]
+    assert cn_bins["copy_number"].tolist() == pytest.approx([1.6, 2.0, 2.0, 2.4, 6.0], abs=0.01)
+    assert cn_bins["cn_scatter_state"].tolist() == ["del", "neutral", "neutral", "dup", "dup"]
     assert set(cn_bins["event_report_state"]) == {"neutral"}
-    assert set(cn_bins["copy_number_source"]) == {"calibrated_z_mosaic30_cn_proxy"}
+    assert set(cn_bins["copy_number_source"]) == {"normalized_signal_ref_median_log2r_autosome_centered"}
+    assert 'data-copy-number-out-of-range="true"' in cn_svg
     assert 'class="report-cn-trend"' not in cn_svg
 
 
-def test_copy_number_plot_falls_back_to_a_ratio_and_refuses_missing_cn(tmp_path):
+def test_copy_number_plot_uses_ref_median_and_refuses_z_only_cn(tmp_path):
     bins = pd.DataFrame(
         {
             "chrom": ["chr1", "chr1"],
@@ -348,8 +477,14 @@ def test_copy_number_plot_falls_back_to_a_ratio_and_refuses_missing_cn(tmp_path)
             "start": [0, 1_000_000],
             "end": [1_000_000, 2_000_000],
             "calibrated_z": [3.1, 3.2],
-            "normalized_signal": [99.0, 100.0],
+            "normalized_signal": [_norm_signal(112), _norm_signal(114)],
         }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 1_000_000, 100),
+            ("chr1", 1, 1_000_000, 2_000_000, 100),
+        ]
     )
     events = pd.DataFrame(
         {
@@ -371,28 +506,83 @@ def test_copy_number_plot_falls_back_to_a_ratio_and_refuses_missing_cn(tmp_path)
         bins_df=bins,
         branch_b_events_df=events,
         a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
         output_svg=tmp_path / "Y1.final_cnv.svg",
         output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
         output_copy_number_svg=output_cn_svg,
         output_copy_number_bins_tsv=output_cn_bins,
     )
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
-    assert cn_bins["copy_number"].tolist() == pytest.approx([2.155, 2.16], abs=0.001)
-    assert set(cn_bins["copy_number_source"]) == {"calibrated_z_mosaic30_cn_proxy"}
+    assert cn_bins["copy_number"].tolist() == pytest.approx([1.98, 2.02], abs=0.01)
+    assert set(cn_bins["copy_number_source"]) == {"normalized_signal_ref_median_log2r_autosome_centered"}
     assert output_cn_svg.read_text(encoding="utf-8").count('class="report-cn-trend"') == 1
 
-    missing_cn_events = events.drop(columns=["a_ratio"])
-    with pytest.raises(ValueError, match="copy_number_estimate|a_ratio"):
+    with pytest.raises(ValueError, match="reference bin medians|log2r|copy_number"):
         build_cnv_plot_svg(
             sample_id="Y1",
             bins_df=bins,
-            branch_b_events_df=missing_cn_events,
+            branch_b_events_df=events,
             a_branch_df=pd.DataFrame(),
             output_svg=tmp_path / "Y1.no_cn.final_cnv.svg",
             output_bins_tsv=tmp_path / "Y1.no_cn.plot_bins.tsv",
             output_copy_number_svg=tmp_path / "Y1.no_cn.final_cnv_cn.svg",
             output_copy_number_bins_tsv=tmp_path / "Y1.no_cn.plot_bins_cn.tsv",
         )
+
+
+def test_copy_number_event_support_counts_use_ratio_cn_not_z(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1"] * 9,
+            "bin_index": list(range(9)),
+            "start": [idx * 1_000_000 for idx in range(9)],
+            "end": [(idx + 1) * 1_000_000 for idx in range(9)],
+            "calibrated_z": [-8.0, -7.0, -6.0, -5.0, -4.0, 12.0, 8.0, 7.0, 6.0],
+            "normalized_signal": [_norm_signal(value) for value in [100, 100, 100, 100, 100, 100, 180, 200, 190]],
+            "is_near_centromere": [False, False, False, False, False, True, False, False, False],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", idx, idx * 1_000_000, (idx + 1) * 1_000_000, 100)
+            for idx in range(9)
+        ]
+    )
+    events = pd.DataFrame(
+        {
+            "sample_id": ["Y1"],
+            "chrom": ["chr1"],
+            "start": [5_000_000],
+            "end": [9_000_000],
+            "state": ["gain"],
+            "v2_report_layer_class": ["report_event"],
+            "v2_report_visibility": ["report_strong_event"],
+            "copy_number_estimate": [2.36],
+        }
+    )
+    support_tsv = tmp_path / "Y1.plot_event_support.tsv"
+
+    build_cnv_plot_svg(
+        sample_id="Y1",
+        bins_df=bins,
+        branch_b_events_df=events,
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=tmp_path / "Y1.final_cnv.svg",
+        output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
+        output_copy_number_svg=tmp_path / "Y1.final_cnv_cn.svg",
+        output_copy_number_bins_tsv=tmp_path / "Y1.plot_bins_cn.tsv",
+        output_copy_number_event_support_tsv=support_tsv,
+    )
+
+    support = pd.read_csv(support_tsv, sep="\t")
+    row = support.iloc[0]
+    assert row["valid_bin_count"] == 3
+    assert row["centromere_gap_bin_count"] == 1
+    assert row["cn_support_bin_count"] == 3
+    assert row["cn_same_direction_fraction"] == pytest.approx(1.0, abs=0.001)
+    assert row["cn_direction_consistency_status"] == "CN_DIRECTION_SUPPORTED"
+    assert row["z_support_bin_count"] == 3
 
 
 def test_build_cnv_plot_svg_requires_calibrated_z_without_fallback(tmp_path):
