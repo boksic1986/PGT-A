@@ -1,5 +1,36 @@
 # PLANS.md
 
+## 2026-06-23 Predict BAM QC And Sample Reportability QC Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-23_1949_predict_bam_sample_reportability_qc_handoff.md`.
+
+Current report:
+`docs/reports/predict_bam_and_sample_reportability_qc_2026-06-23.md`.
+
+Current status:
+
+- `predict_bam_qc` and `cnv_sample_report_qc` have been implemented as formal
+  workflow targets.
+- `cnv_report` now displays sample reportability QC status.
+- This is a QC/reportability layer only; it does not alter Branch A/B/S
+  event-level decisions.
+- Remote pytest and Y/H/G/0615 dry-runs passed.
+- 0615 was materialized: 0 no-call samples, 5 sample-quality-review samples.
+  Sample 60 is the unique high-wave/global-instability outlier.
+
+Immediate next steps:
+
+1. Decide whether BAM-only predict batches should keep
+   `FASTP_METRICS_MISSING` as `BAM_QC_REVIEW`, or whether to add a BAM-derived
+   GC/insert-size substitute so BAM-only samples can pass library QC more
+   specifically.
+2. If sample 60 is to be reported, keep it as `SAMPLE_QUALITY_REVIEW` with
+   rebuild/resequence recommendation rather than treating it as a clean
+   negative or clean positive.
+3. Only after this QC layer is accepted, decide whether
+   `NO_CALL_RECOMMENDED` should block formal external report packaging.
+
 ## 2026-06-22 Report-Table Ablation Audit Next Gate
 
 Current handoff:

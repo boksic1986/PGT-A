@@ -1,5 +1,54 @@
 # CURRENT_STATE.md
 
+## 2026-06-23 Predict BAM QC And Sample Reportability QC
+
+Current handoff:
+`docs/handoff/2026-06-23_1949_predict_bam_sample_reportability_qc_handoff.md`.
+
+Current report:
+`docs/reports/predict_bam_and_sample_reportability_qc_2026-06-23.md`.
+
+This loop adds sample-level QC/reportability evidence to the predict/report
+path. It does not modify Branch A, Branch B V2 classifier decisions, Branch S,
+reference build, sex calling, event classification, or TP/FN/FP definitions.
+
+New workflow targets:
+
+- `predict_bam_qc`
+- `cnv_sample_report_qc`
+
+New report integration:
+
+- `cnv_report` accepts `--predict-bam-qc-summary` and `--sample-report-qc`.
+- The report sample table includes BAM/library QC status and post-predict
+  reportability status.
+- `SAMPLE_QUALITY_REVIEW` adds review/rebuild/resequence guidance but does not
+  suppress CNV/SCA evidence.
+- `NO_CALL_RECOMMENDED` is reserved for severe library/input QC failure or
+  globally uninterpretable evidence.
+
+Remote validation state:
+
+- Local static: `git diff --check` passed.
+- Local compile: `pgta/predict/bam_qc.py`,
+  `pgta/predict/sample_report_qc.py`, `pgta/predict/report.py`, and
+  `scripts/_compat_entry.py` passed `python -m py_compile`.
+- Remote pytest for predict BAM QC, sample reportability QC, report, and
+  workflow contracts: `42 passed in 1.25s`.
+- Remote Snakemake dry-runs for Y/H/G/0615 active configs passed for
+  `predict_bam_qc cnv_sample_report_qc cnv_report`.
+- 0615 materialized `predict_bam_qc`, `cnv_sample_report_qc`, and `cnv_report`.
+
+0615 materialized sample reportability:
+
+- `NO_CALL_RECOMMENDED`: 0 samples.
+- `SAMPLE_QUALITY_REVIEW`: 5 samples.
+- 60 (`JZ26125845-60-60`) is the high-wave/global-instability outlier with
+  `HIGH_MAD_LOG1P_RELATIVE_OUTLIER` and
+  `AUTOSOMAL_CN_OUTSIDE_1P7_2P3_REVIEW`.
+- 56/59/61/62 are not no-called. Their review state is sample-level context
+  driven by missing fastp library metrics and multi-chromosome burden warnings.
+
 ## 2026-06-22 Report-Table Ablation Audit
 
 Current handoff:

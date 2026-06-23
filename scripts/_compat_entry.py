@@ -34,7 +34,9 @@ DISPATCHER_MODULE_MAP = {
         "cnv_plot": "pgta.predict.branch_b.plot",
         "cnv_qc": "pgta.predict.cnv_qc",
         "cnv_report": "pgta.predict.report",
+        "cnv_sample_report_qc": "pgta.predict.sample_report_qc",
         "negative_bank_labels": "pgta.predict.branch_b.negative_bank",
+        "predict_bam_qc": "pgta.predict.bam_qc",
         "wisecondorx_gender": "pgta.predict.sex_routing",
     },
     "qc.py": {
