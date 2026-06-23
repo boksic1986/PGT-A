@@ -1,5 +1,36 @@
 # PLANS.md
 
+## 2026-06-23 Production Boundary Cleanup Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-23_2320_workflow_boundary_report_cleanup_handoff.md`.
+
+Current report:
+`docs/reports/production_workflow_test_boundary_audit_2026-06-23.md`.
+
+Current status:
+
+- Production/test workflow boundary tests have been added.
+- `branch_b_v2_report_ablation` is locked as explicit R&D-only workflow target,
+  not a default active `cnv_report` dependency.
+- `tests/server_validation/*.sh` is locked as validation-only wrapper coverage,
+  not a production DAG include.
+- Formal z/CN SVG report style has been locked to the accepted 0615 negative
+  sample preview layout.
+- Remote pytest passed after cleanup: `67 passed in 4.57s`.
+- Y/H/G/0615 active report dry-runs and explicit ablation dry-runs passed.
+- Local ignored `/reports/` and caches were removed; remote result directories
+  were retained.
+
+Immediate next steps:
+
+1. Commit, PR, merge, and sync tracked `main` content to the non-git remote
+   mirror.
+2. Keep `branch_b_v2_report_ablation` as explicit R&D-only target unless a
+   future report-table demotion implementation is separately validated.
+3. Do not delete remote `reports/`, `.snakemake/`, or `results_*` without a
+   separate retention decision.
+
 ## 2026-06-23 Repository Archive And Report Readiness Next Gate
 
 Current handoff:

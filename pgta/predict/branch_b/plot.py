@@ -1941,7 +1941,7 @@ def build_copy_number_plot_svg(
         )
 
     width = 3200
-    height = 620
+    height = 700
     left = 82
     right = 42
     top = 74
@@ -1956,7 +1956,7 @@ def build_copy_number_plot_svg(
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         svg_text(24, 34, f"CNV final copy-number profile - {sample_id}", size=24, weight="bold"),
         svg_text(24, 58, "Final reported dup/del regions over ratio-derived bin copy number", size=13, fill="#475569"),
-        svg_text(20, signal_top - 18, "Copy number", size=16, fill="#334155", weight="bold"),
+        svg_text(20, signal_top - 18, "Copy number", size=32, fill="#334155", weight="bold"),
         f'<rect x="{left:.2f}" y="{signal_top:.2f}" width="{plot_width:.2f}" height="{signal_height:.2f}" fill="#ffffff"/>',
     ]
 
@@ -1972,9 +1972,9 @@ def build_copy_number_plot_svg(
         svg.append(
             svg_text(
                 (x1 + x2) / 2.0,
-                signal_top + signal_height + 36,
+                signal_top + signal_height + 92,
                 chrom,
-                size=14,
+                size=22,
                 fill="#334155",
                 weight="bold",
                 anchor="middle",
@@ -1991,16 +1991,29 @@ def build_copy_number_plot_svg(
             svg.append(
                 svg_text(
                     tick_x,
-                    signal_top + signal_height + 18,
-                    f"{int(tick / 1_000_000)}Mb",
-                    size=11,
-                    fill="#64748b",
+                    signal_top + signal_height + 40,
+                    f"{int(tick / 1_000_000)}",
+                    size=15,
+                    fill="#94a3b8",
                     weight="bold",
                     anchor="middle",
                     css_class="chrom-position-label",
                 )
             )
             tick += 50_000_000
+
+    svg.append(
+        svg_text(
+            left - 6,
+            signal_top + signal_height + 40,
+            "Mb",
+            size=15,
+            fill="#94a3b8",
+            weight="bold",
+            anchor="middle",
+            css_class="chrom-position-unit-label",
+        )
+    )
 
     for cn in (1, 2, 3):
         y = scale_copy_number_y(cn, mid_y, half_h)
@@ -2173,9 +2186,9 @@ def build_cnv_plot_svg(
     write_plot_bins_tsv(output_bins_tsv, bins, layout)
 
     width = 3200
-    height = 620
-    left = 70
-    right = 30
+    height = 700
+    left = 82
+    right = 42
     top = 74
     plot_width = width - left - right
     signal_top = top + 72
@@ -2188,6 +2201,7 @@ def build_cnv_plot_svg(
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         svg_text(24, 34, f"CNV final profile - {sample_id}", size=24, weight="bold"),
         svg_text(24, 58, "Final reported dup/del regions over Branch A ref-normalized z signal", size=13, fill="#475569"),
+        svg_text(20, signal_top - 18, "Branch A ref-z", size=32, fill="#334155", weight="bold"),
     ]
 
     # Chromosome background and labels.
@@ -2203,9 +2217,9 @@ def build_cnv_plot_svg(
         svg.append(
             svg_text(
                 (x1 + x2) / 2.0,
-                signal_top + signal_height + 36,
+                signal_top + signal_height + 92,
                 chrom,
-                size=14,
+                size=22,
                 fill="#334155",
                 weight="bold",
                 anchor="middle",
@@ -2222,16 +2236,29 @@ def build_cnv_plot_svg(
             svg.append(
                 svg_text(
                     tick_x,
-                    signal_top + signal_height + 18,
-                    f"{int(tick / 1_000_000)}Mb",
-                    size=11,
-                    fill="#64748b",
+                    signal_top + signal_height + 40,
+                    f"{int(tick / 1_000_000)}",
+                    size=15,
+                    fill="#94a3b8",
                     weight="bold",
                     anchor="middle",
                     css_class="chrom-position-label",
                 )
             )
             tick += 50_000_000
+
+    svg.append(
+        svg_text(
+            left - 6,
+            signal_top + signal_height + 40,
+            "Mb",
+            size=15,
+            fill="#94a3b8",
+            weight="bold",
+            anchor="middle",
+            css_class="chrom-position-unit-label",
+        )
+    )
 
     for z in (-6, 0, 6):
         y = scale_y(z, mid_y, half_h)

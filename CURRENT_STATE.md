@@ -1,5 +1,51 @@
 # CURRENT_STATE.md
 
+## 2026-06-23 Production Workflow Boundary And Report Style Cleanup
+
+Current handoff:
+`docs/handoff/2026-06-23_2320_workflow_boundary_report_cleanup_handoff.md`.
+
+Current report:
+`docs/reports/production_workflow_test_boundary_audit_2026-06-23.md`.
+
+This loop audits the production/test workflow boundary, locks the final z/CN
+report plot style to the accepted 0615 negative-sample preview format, and
+performs conservative cache/artifact cleanup. It does not modify Branch A,
+Branch B V2, Branch S, reference build, sex calling, event classification, or
+report-event filtering.
+
+Boundary decisions:
+
+- `Snakefile + rules/*.smk` remain the production workflow entry.
+- `tests/server_validation/*.sh` are validation wrappers referenced by CLI and
+  README, not production DAG includes.
+- `branch_b_v2_report_ablation` remains an explicit R&D audit target and is not
+  a default `cnv_report` dependency.
+- `cnv_report` may consume current V2 report events, QC summaries, plots, and
+  Branch S summaries, but must not auto-consume ablation-only or truth-only
+  conclusions.
+
+Formal z/CN plot style is now pinned to `3200 x 700`, title `24 bold`, y-axis
+title `32 bold`, chromosome labels `22 bold`, and position ticks `15 bold` with
+a single leading `Mb` unit label.
+
+Validation state:
+
+- Remote TDD red/green was confirmed for the plot-style and workflow-boundary
+  targeted tests: old implementation failed; updated implementation passed
+  `3 passed in 1.00s`.
+- Full remote pytest after cleanup passed:
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`,
+  `tests/unit/test_branch_b_plot.py`, `tests/unit/test_cnv_report.py`, and
+  `tests/unit/test_current_context_index.py`: `67 passed in 4.57s`.
+- Y/H/G/0615 active configs dry-ran
+  `predict_bam_qc cnv_sample_report_qc branch_s_review cnv_report` and
+  explicit `branch_b_v2_report_ablation`; all reported outputs present and up
+  to date.
+- Local ignored `/reports/` was removed: 79 files, 62,238,457 bytes.
+- Remote small caches and `tests/qc_result` were removed; remote `reports/`,
+  `.snakemake/`, and `results_*` were retained.
+
 ## 2026-06-23 Repository Archive And Status Sync
 
 Current handoff:
