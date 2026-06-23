@@ -1055,10 +1055,59 @@ def test_z_plot_is_wide_and_uses_chromosome_background_without_separator_lines(t
     )
 
     svg = output_svg.read_text(encoding="utf-8")
-    assert 'width="2560"' in svg
+    assert 'width="3200"' in svg
     assert 'class="chrom-background"' in svg
     assert 'class="chrom-separator"' not in svg
     assert "50Mb" in svg
+
+
+def test_z_and_cn_axis_labels_are_bold_and_position_ticks_are_above_chrom_labels(tmp_path):
+    bins = pd.DataFrame(
+        {
+            "chrom": ["chr1", "chr1"],
+            "bin_index": [0, 1],
+            "start": [0, 50_000_000],
+            "end": [50_000_000, 100_000_000],
+            "calibrated_z": [0.0, 0.0],
+            "normalized_signal": [_norm_signal(100), _norm_signal(100)],
+        }
+    )
+    ref_bins = _ref_bins(
+        [
+            ("chr1", 0, 0, 50_000_000, 100),
+            ("chr1", 1, 50_000_000, 100_000_000, 100),
+        ]
+    )
+    output_svg = tmp_path / "Y1.final_cnv.svg"
+    output_cn_svg = tmp_path / "Y1.final_cnv_cn.svg"
+
+    build_cnv_plot_svg(
+        sample_id="Y1",
+        bins_df=bins,
+        branch_b_events_df=pd.DataFrame(),
+        a_branch_df=pd.DataFrame(),
+        ref_bins_df=ref_bins,
+        output_svg=output_svg,
+        output_bins_tsv=tmp_path / "Y1.plot_bins.tsv",
+        output_copy_number_svg=output_cn_svg,
+        output_copy_number_bins_tsv=tmp_path / "Y1.plot_bins_cn.tsv",
+    )
+
+    for svg_text_content in [output_svg.read_text(encoding="utf-8"), output_cn_svg.read_text(encoding="utf-8")]:
+        chrom = re.search(
+            r'<text[^>]+class="chrom-axis-label"[^>]+y="(?P<y>[0-9.]+)"[^>]+font-size="14"[^>]+font-weight="bold"[^>]*>chr1</text>',
+            svg_text_content,
+        )
+        position = re.search(
+            r'<text[^>]+class="chrom-position-label"[^>]+y="(?P<y>[0-9.]+)"[^>]+font-size="11"[^>]+font-weight="bold"[^>]*>50Mb</text>',
+            svg_text_content,
+        )
+        assert chrom is not None
+        assert position is not None
+        assert float(position.group("y")) < float(chrom.group("y"))
+    cn_svg = output_cn_svg.read_text(encoding="utf-8")
+    assert re.search(r'<text[^>]+font-size="16"[^>]+font-weight="bold"[^>]*>Copy number</text>', cn_svg)
+    assert re.search(r'<text[^>]+font-size="14"[^>]+font-weight="bold"[^>]*>CN=2</text>', cn_svg)
 
 
 def test_internal_review_event_is_drawn_in_review_plot_without_promoting_report_table(tmp_path):
@@ -1364,7 +1413,7 @@ def test_copy_number_scatter_marks_chry_zero_ref_as_not_interpretable(tmp_path):
     assert 'data-chrom="chrY"' not in cn_svg
 
 
-def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp_path):
+def test_copy_number_scatter_uses_valid_xy_chry_bins_when_chrom_median_ref_is_zero(tmp_path):
     bins = pd.DataFrame(
         {
             "chrom": ["chr1", "chrY", "chrY", "chrY"],
@@ -1377,10 +1426,10 @@ def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp
     )
     ref_bins = _ref_bins(
         [
-            ("chr1", 0, 0, 1_000_000, 100),
-            ("chrY", 0, 0, 1_000_000, 0),
-            ("chrY", 1, 1_000_000, 2_000_000, 0),
-            ("chrY", 2, 2_000_000, 3_000_000, 5),
+            ("chr1", 0, 0, 1_000_000, 100, 0.1, "mixed"),
+            ("chrY", 0, 0, 1_000_000, 0, 0.1, "XY"),
+            ("chrY", 1, 1_000_000, 2_000_000, 0, 0.1, "XY"),
+            ("chrY", 2, 2_000_000, 3_000_000, 5, 0.1, "XY"),
         ]
     )
     gender = pd.DataFrame(
@@ -1394,6 +1443,7 @@ def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp
         }
     )
     output_cn_bins = tmp_path / "XY1.plot_bins_cn.tsv"
+    output_cn_svg = tmp_path / "XY1.final_cnv_cn.svg"
 
     build_cnv_plot_svg(
         sample_id="XY1",
@@ -1404,17 +1454,23 @@ def test_copy_number_scatter_marks_chry_median_zero_ref_as_not_interpretable(tmp
         ref_bins_df=ref_bins,
         output_svg=tmp_path / "XY1.final_cnv.svg",
         output_bins_tsv=tmp_path / "XY1.plot_bins.tsv",
-        output_copy_number_svg=tmp_path / "XY1.final_cnv_cn.svg",
+        output_copy_number_svg=output_cn_svg,
         output_copy_number_bins_tsv=output_cn_bins,
     )
 
     cn_bins = pd.read_csv(output_cn_bins, sep="\t")
     chr_y = cn_bins.loc[cn_bins["chrom"].eq("chrY")]
-    assert chr_y["copy_number"].isna().all()
-    assert set(chr_y["cn_scatter_state_sex_aware"]) == {"neutral"}
-    assert set(chr_y["copy_number_interpretation_status"]) == {"sex_chrom_cn_unavailable"}
-    assert set(chr_y["copy_number_source"]) == {"sex_chrom_ref_ratio_not_interpretable"}
-    assert set(chr_y["chrY_display_mode"]) == {"sex_chrom_cn_unavailable"}
+    invalid_bins = chr_y.loc[chr_y["start"].isin([0, 1_000_000])]
+    valid_bin = chr_y.loc[chr_y["start"].eq(2_000_000)].iloc[0]
+
+    assert invalid_bins["copy_number"].isna().all()
+    assert set(invalid_bins["copy_number_interpretation_status"]) == {"sex_chrom_cn_unavailable"}
+    assert set(invalid_bins["copy_number_source"]) == {"sex_chrom_ref_ratio_not_interpretable"}
+    assert valid_bin["copy_number"] == pytest.approx(10.0, abs=0.02)
+    assert valid_bin["copy_number_interpretation_status"] == "sex_aware_interpretable"
+    assert valid_bin["copy_number_source"] == "normalized_signal_ref_median_log2r_y_haploid_sex_specific_XY"
+    assert valid_bin["chrY_display_mode"] == "xy_y_ratio_interpretable"
+    assert 'data-chrom="chrY"' in output_cn_svg.read_text(encoding="utf-8")
 
 
 def test_branch_s_cn_trend_skips_uninterpretable_chry_reference(tmp_path):

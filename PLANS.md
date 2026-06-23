@@ -1,5 +1,36 @@
 # PLANS.md
 
+## 2026-06-23 Repository Archive And Report Readiness Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md`.
+
+Current report:
+`docs/reports/repo_archive_inventory_2026-06-23.md`.
+
+Current status:
+
+- The repository archive pass is conservative: no tracked workflow files and no
+  remote result directories are deleted.
+- Historical reports/handoffs remain archive-only evidence.
+- Local generated artifacts such as `/reports/`, Excel files, caches, copied
+  reference packages, and one-off scripts remain ignored or cleanup candidates.
+- `docs/CURRENT_CONTEXT_INDEX.md` has been synchronized with the validated
+  sample reportability QC handoff.
+- Remote pytest, active-config dry-run, and active report target refresh have
+  passed for this archive/status-sync loop.
+
+Immediate next steps:
+
+1. Merge/sync the current branch to `main` and the non-git remote mirror.
+2. Decide whether BAM-only predict batches should keep
+   `FASTP_METRICS_MISSING` as `BAM_QC_REVIEW`, or whether to add a
+   BAM-derived GC/insert-size/coverage substitute.
+3. Keep sample 60 as `SAMPLE_QUALITY_REVIEW` unless repeat library QC or
+   resequencing provides cleaner evidence.
+4. Only after this QC/report readiness layer is accepted, decide whether
+   `NO_CALL_RECOMMENDED` should block external report packaging.
+
 ## 2026-06-23 Predict BAM QC And Sample Reportability QC Next Gate
 
 Current handoff:

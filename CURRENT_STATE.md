@@ -1,5 +1,42 @@
 # CURRENT_STATE.md
 
+## 2026-06-23 Repository Archive And Status Sync
+
+Current handoff:
+`docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md`.
+
+Current report:
+`docs/reports/repo_archive_inventory_2026-06-23.md`.
+
+This loop records a conservative repository archive inventory, synchronizes the
+context index with the already validated predict BAM QC/sample reportability QC
+state, and refreshes the active report targets on the remote mirror. It does not
+modify Branch A, Branch B V2, Branch S, reference build, sex calling, event
+classification, or report-event filtering.
+
+Confirmed cleanup stance:
+
+- keep active workflow code, rules, configs, unit tests, server validation
+  entrypoints, current context docs, and workflow-consumed TSV sample info;
+- retain older handoffs/reports as archive-only audit evidence;
+- keep local `/reports/`, Excel metadata, caches, copied reference packages,
+  and one-off scripts out of Git;
+- do not delete remote result directories in this archive pass.
+
+`docs/CURRENT_CONTEXT_INDEX.md` now records
+`report_status: sample_reportability_qc_remote_validated_0615_materialized`,
+resolving the stale pending-validation wording.
+
+Remote validation:
+
+- pytest for context index, plot, predict BAM QC, sample reportability QC,
+  report, and workflow contract tests: `73 passed in 4.99s`.
+- dry-run passed for Y/H/G/0615 active gap2m lowres configs with
+  `predict_bam_qc cnv_sample_report_qc branch_b_v2_report_ablation branch_s_review cnv_report`.
+- materialization rerun completed for those targets; an initial SSH timeout
+  interrupted H-batch report generation, then a longer rerun completed and
+  refreshed H/G reports while Y/0615 were already up to date.
+
 ## 2026-06-23 Predict BAM QC And Sample Reportability QC
 
 Current handoff:
