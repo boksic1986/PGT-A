@@ -11,14 +11,14 @@ def test_current_context_index_exists_and_pins_active_context():
 
     required_tokens = [
         "status: active_current_index",
-        "active_handoff: docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md",
-        "previous_handoff: docs/handoff/2026-06-23_1949_predict_bam_sample_reportability_qc_handoff.md",
+        "active_handoff: docs/handoff/2026-06-23_2320_workflow_boundary_report_cleanup_handoff.md",
+        "previous_handoff: docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md",
         "active_reference_id: h_r0_shadow_ref_20260619",
         "reference_status: fixed_shadow_baseline_not_production",
         "branch_a_status: burden_phase1_gap2m_materialized_default_unchanged",
         "branch_b_status: v2_report_table_ablation_audit_development_only",
         "branch_s_status: branch_s_review_manifest_visible_not_final",
-        "report_status: sample_reportability_qc_remote_validated_0615_materialized",
+        "report_status: production_boundary_audited_report_style_locked_remote_validated_cleaned",
     ]
     for token in required_tokens:
         assert token in text
@@ -28,6 +28,8 @@ def test_current_context_index_points_to_existing_evidence_docs():
     text = INDEX_PATH.read_text(encoding="utf-8")
 
     expected_paths = [
+        "docs/reports/production_workflow_test_boundary_audit_2026-06-23.md",
+        "docs/handoff/2026-06-23_2320_workflow_boundary_report_cleanup_handoff.md",
         "docs/reports/repo_archive_inventory_2026-06-23.md",
         "docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md",
         "docs/reports/predict_bam_and_sample_reportability_qc_2026-06-23.md",

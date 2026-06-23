@@ -10,6 +10,14 @@ def read_text(relative_path):
     return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
 
 
+ACTIVE_REPORT_CONFIGS = [
+    "config_predict_y_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml",
+    "config_predict_h_20260608_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml",
+    "config_predict_g1_g8_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml",
+    "config_predict_20260615_h_r0_shadow_branch_b_v2_gap2m_lowres_evidence_20260622.yaml",
+]
+
+
 def test_predict_dispatcher_exposes_phase1_phase2_actions():
     dispatcher = read_text("scripts/_compat_entry.py")
 
@@ -21,6 +29,44 @@ def test_predict_dispatcher_exposes_phase1_phase2_actions():
     assert '"branch_b_ref_stability": "pgta.predict.branch_b.ref_stability"' in dispatcher
     assert '"negative_bank_labels": "pgta.predict.branch_b.negative_bank"' in dispatcher
     assert '"reference_candidate_audit": "pgta.reference.audit"' in dispatcher
+
+
+def test_production_report_configs_do_not_default_to_ablation_or_server_validation():
+    for config_path in ACTIVE_REPORT_CONFIGS:
+        config_text = read_text(config_path)
+        targets_block = config_text.split("pipeline:", 1)[1].split("core:", 1)[0]
+        assert "branch_b_v2_report_ablation" not in targets_block
+        assert "tests/server_validation" not in targets_block
+
+
+def test_cnv_report_target_assembly_excludes_ablation_audit_outputs():
+    target_assembly = read_text("rules/target_assembly.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+
+    report_target = target_assembly.split('if "cnv_report" in REQUESTED_TARGETS', 1)[1].split(
+        "if CNV_ENABLED and CNV_MOSAIC_FRACTION_TRUTH_TSV", 1
+    )[0]
+    assert "CNV_B_V2_REPORT_ABLATION" not in report_target
+    assert "plot_manifest_audit" not in report_target
+    assert "CNV_REPORT_TSV" in report_target
+
+    report_rule = workflow.split("rule cnv_report_summary:", 1)[1].split(
+        "if CNV_NEGATIVE_BANK_SAMPLES_TSV:", 1
+    )[0]
+    assert "CNV_B_V2_REPORT_ABLATION" not in report_rule
+    assert "plot_manifest_audit" not in report_rule
+    assert "CNV_B_V2_BENCHMARK_REPORT_EVENTS" in report_rule
+
+
+def test_server_validation_wrappers_are_not_snakefile_includes_or_production_all_targets():
+    snakefile = read_text("Snakefile")
+    cli = read_text("cli/pgta.py")
+    readme = read_text("README.md")
+
+    assert "tests/server_validation" not in snakefile
+    assert "include: \"tests/server_validation" not in snakefile
+    assert "tests/server_validation" in cli
+    assert "tests/server_validation" in readme
 
 
 def test_predict_reportability_qc_is_formal_workflow_target_and_report_input():

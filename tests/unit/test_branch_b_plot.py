@@ -332,7 +332,9 @@ def test_copy_number_plot_v2_leaves_structure_gaps_blank_and_uses_50mb_ticks(tmp
 
     assert 'class="structure-gap-blank"' not in cn_svg
     assert 'fill="#0f172a" opacity="0.96"' not in cn_svg
-    assert "50Mb" in cn_svg
+    assert re.search(r'<text[^>]+class="chrom-position-unit-label"[^>]*>Mb</text>', cn_svg)
+    assert re.search(r'<text[^>]+class="chrom-position-label"[^>]*>50</text>', cn_svg)
+    assert "50Mb" not in cn_svg
     assert cn_svg.count('class="cn-bin-scatter"') == 59
     assert re.search(r'<circle[^>]+class="cn-bin-scatter"[^>]+r="1\.35"', cn_svg)
     assert cn_svg.count('class="report-cn-trend"') == 2
@@ -1056,9 +1058,13 @@ def test_z_plot_is_wide_and_uses_chromosome_background_without_separator_lines(t
 
     svg = output_svg.read_text(encoding="utf-8")
     assert 'width="3200"' in svg
+    assert 'height="700"' in svg
     assert 'class="chrom-background"' in svg
     assert 'class="chrom-separator"' not in svg
-    assert "50Mb" in svg
+    assert 'class="chrom-position-unit-label"' in svg
+    assert re.search(r'<text[^>]+class="chrom-position-unit-label"[^>]*>Mb</text>', svg)
+    assert re.search(r'<text[^>]+class="chrom-position-label"[^>]*>50</text>', svg)
+    assert "50Mb" not in svg
 
 
 def test_z_and_cn_axis_labels_are_bold_and_position_ticks_are_above_chrom_labels(tmp_path):
@@ -1094,19 +1100,28 @@ def test_z_and_cn_axis_labels_are_bold_and_position_ticks_are_above_chrom_labels
     )
 
     for svg_text_content in [output_svg.read_text(encoding="utf-8"), output_cn_svg.read_text(encoding="utf-8")]:
+        assert 'width="3200"' in svg_text_content
+        assert 'height="700"' in svg_text_content
         chrom = re.search(
-            r'<text[^>]+class="chrom-axis-label"[^>]+y="(?P<y>[0-9.]+)"[^>]+font-size="14"[^>]+font-weight="bold"[^>]*>chr1</text>',
+            r'<text[^>]+class="chrom-axis-label"[^>]+y="(?P<y>[0-9.]+)"[^>]+font-size="22"[^>]+font-weight="bold"[^>]*>chr1</text>',
             svg_text_content,
         )
         position = re.search(
-            r'<text[^>]+class="chrom-position-label"[^>]+y="(?P<y>[0-9.]+)"[^>]+font-size="11"[^>]+font-weight="bold"[^>]*>50Mb</text>',
+            r'<text[^>]+class="chrom-position-label"[^>]+y="(?P<y>[0-9.]+)"[^>]+font-size="15"[^>]+font-weight="bold"[^>]+text-anchor="middle"[^>]+fill="#94a3b8"[^>]*>50</text>',
+            svg_text_content,
+        )
+        position_unit = re.search(
+            r'<text[^>]+class="chrom-position-unit-label"[^>]+font-size="15"[^>]+font-weight="bold"[^>]+text-anchor="middle"[^>]+fill="#94a3b8"[^>]*>Mb</text>',
             svg_text_content,
         )
         assert chrom is not None
         assert position is not None
+        assert position_unit is not None
         assert float(position.group("y")) < float(chrom.group("y"))
     cn_svg = output_cn_svg.read_text(encoding="utf-8")
-    assert re.search(r'<text[^>]+font-size="16"[^>]+font-weight="bold"[^>]*>Copy number</text>', cn_svg)
+    z_svg = output_svg.read_text(encoding="utf-8")
+    assert re.search(r'<text[^>]+font-size="32"[^>]+font-weight="bold"[^>]*>Copy number</text>', cn_svg)
+    assert re.search(r'<text[^>]+font-size="32"[^>]+font-weight="bold"[^>]*>Branch A ref-z</text>', z_svg)
     assert re.search(r'<text[^>]+font-size="14"[^>]+font-weight="bold"[^>]*>CN=2</text>', cn_svg)
 
 

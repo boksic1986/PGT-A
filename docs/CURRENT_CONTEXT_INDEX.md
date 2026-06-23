@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md`
+2. `docs/handoff/2026-06-23_2320_workflow_boundary_report_cleanup_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,18 +23,20 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md
-previous_handoff: docs/handoff/2026-06-23_1949_predict_bam_sample_reportability_qc_handoff.md
+active_handoff: docs/handoff/2026-06-23_2320_workflow_boundary_report_cleanup_handoff.md
+previous_handoff: docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_table_ablation_audit_development_only
 branch_s_status: branch_s_review_manifest_visible_not_final
-report_status: sample_reportability_qc_remote_validated_0615_materialized
+report_status: production_boundary_audited_report_style_locked_remote_validated_cleaned
 
 ## Current Evidence Files
 
+- `docs/reports/production_workflow_test_boundary_audit_2026-06-23.md`
+- `docs/handoff/2026-06-23_2320_workflow_boundary_report_cleanup_handoff.md`
 - `docs/reports/repo_archive_inventory_2026-06-23.md`
 - `docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md`
 - `docs/reports/predict_bam_and_sample_reportability_qc_2026-06-23.md`
