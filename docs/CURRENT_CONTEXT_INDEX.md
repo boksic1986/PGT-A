@@ -1,7 +1,7 @@
 ---
 status: active_current_index
 decision_use: active_context_entrypoint
-last_updated: 2026-06-23
+last_updated: 2026-06-24
 active_reference_id: h_r0_shadow_ref_20260619
 ---
 
@@ -32,9 +32,13 @@ branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_table_ablation_audit_development_only
 branch_s_status: branch_s_review_manifest_visible_not_final
 report_status: production_boundary_audited_report_style_locked_remote_validated_cleaned
+sample_manifest_status: sample_master_manifest_static_validated_pending_g1_g8_truth_tsv
 
 ## Current Evidence Files
 
+- `sample_info/sample_master_manifest_20260624.tsv`
+- `docs/reports/sample_master_manifest_2026-06-24.md`
+- `docs/handoff/2026-06-24_0031_sample_master_manifest_handoff.md`
 - `docs/reports/production_workflow_test_boundary_audit_2026-06-23.md`
 - `docs/handoff/2026-06-23_2320_workflow_boundary_report_cleanup_handoff.md`
 - `docs/reports/repo_archive_inventory_2026-06-23.md`

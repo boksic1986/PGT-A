@@ -1,5 +1,38 @@
 # CURRENT_STATE.md
 
+## 2026-06-24 Sample Master Manifest
+
+Current handoff:
+`docs/handoff/2026-06-24_0031_sample_master_manifest_handoff.md`.
+
+Current report:
+`docs/reports/sample_master_manifest_2026-06-24.md`.
+
+Current manifest:
+`sample_info/sample_master_manifest_20260624.tsv`.
+
+This loop establishes a single sample-level fact source for the current
+negative/positive sample inventory. It does not modify Branch A, Branch B V2,
+Branch S, reference build, sex calling, report-event classification, filtering,
+or any Snakemake production target.
+
+Manifest summary:
+
+- 32 base reference-negative package samples are recorded as current shadow
+  reference samples, not as formal N0 controls.
+- Y1-Y8 and H1-H6 positive truth rows point to
+  `sample_info/positive_truth_events.tsv`.
+- G1-G8 positive truth rows are present, but currently point to
+  `docs/reports/branch_b_v2_g1_g8_validation_2026-06-21.md` because the cited
+  `sample_info/g1_g8_truth_events_20260621.tsv` is not present locally.
+- H7-H16 rows separate reference eligibility labels (`R0/R1`) from
+  negative-bank labels (`N1/N2`).
+- 2026-06-15 rows remain burden/context only and must not be used for TP/FN/FP
+  claims or threshold derivation.
+
+Static validation confirmed no duplicate sample IDs, presence of all current
+Y/H/G truth samples, presence of all H7-H16 rows, and no sample labeled N0.
+
 ## 2026-06-23 Production Workflow Boundary And Report Style Cleanup
 
 Current handoff:

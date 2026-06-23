@@ -1,5 +1,35 @@
 # PLANS.md
 
+## 2026-06-24 Sample Master Manifest Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-24_0031_sample_master_manifest_handoff.md`.
+
+Current report:
+`docs/reports/sample_master_manifest_2026-06-24.md`.
+
+Current manifest:
+`sample_info/sample_master_manifest_20260624.tsv`.
+
+Current status:
+
+- A single sample-level manifest now records current positive truth samples,
+  presumed negatives, current shadow-reference samples, and 2026-06-15 context
+  samples.
+- `R0/R1/R2` reference eligibility and `N0/N1/N2` negative-bank labels are kept
+  separate.
+- No sample is promoted to N0 by this manifest.
+- G1-G8 truth is included but marked as report-only pending a missing
+  machine-readable TSV.
+
+Immediate next steps:
+
+1. Commit, PR, merge, and sync the manifest/report/handoff updates.
+2. Add `sample_info/g1_g8_truth_events_20260621.tsv` so G1-G8 truth is
+   machine-readable.
+3. If workflow/report code later needs sample roles, add a separate manifest
+   consumer and tests instead of reading scattered reports directly.
+
 ## 2026-06-23 Production Boundary Cleanup Next Gate
 
 Current handoff:
