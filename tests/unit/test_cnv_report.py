@@ -20,10 +20,12 @@ else:
     from pgta.predict.report import (
         build_plot_lookup,
         format_biological_candidate_conclusion,
+        format_sample_report_qc_status,
         format_technical_conclusion,
         load_branch_a_validation_summaries,
         load_branch_b_evidence_summaries,
         load_branch_s_summaries,
+        load_sample_report_qc,
         summarize_branch_a_validation_gate,
         summarize_branch_b_events,
     )
@@ -31,6 +33,47 @@ else:
 
 @unittest.skipIf(IMPORT_ERROR is not None, f"optional dependency missing: {IMPORT_ERROR}")
 class CnvReportRankingTest(unittest.TestCase):
+    def test_sample_report_qc_is_loaded_and_displayed_as_sample_level_context(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            qc_path = Path(tmpdir) / "sample_report_qc.tsv"
+            qc_path.write_text(
+                "\t".join(
+                    [
+                        "sample_id",
+                        "sample_report_qc_status",
+                        "sample_report_qc_reasons",
+                        "rebuild_or_resample_recommendation",
+                        "library_qc_status",
+                        "global_wave_context",
+                        "multi_chromosome_cnv_context",
+                        "possible_contamination_or_mixture_context",
+                    ]
+                )
+                + "\n"
+                + "\t".join(
+                    [
+                        "60",
+                        "SAMPLE_QUALITY_REVIEW",
+                        "HIGH_MAD_LOG1P_RELATIVE_OUTLIER",
+                        "review_library_or_resequence_before_release",
+                        "BAM_QC_PASS",
+                        "GLOBAL_WAVE_REVIEW",
+                        "MULTI_CHROMOSOME_CNV_REVIEW",
+                        "no_mixture_evidence",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            df = load_sample_report_qc(str(qc_path))
+            self.assertEqual(df.loc[0, "sample_report_qc_status"], "SAMPLE_QUALITY_REVIEW")
+
+            display = format_sample_report_qc_status(df.loc[0].to_dict())
+            self.assertIn("SAMPLE_QUALITY_REVIEW", display)
+            self.assertIn("HIGH_MAD_LOG1P_RELATIVE_OUTLIER", display)
+            self.assertIn("review_library_or_resequence_before_release", display)
+
     def test_build_plot_lookup_indexes_existing_svg_by_sample_id(self):
         lookup = build_plot_lookup(
             [

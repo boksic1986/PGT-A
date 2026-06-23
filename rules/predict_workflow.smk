@@ -286,6 +286,92 @@ if CNV_ENABLED:
                 touch {output.done:q}
                 """
 
+    rule predict_bam_samtools_diagnostics:
+        input:
+            bam=lambda wildcards: sample_bam_path(wildcards.sample),
+            bai=lambda wildcards: sample_bai_path(wildcards.sample),
+            metadata=RUN_METADATA
+        output:
+            flagstat=CNV_PREDICT_BAM_QC_FLAGSTAT,
+            idxstats=CNV_PREDICT_BAM_QC_IDXSTATS
+        log:
+            project_path("logs", "cnv", "{sample}.predict_bam_qc.samtools.log")
+        params:
+            samtools=config["biosoft"]["samtools"]
+        threads: 4
+        shell:
+            r"""
+            mkdir -p "$(dirname {output.flagstat})" "$(dirname {log})"
+            (
+                echo "=== PIPELINE AUDIT ==="
+                cat {input.metadata:q}
+                echo "=== COMMAND ==="
+            ) > {log:q}
+            {params.samtools:q} flagstat -@ {threads} {input.bam:q} > {output.flagstat:q} 2>> {log:q}
+            {params.samtools:q} idxstats {input.bam:q} > {output.idxstats:q} 2>> {log:q}
+            """
+
+    rule predict_bam_qc_per_sample:
+        input:
+            flagstat=CNV_PREDICT_BAM_QC_FLAGSTAT,
+            idxstats=CNV_PREDICT_BAM_QC_IDXSTATS,
+            metadata=RUN_METADATA
+        output:
+            tsv=CNV_PREDICT_BAM_QC_TSV,
+            json=CNV_PREDICT_BAM_QC_JSON
+        log:
+            project_path("logs", "cnv", "{sample}.predict_bam_qc.log")
+        params:
+            fastp_json=lambda wildcards: sample_fastp_json_path(wildcards.sample)
+        threads: 1
+        run:
+            from pgta.core.logging import write_rule_audit_log
+            import subprocess
+
+            write_rule_audit_log(log[0], input.metadata)
+            subprocess.run(
+                [
+                    config["biosoft"]["python"],
+                    SCRIPT_PREDICT_BAM_QC,
+                    SCRIPT_PREDICT_BAM_QC_ACTION,
+                    "--sample-id", wildcards.sample,
+                    "--flagstat", input.flagstat,
+                    "--idxstats", input.idxstats,
+                    "--fastp-json", str(params.fastp_json or ""),
+                    "--output-tsv", output.tsv,
+                    "--output-json", output.json,
+                    "--log", log[0],
+                ],
+                check=True,
+            )
+
+    rule predict_bam_qc_summary:
+        input:
+            qc=expand(CNV_PREDICT_BAM_QC_TSV, sample=SAMPLES),
+            metadata=RUN_METADATA
+        output:
+            tsv=CNV_PREDICT_BAM_QC_SUMMARY_TSV,
+            json=CNV_PREDICT_BAM_QC_SUMMARY_JSON
+        log:
+            project_path("logs", "cnv", "predict_bam_qc.summary.log")
+        threads: 1
+        run:
+            from pgta.core.logging import write_rule_audit_log
+            import subprocess
+
+            write_rule_audit_log(log[0], input.metadata)
+            command = [
+                config["biosoft"]["python"],
+                SCRIPT_PREDICT_BAM_QC,
+                SCRIPT_PREDICT_BAM_QC_ACTION,
+                "--summary-tsv", output.tsv,
+                "--summary-json", output.json,
+                "--log", log[0],
+            ]
+            for path_value in input.qc:
+                command.extend(["--input-tsv", path_value])
+            subprocess.run(command, check=True)
+
     if CNV_PREPROCESS_STRATEGY == "mask_only":
         rule cnv_mask_npz_for_predict:
             input:
@@ -1232,6 +1318,44 @@ if CNV_ENABLED:
                     command.extend(["--low-fraction-threshold", str(threshold)])
                 subprocess.run(command, check=True)
 
+    rule cnv_sample_report_qc_build:
+        input:
+            metadata=RUN_METADATA,
+            bam_qc_summary=CNV_PREDICT_BAM_QC_SUMMARY_TSV,
+            qcs=expand(CNV_QC_TSV, sample=SAMPLES),
+            branch_b_v2_sample_summary=([CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY] if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
+            report_events=([CNV_B_V2_BENCHMARK_REPORT_EVENTS] if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
+            cn_bins=(expand(CNV_B_PLOT_CN_BINS_TSV, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else [])
+        output:
+            tsv=CNV_SAMPLE_REPORT_QC_TSV,
+            json=CNV_SAMPLE_REPORT_QC_JSON
+        log:
+            project_path("logs", "cnv", "sample_report_qc.log")
+        threads: 1
+        run:
+            from pgta.core.logging import write_rule_audit_log
+            import subprocess
+
+            write_rule_audit_log(log[0], input.metadata)
+            command = [
+                config["biosoft"]["python"],
+                SCRIPT_CNV_SAMPLE_REPORT_QC,
+                SCRIPT_CNV_SAMPLE_REPORT_QC_ACTION,
+                "--bam-qc-summary", input.bam_qc_summary,
+                "--output-tsv", output.tsv,
+                "--output-json", output.json,
+                "--log", log[0],
+            ]
+            for path_value in input.qcs:
+                command.extend(["--cnv-qc-tsv", path_value])
+            if input.branch_b_v2_sample_summary:
+                command.extend(["--branch-b-v2-sample-summary", input.branch_b_v2_sample_summary[0]])
+            if input.report_events:
+                command.extend(["--report-events", input.report_events[0]])
+            for path_value in input.cn_bins:
+                command.extend(["--copy-number-bin-tsv", path_value])
+            subprocess.run(command, check=True)
+
     if "cnv_report" in AVAILABLE_TARGETS:
         rule cnv_report_summary:
             input:
@@ -1252,6 +1376,8 @@ if CNV_ENABLED:
                 branch_s_summaries=(expand(CNV_BRANCH_S_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 branch_b_v2_benchmark_summary=([CNV_B_V2_BENCHMARK_SUMMARY] if "branch_b_v2_benchmark" in AVAILABLE_TARGETS else []),
                 branch_b_v2_sample_summary=([CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY] if "branch_b_v2_benchmark" in AVAILABLE_TARGETS else []),
+                predict_bam_qc_summary=([CNV_PREDICT_BAM_QC_SUMMARY_TSV] if CNV_ENABLED else []),
+                sample_report_qc=([CNV_SAMPLE_REPORT_QC_TSV] if CNV_ENABLED else []),
                 evaluation_summary=([CNV_EVAL_SUMMARY] if "cnv_eval" in REQUESTED_TARGETS else []),
                 ml_summary=([CNV_ML_SUMMARY] if "cnv_ml" in REQUESTED_TARGETS else []),
                 benchmark_summary=([CNV_BENCHMARK_SUMMARY] if "cnv_benchmark" in REQUESTED_TARGETS else []),
@@ -1300,6 +1426,10 @@ if CNV_ENABLED:
                     command.extend(["--branch-b-v2-benchmark-summary", input.branch_b_v2_benchmark_summary[0]])
                 if input.branch_b_v2_sample_summary:
                     command.extend(["--branch-b-v2-sample-summary", input.branch_b_v2_sample_summary[0]])
+                if input.predict_bam_qc_summary:
+                    command.extend(["--predict-bam-qc-summary", input.predict_bam_qc_summary[0]])
+                if input.sample_report_qc:
+                    command.extend(["--sample-report-qc", input.sample_report_qc[0]])
                 for path_value in input.branch_a_validation_summaries:
                     command.extend(["--branch-a-validation-summary", path_value])
                 for path_value in input.events:

@@ -1,5 +1,91 @@
 # CURRENT_STATE.md
 
+## 2026-06-23 Repository Archive And Status Sync
+
+Current handoff:
+`docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md`.
+
+Current report:
+`docs/reports/repo_archive_inventory_2026-06-23.md`.
+
+This loop records a conservative repository archive inventory, synchronizes the
+context index with the already validated predict BAM QC/sample reportability QC
+state, and refreshes the active report targets on the remote mirror. It does not
+modify Branch A, Branch B V2, Branch S, reference build, sex calling, event
+classification, or report-event filtering.
+
+Confirmed cleanup stance:
+
+- keep active workflow code, rules, configs, unit tests, server validation
+  entrypoints, current context docs, and workflow-consumed TSV sample info;
+- retain older handoffs/reports as archive-only audit evidence;
+- keep local `/reports/`, Excel metadata, caches, copied reference packages,
+  and one-off scripts out of Git;
+- do not delete remote result directories in this archive pass.
+
+`docs/CURRENT_CONTEXT_INDEX.md` now records
+`report_status: sample_reportability_qc_remote_validated_0615_materialized`,
+resolving the stale pending-validation wording.
+
+Remote validation:
+
+- pytest for context index, plot, predict BAM QC, sample reportability QC,
+  report, and workflow contract tests: `73 passed in 4.99s`.
+- dry-run passed for Y/H/G/0615 active gap2m lowres configs with
+  `predict_bam_qc cnv_sample_report_qc branch_b_v2_report_ablation branch_s_review cnv_report`.
+- materialization rerun completed for those targets; an initial SSH timeout
+  interrupted H-batch report generation, then a longer rerun completed and
+  refreshed H/G reports while Y/0615 were already up to date.
+
+## 2026-06-23 Predict BAM QC And Sample Reportability QC
+
+Current handoff:
+`docs/handoff/2026-06-23_1949_predict_bam_sample_reportability_qc_handoff.md`.
+
+Current report:
+`docs/reports/predict_bam_and_sample_reportability_qc_2026-06-23.md`.
+
+This loop adds sample-level QC/reportability evidence to the predict/report
+path. It does not modify Branch A, Branch B V2 classifier decisions, Branch S,
+reference build, sex calling, event classification, or TP/FN/FP definitions.
+
+New workflow targets:
+
+- `predict_bam_qc`
+- `cnv_sample_report_qc`
+
+New report integration:
+
+- `cnv_report` accepts `--predict-bam-qc-summary` and `--sample-report-qc`.
+- The report sample table includes BAM/library QC status and post-predict
+  reportability status.
+- `SAMPLE_QUALITY_REVIEW` adds review/rebuild/resequence guidance but does not
+  suppress CNV/SCA evidence.
+- `NO_CALL_RECOMMENDED` is reserved for severe library/input QC failure or
+  globally uninterpretable evidence.
+
+Remote validation state:
+
+- Local static: `git diff --check` passed.
+- Local compile: `pgta/predict/bam_qc.py`,
+  `pgta/predict/sample_report_qc.py`, `pgta/predict/report.py`, and
+  `scripts/_compat_entry.py` passed `python -m py_compile`.
+- Remote pytest for predict BAM QC, sample reportability QC, report, and
+  workflow contracts: `42 passed in 1.25s`.
+- Remote Snakemake dry-runs for Y/H/G/0615 active configs passed for
+  `predict_bam_qc cnv_sample_report_qc cnv_report`.
+- 0615 materialized `predict_bam_qc`, `cnv_sample_report_qc`, and `cnv_report`.
+
+0615 materialized sample reportability:
+
+- `NO_CALL_RECOMMENDED`: 0 samples.
+- `SAMPLE_QUALITY_REVIEW`: 5 samples.
+- 60 (`JZ26125845-60-60`) is the high-wave/global-instability outlier with
+  `HIGH_MAD_LOG1P_RELATIVE_OUTLIER` and
+  `AUTOSOMAL_CN_OUTSIDE_1P7_2P3_REVIEW`.
+- 56/59/61/62 are not no-called. Their review state is sample-level context
+  driven by missing fastp library metrics and multi-chromosome burden warnings.
+
 ## 2026-06-22 Report-Table Ablation Audit
 
 Current handoff:

@@ -1,5 +1,67 @@
 # PLANS.md
 
+## 2026-06-23 Repository Archive And Report Readiness Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-23_2052_repo_archive_status_sync_handoff.md`.
+
+Current report:
+`docs/reports/repo_archive_inventory_2026-06-23.md`.
+
+Current status:
+
+- The repository archive pass is conservative: no tracked workflow files and no
+  remote result directories are deleted.
+- Historical reports/handoffs remain archive-only evidence.
+- Local generated artifacts such as `/reports/`, Excel files, caches, copied
+  reference packages, and one-off scripts remain ignored or cleanup candidates.
+- `docs/CURRENT_CONTEXT_INDEX.md` has been synchronized with the validated
+  sample reportability QC handoff.
+- Remote pytest, active-config dry-run, and active report target refresh have
+  passed for this archive/status-sync loop.
+
+Immediate next steps:
+
+1. Merge/sync the current branch to `main` and the non-git remote mirror.
+2. Decide whether BAM-only predict batches should keep
+   `FASTP_METRICS_MISSING` as `BAM_QC_REVIEW`, or whether to add a
+   BAM-derived GC/insert-size/coverage substitute.
+3. Keep sample 60 as `SAMPLE_QUALITY_REVIEW` unless repeat library QC or
+   resequencing provides cleaner evidence.
+4. Only after this QC/report readiness layer is accepted, decide whether
+   `NO_CALL_RECOMMENDED` should block external report packaging.
+
+## 2026-06-23 Predict BAM QC And Sample Reportability QC Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-23_1949_predict_bam_sample_reportability_qc_handoff.md`.
+
+Current report:
+`docs/reports/predict_bam_and_sample_reportability_qc_2026-06-23.md`.
+
+Current status:
+
+- `predict_bam_qc` and `cnv_sample_report_qc` have been implemented as formal
+  workflow targets.
+- `cnv_report` now displays sample reportability QC status.
+- This is a QC/reportability layer only; it does not alter Branch A/B/S
+  event-level decisions.
+- Remote pytest and Y/H/G/0615 dry-runs passed.
+- 0615 was materialized: 0 no-call samples, 5 sample-quality-review samples.
+  Sample 60 is the unique high-wave/global-instability outlier.
+
+Immediate next steps:
+
+1. Decide whether BAM-only predict batches should keep
+   `FASTP_METRICS_MISSING` as `BAM_QC_REVIEW`, or whether to add a BAM-derived
+   GC/insert-size substitute so BAM-only samples can pass library QC more
+   specifically.
+2. If sample 60 is to be reported, keep it as `SAMPLE_QUALITY_REVIEW` with
+   rebuild/resequence recommendation rather than treating it as a clean
+   negative or clean positive.
+3. Only after this QC layer is accepted, decide whether
+   `NO_CALL_RECOMMENDED` should block formal external report packaging.
+
 ## 2026-06-22 Report-Table Ablation Audit Next Gate
 
 Current handoff:

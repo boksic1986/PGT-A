@@ -232,6 +232,15 @@ rule cnv_qc:
         ) if CNV_ENABLED else []
 
 
+rule predict_bam_qc:
+    input:
+        (
+            expand(CNV_PREDICT_BAM_QC_TSV, sample=SAMPLES)
+            + expand(CNV_PREDICT_BAM_QC_JSON, sample=SAMPLES)
+            + [CNV_PREDICT_BAM_QC_SUMMARY_TSV, CNV_PREDICT_BAM_QC_SUMMARY_JSON]
+        ) if CNV_ENABLED else []
+
+
 rule cnv:
     input:
         (
@@ -296,6 +305,11 @@ rule branch_b_v2_report_ablation:
             CNV_B_V2_REPORT_ABLATION_SUMMARY,
             CNV_B_V2_REPORT_ABLATION_MD,
         ] if CNV_ENABLED and CNV_POSTPROCESS_ENABLE_BRANCH_B else []
+
+
+rule cnv_sample_report_qc:
+    input:
+        [CNV_SAMPLE_REPORT_QC_TSV, CNV_SAMPLE_REPORT_QC_JSON] if CNV_ENABLED else []
 
 
 rule branch_s_review:

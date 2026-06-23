@@ -985,15 +985,9 @@ def classify_sex_aware_copy_number_state(
             ref_value = float(ref_cpm)
         except (TypeError, ValueError):
             ref_value = np.nan
-        try:
-            chrom_ref_value = float(chrom_ref_cpm_median)
-        except (TypeError, ValueError):
-            chrom_ref_value = np.nan
         if (
             not np.isfinite(ref_value)
             or ref_value < SEX_CHROM_REF_MIN_CPM
-            or not np.isfinite(chrom_ref_value)
-            or chrom_ref_value < SEX_CHROM_REF_MIN_CPM
         ):
             return "neutral", "sex_chrom_ref_ratio_not_interpretable"
     if not np.isfinite(expected):
@@ -1060,7 +1054,6 @@ def annotate_copy_number_bins(
         & frame.get("ref_group", pd.Series("", index=frame.index)).astype(str).eq(sex_group)
         & raw_ratio.notna()
         & ref_cpm.ge(SEX_CHROM_REF_MIN_CPM)
-        & chrom_ref_cpm_median.ge(SEX_CHROM_REF_MIN_CPM)
     )
     frame.loc[sex_specific_haploid_interpretable, "copy_number"] = raw_ratio.loc[
         sex_specific_haploid_interpretable
@@ -1246,10 +1239,11 @@ def downsample_bins(frame, max_points):
     return frame.iloc[::stride].copy()
 
 
-def svg_text(x, y, text, size=12, fill="#0f172a", weight="normal", anchor="start"):
+def svg_text(x, y, text, size=12, fill="#0f172a", weight="normal", anchor="start", css_class=""):
     escaped = html.escape(str(text))
+    class_attr = f' class="{html.escape(str(css_class))}"' if css_class else ""
     return (
-        f'<text x="{x:.2f}" y="{y:.2f}" font-size="{size}" font-family="Arial,sans-serif" '
+        f'<text x="{x:.2f}"{class_attr} y="{y:.2f}" font-size="{size}" font-family="Arial,sans-serif" '
         f'font-weight="{weight}" text-anchor="{anchor}" fill="{fill}">{escaped}</text>'
     )
 
@@ -1946,7 +1940,7 @@ def build_copy_number_plot_svg(
             summarize_copy_number_event_support(cn_bins, support_events, branch_s_events=branch_s_events, sex_call=sex_call),
         )
 
-    width = 2560
+    width = 3200
     height = 620
     left = 82
     right = 42
@@ -1962,7 +1956,7 @@ def build_copy_number_plot_svg(
         '<rect width="100%" height="100%" fill="#ffffff"/>',
         svg_text(24, 34, f"CNV final copy-number profile - {sample_id}", size=24, weight="bold"),
         svg_text(24, 58, "Final reported dup/del regions over ratio-derived bin copy number", size=13, fill="#475569"),
-        svg_text(20, signal_top - 18, "Copy number", size=12, fill="#334155"),
+        svg_text(20, signal_top - 18, "Copy number", size=16, fill="#334155", weight="bold"),
         f'<rect x="{left:.2f}" y="{signal_top:.2f}" width="{plot_width:.2f}" height="{signal_height:.2f}" fill="#ffffff"/>',
     ]
 
@@ -1975,7 +1969,18 @@ def build_copy_number_plot_svg(
             f'<rect class="chrom-background" x="{x1:.2f}" y="{signal_top:.2f}" '
             f'width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="{fill}" opacity="0.52"/>'
         )
-        svg.append(svg_text((x1 + x2) / 2.0, signal_top + signal_height + 18, chrom, size=10, fill="#334155", anchor="middle"))
+        svg.append(
+            svg_text(
+                (x1 + x2) / 2.0,
+                signal_top + signal_height + 36,
+                chrom,
+                size=14,
+                fill="#334155",
+                weight="bold",
+                anchor="middle",
+                css_class="chrom-axis-label",
+            )
+        )
         tick = ((int(item["start"]) // 50_000_000) + 1) * 50_000_000
         while tick < int(item["end"]):
             tick_x = scale_x(genome_position(chrom, tick, cn_layout), cn_total_span, left, plot_width)
@@ -1983,14 +1988,25 @@ def build_copy_number_plot_svg(
                 f'<line class="chrom-50mb-tick" x1="{tick_x:.2f}" y1="{signal_top + signal_height:.2f}" '
                 f'x2="{tick_x:.2f}" y2="{signal_top + signal_height + 6:.2f}" stroke="#64748b" stroke-width="0.7"/>'
             )
-            svg.append(svg_text(tick_x, signal_top + signal_height + 31, f"{int(tick / 1_000_000)}Mb", size=8, fill="#64748b", anchor="middle"))
+            svg.append(
+                svg_text(
+                    tick_x,
+                    signal_top + signal_height + 18,
+                    f"{int(tick / 1_000_000)}Mb",
+                    size=11,
+                    fill="#64748b",
+                    weight="bold",
+                    anchor="middle",
+                    css_class="chrom-position-label",
+                )
+            )
             tick += 50_000_000
 
     for cn in (1, 2, 3):
         y = scale_copy_number_y(cn, mid_y, half_h)
         color = "#94a3b8" if cn == 2 else "#cbd5e1"
         svg.append(f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" y2="{y:.2f}" stroke="{color}" stroke-width="1" stroke-dasharray="4,4"/>')
-        svg.append(svg_text(18, y + 4, f"CN={cn}", size=11, fill="#64748b"))
+        svg.append(svg_text(18, y + 4, f"CN={cn}", size=14, fill="#64748b", weight="bold"))
 
     for row in final_events.to_dict("records"):
         color = CN_REPORT_STATE_COLOR.get(str(row.get("report_state", "")), NEUTRAL_COLOR)
@@ -2156,7 +2172,7 @@ def build_cnv_plot_svg(
     bins = annotate_report_states(bins, plot_events)
     write_plot_bins_tsv(output_bins_tsv, bins, layout)
 
-    width = 2560
+    width = 3200
     height = 620
     left = 70
     right = 30
@@ -2184,7 +2200,18 @@ def build_cnv_plot_svg(
             f'<rect class="chrom-background" x="{x1:.2f}" y="{signal_top:.2f}" '
             f'width="{max(x2 - x1, 1):.2f}" height="{signal_height:.2f}" fill="{fill}" opacity="0.52"/>'
         )
-        svg.append(svg_text((x1 + x2) / 2.0, signal_top + signal_height + 18, chrom, size=10, fill="#334155", anchor="middle"))
+        svg.append(
+            svg_text(
+                (x1 + x2) / 2.0,
+                signal_top + signal_height + 36,
+                chrom,
+                size=14,
+                fill="#334155",
+                weight="bold",
+                anchor="middle",
+                css_class="chrom-axis-label",
+            )
+        )
         tick = ((int(item["start"]) // 50_000_000) + 1) * 50_000_000
         while tick < int(item["end"]):
             tick_x = scale_x(genome_position(chrom, tick, layout), total_span, left, plot_width)
@@ -2192,14 +2219,25 @@ def build_cnv_plot_svg(
                 f'<line class="chrom-50mb-tick" x1="{tick_x:.2f}" y1="{signal_top + signal_height:.2f}" '
                 f'x2="{tick_x:.2f}" y2="{signal_top + signal_height + 6:.2f}" stroke="#64748b" stroke-width="0.7"/>'
             )
-            svg.append(svg_text(tick_x, signal_top + signal_height + 31, f"{int(tick / 1_000_000)}Mb", size=8, fill="#64748b", anchor="middle"))
+            svg.append(
+                svg_text(
+                    tick_x,
+                    signal_top + signal_height + 18,
+                    f"{int(tick / 1_000_000)}Mb",
+                    size=11,
+                    fill="#64748b",
+                    weight="bold",
+                    anchor="middle",
+                    css_class="chrom-position-label",
+                )
+            )
             tick += 50_000_000
 
     for z in (-6, 0, 6):
         y = scale_y(z, mid_y, half_h)
         color = "#94a3b8" if z == 0 else "#cbd5e1"
         svg.append(f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" y2="{y:.2f}" stroke="{color}" stroke-width="1" stroke-dasharray="4,4"/>')
-        svg.append(svg_text(20, y + 4, f"z={z}", size=11, fill="#64748b"))
+        svg.append(svg_text(20, y + 4, f"z={z}", size=14, fill="#64748b", weight="bold"))
 
     for row in plot_events.itertuples(index=False):
         row_dict = row._asdict()

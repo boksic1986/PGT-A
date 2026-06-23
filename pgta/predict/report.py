@@ -48,6 +48,8 @@ def parse_args():
     parser.add_argument("--branch-s-summary", action="append", default=[])
     parser.add_argument("--branch-b-v2-benchmark-summary", default="")
     parser.add_argument("--branch-b-v2-sample-summary", default="")
+    parser.add_argument("--predict-bam-qc-summary", default="")
+    parser.add_argument("--sample-report-qc", default="")
     parser.add_argument("--reference-id", default="")
     parser.add_argument("--wisecondorx-predict-command", default="")
     parser.add_argument("--evaluation-summary", default="")
@@ -97,6 +99,65 @@ def load_one_row_tables(paths):
         row.setdefault("sample_id", path.stem.split(".")[0])
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+def load_sample_report_qc(path_value=""):
+    columns = [
+        "sample_id",
+        "sample_report_qc_status",
+        "sample_report_qc_reasons",
+        "rebuild_or_resample_recommendation",
+        "library_qc_status",
+        "global_wave_context",
+        "multi_chromosome_cnv_context",
+        "possible_contamination_or_mixture_context",
+    ]
+    if not path_value:
+        return pd.DataFrame(columns=columns)
+    path = Path(path_value)
+    if not path.exists():
+        return pd.DataFrame(columns=columns)
+    df = pd.read_csv(path, sep="\t")
+    for column in columns:
+        if column not in df.columns:
+            df[column] = ""
+    return df[columns]
+
+
+def summarize_sample_report_qc(df):
+    if df.empty or "sample_report_qc_status" not in df.columns:
+        return {
+            "sample_report_qc_status": "not_configured",
+            "sample_report_qc_sample_count": 0,
+            "pass_reportable_count": 0,
+            "sample_quality_review_count": 0,
+            "no_call_recommended_count": 0,
+        }
+    status = df["sample_report_qc_status"].astype(str)
+    return {
+        "sample_report_qc_status": "completed",
+        "sample_report_qc_sample_count": int(df["sample_id"].nunique()) if "sample_id" in df.columns else int(len(df)),
+        "pass_reportable_count": int((status == "PASS_REPORTABLE").sum()),
+        "sample_quality_review_count": int((status == "SAMPLE_QUALITY_REVIEW").sum()),
+        "no_call_recommended_count": int((status == "NO_CALL_RECOMMENDED").sum()),
+    }
+
+
+def format_sample_report_qc_status(row):
+    status = text_or_empty(row.get("sample_report_qc_status", ""))
+    if not status:
+        return "not_available"
+    reasons = text_or_empty(row.get("sample_report_qc_reasons", ""))
+    recommendation = text_or_empty(row.get("rebuild_or_resample_recommendation", ""))
+    library = text_or_empty(row.get("library_qc_status", ""))
+    details = [status]
+    if library:
+        details.append(f"library={library}")
+    if reasons and reasons != "PASS":
+        details.append(f"reasons={reasons}")
+    if recommendation:
+        details.append(f"recommendation={recommendation}")
+    return "; ".join(details)
 
 
 def format_a_branch_event(row, include_z=False):
@@ -835,6 +896,15 @@ def format_technical_conclusion(row):
         f"A-branch_top_signal={a_branch_top_event}",
         f"A-branch_review_shortlist={a_branch_shortlist}",
     ]
+    sample_qc_status = text_or_empty(row.get("sample_report_qc_status", ""))
+    if sample_qc_status:
+        parts.extend(
+            [
+                f"sample_report_qc={sample_qc_status}",
+                f"sample_report_qc_reasons={text_or_empty(row.get('sample_report_qc_reasons', 'PASS')) or 'PASS'}",
+                f"sample_report_qc_recommendation={text_or_empty(row.get('rebuild_or_resample_recommendation', 'not_recorded')) or 'not_recorded'}",
+            ]
+        )
     evidence_count = row.get("branch_b_evidence_candidate_count", "")
     if not pd.isna(evidence_count) and evidence_count != "":
         parts.extend(
@@ -935,6 +1005,8 @@ def main():
         benchmark_summary_path=args.branch_b_v2_benchmark_summary,
         report_reference_id=args.reference_id,
     )
+    sample_report_qc_df = load_sample_report_qc(args.sample_report_qc)
+    sample_report_qc_contract = summarize_sample_report_qc(sample_report_qc_df)
     evaluation_summary = read_optional_json(args.evaluation_summary)
     ml_summary = read_optional_json(args.ml_summary)
     benchmark_summary = read_optional_json(args.benchmark_summary)
@@ -944,7 +1016,7 @@ def main():
     fraction_benchmark = benchmark_summary.get("fraction_estimation", {}) if isinstance(benchmark_summary, dict) else {}
     low_fraction_detection = benchmark_summary.get("low_fraction_detection", []) if isinstance(benchmark_summary, dict) else []
 
-    if events_df.empty and branch_b_v2_df.empty:
+    if events_df.empty and branch_b_v2_df.empty and sample_report_qc_df.empty:
         empty = pd.DataFrame(columns=["sample_id"])
         ensure_parent(args.output_tsv)
         empty.to_csv(args.output_tsv, sep="\t", index=False)
@@ -956,6 +1028,7 @@ def main():
 
     sample_df, top_branch_b = summarize_branch_b_events(events_df)
     sample_df = ensure_branch_b_v2_sample_universe(sample_df, branch_b_v2_df)
+    sample_df = ensure_branch_b_v2_sample_universe(sample_df, sample_report_qc_df)
 
     sample_df = sample_df.merge(top_branch_b, on="sample_id", how="left")
     if not gender_df.empty:
@@ -980,11 +1053,14 @@ def main():
         sample_df = sample_df.merge(branch_s_df, on="sample_id", how="left")
     if not branch_b_v2_df.empty:
         sample_df = sample_df.merge(branch_b_v2_df, on="sample_id", how="left")
+    if not sample_report_qc_df.empty:
+        sample_df = sample_df.merge(sample_report_qc_df, on="sample_id", how="left")
 
     sample_df["technical_conclusion"] = sample_df.apply(format_technical_conclusion, axis=1)
     sample_df["biological_candidate_conclusion"] = sample_df.apply(format_biological_candidate_conclusion, axis=1)
     sample_df["branch_b_evidence_status"] = sample_df.apply(format_branch_b_evidence_status, axis=1)
     sample_df["branch_b_v2_burden_display"] = sample_df.apply(format_branch_b_v2_burden_status, axis=1)
+    sample_df["sample_report_qc_display"] = sample_df.apply(format_sample_report_qc_status, axis=1)
     sample_df["sca_report_status"] = sample_df.apply(format_sca_report_status, axis=1)
     sample_df["plot_svg"] = sample_df["sample_id"].map(lambda sample_id: plot_lookup.get(str(sample_id), ""))
     sample_df["copy_number_plot_svg"] = sample_df["sample_id"].map(lambda sample_id: copy_number_plot_lookup.get(str(sample_id), ""))
@@ -1005,6 +1081,7 @@ def main():
         **branch_b_v2_contract,
         "branch_b_raw_ledger_used": False,
         "branch_s_raw_evidence_used": False,
+        **sample_report_qc_contract,
         "note": (
             "P6 report package carries P3/P5 review summaries and Branch B V2 burden display only; "
             "it does not promote Branch B V2, Branch S, or SCA."
@@ -1058,11 +1135,13 @@ def main():
         f"- Branch B V2 sample report-burden flags: `{report_contract['branch_b_v2_sample_report_burden_flag_count']}`"
         f" (threshold `{report_contract['branch_b_v2_sample_report_burden_threshold']}` report events/sample; audit-only)",
         "- Branch B V2 limitation: `development_review_only display; not FP-reduction proof; not final promotion`",
+        f"- Sample reportability QC status: `{report_contract['sample_report_qc_status']}`",
+        f"- Sample reportability QC: pass `{report_contract['pass_reportable_count']}`, review `{report_contract['sample_quality_review_count']}`, no-call `{report_contract['no_call_recommended_count']}`",
         "",
         "## Sample Table",
         "",
-        "| Sample | QC | Sex | Plot | CN Plot | Legacy Branch B Top Event | P3 Evidence | Branch B V2 Burden | SCA Status | Technical Conclusion | Biological Candidate Conclusion |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Sample | QC | Reportability QC | Sex | Plot | CN Plot | Legacy Branch B Top Event | P3 Evidence | Branch B V2 Burden | SCA Status | Technical Conclusion | Biological Candidate Conclusion |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     if fraction_benchmark:
         md_lines[8:8] = [
@@ -1094,7 +1173,7 @@ def main():
         plot_link = format_plot_link(row.sample_id, args.output_md, plot_lookup, html=False, label="z plot")
         cn_plot_link = format_plot_link(row.sample_id, args.output_md, copy_number_plot_lookup, html=False, label="CN plot")
         md_lines.append(
-            f"| `{row.sample_id}` | `{getattr(row, 'qc_status', 'NA')}` | `{getattr(row, 'sex_call', 'NA')}` | "
+            f"| `{row.sample_id}` | `{getattr(row, 'qc_status', 'NA')}` | `{getattr(row, 'sample_report_qc_display', 'not_available')}` | `{getattr(row, 'sex_call', 'NA')}` | "
             f"{plot_link or ''} | {cn_plot_link or ''} | "
             f"{getattr(row, 'branch_b_top_event', '') or 'none'} | "
             f"{getattr(row, 'branch_b_evidence_status', 'not_available')} | "
@@ -1112,6 +1191,7 @@ def main():
             "<tr>"
             f"<td>{html_lib.escape(str(row.sample_id))}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'qc_status', 'NA')))}</td>"
+            f"<td>{html_lib.escape(str(getattr(row, 'sample_report_qc_display', 'not_available')))}</td>"
             f"<td>{html_lib.escape(str(getattr(row, 'sex_call', 'NA')))}</td>"
             f"<td>{plot_link}</td>"
             f"<td>{cn_plot_link}</td>"
@@ -1137,8 +1217,12 @@ def main():
         f"filtered={int(report_contract['branch_b_v2_filtered_event_count'])}; "
         f"branch_s={int(report_contract['branch_b_v2_branch_s_event_count'])}; "
         f"sample_report_burden_flags={int(report_contract['branch_b_v2_sample_report_burden_flag_count'])}</p>"
+        f"<p>Sample reportability QC: status={html_lib.escape(str(report_contract['sample_report_qc_status']))}; "
+        f"pass={int(report_contract['pass_reportable_count'])}; "
+        f"review={int(report_contract['sample_quality_review_count'])}; "
+        f"no_call={int(report_contract['no_call_recommended_count'])}</p>"
         "<p>Branch B V2 burden display is development_review_only evidence; it is not FP-reduction proof and is not final promotion.</p>"
-        "<table><thead><tr><th>Sample</th><th>QC</th><th>Sex</th><th>Plot</th><th>CN Plot</th><th>Legacy Branch B Top Event</th>"
+        "<table><thead><tr><th>Sample</th><th>QC</th><th>Reportability QC</th><th>Sex</th><th>Plot</th><th>CN Plot</th><th>Legacy Branch B Top Event</th>"
         "<th>P3 Evidence</th><th>Branch B V2 Burden</th><th>SCA Status</th><th>Technical Conclusion</th><th>Biological Candidate Conclusion</th></tr></thead><tbody>"
         + "".join(html_rows)
         + "</tbody></table></body></html>"

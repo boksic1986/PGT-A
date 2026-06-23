@@ -13,12 +13,47 @@ def read_text(relative_path):
 def test_predict_dispatcher_exposes_phase1_phase2_actions():
     dispatcher = read_text("scripts/_compat_entry.py")
 
+    assert '"predict_bam_qc": "pgta.predict.bam_qc"' in dispatcher
+    assert '"cnv_sample_report_qc": "pgta.predict.sample_report_qc"' in dispatcher
     assert '"cnv_evidence_ledger": "pgta.predict.branch_b.evidence_ledger"' in dispatcher
     assert '"branch_b_v2_benchmark": "pgta.predict.branch_b.v2_benchmark"' in dispatcher
     assert '"branch_b_lowres_evidence": "pgta.predict.branch_b.lowres_evidence"' in dispatcher
     assert '"branch_b_ref_stability": "pgta.predict.branch_b.ref_stability"' in dispatcher
     assert '"negative_bank_labels": "pgta.predict.branch_b.negative_bank"' in dispatcher
     assert '"reference_candidate_audit": "pgta.reference.audit"' in dispatcher
+
+
+def test_predict_reportability_qc_is_formal_workflow_target_and_report_input():
+    entrypoints = read_text("rules/script_entrypoints.smk")
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+    modes = read_text("rules/pipeline_modes.smk")
+    target_assembly = read_text("rules/target_assembly.smk")
+    report = read_text("pgta/predict/report.py")
+    snakefile = read_text("Snakefile")
+
+    assert 'SCRIPT_PREDICT_BAM_QC_ACTION = "predict_bam_qc"' in entrypoints
+    assert 'SCRIPT_CNV_SAMPLE_REPORT_QC_ACTION = "cnv_sample_report_qc"' in entrypoints
+    assert "predict_bam_qc" in modes
+    assert "cnv_sample_report_qc" in modes
+    assert "CNV_PREDICT_BAM_QC_SUMMARY_TSV" in layout
+    assert "CNV_SAMPLE_REPORT_QC_TSV" in layout
+    assert "rule predict_bam_samtools_diagnostics" in workflow
+    assert "rule predict_bam_qc_summary" in workflow
+    assert "rule cnv_sample_report_qc_build" in workflow
+    assert "CNV_PREDICT_BAM_QC_SUMMARY_TSV" in target_assembly
+    assert "CNV_SAMPLE_REPORT_QC_TSV" in target_assembly
+    assert "rule predict_bam_qc:" in snakefile
+    assert "rule cnv_sample_report_qc:" in snakefile
+
+    report_rule = workflow.split("rule cnv_report_summary:", 1)[1]
+    assert "sample_report_qc=([CNV_SAMPLE_REPORT_QC_TSV]" in report_rule
+    assert "--sample-report-qc" in report_rule
+    assert "--predict-bam-qc-summary" in report_rule
+
+    assert "--sample-report-qc" in report
+    assert "sample_report_qc_status" in report
+    assert "sample_report_qc_status" not in workflow.split("rule cnv_branch_b_v2_classifier:", 1)[1].split("rule cnv_branch_b_v2_benchmark:", 1)[0]
 
 
 def test_reference_audit_target_is_branch_a_level_and_report_safe():
