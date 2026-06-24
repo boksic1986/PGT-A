@@ -29,6 +29,7 @@ else:
         load_sample_report_qc,
         summarize_branch_a_validation_gate,
         summarize_branch_b_events,
+        summarize_event_annotation_status,
     )
 
 
@@ -97,6 +98,32 @@ class CnvReportRankingTest(unittest.TestCase):
         top_event = top_branch_b.iloc[0]["branch_b_top_event"]
         self.assertIn("p36.33", top_event)
         self.assertIn("GENE1", top_event)
+
+    def test_event_annotation_contract_reports_gene_omim_hpo_source_status(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            annotation_tsv = Path(tmpdir) / "cnv_event_annotation.tsv"
+            pd.DataFrame(
+                [
+                    {
+                        "sample_id": "S1",
+                        "event_id": "E1",
+                        "annotation_status": "annotated",
+                        "annotation_backend": "pgta_sqlite",
+                        "annotation_bundle_id": "unit-test-gene-omim",
+                        "gene_source_status": "ready",
+                        "omim_source_status": "ready",
+                        "hpo_source_status": "missing_hpo_source",
+                    }
+                ]
+            ).to_csv(annotation_tsv, sep="\t", index=False)
+
+            contract = summarize_event_annotation_status(str(annotation_tsv))
+
+            self.assertEqual(contract["event_annotation_status"], "annotated")
+            self.assertEqual(contract["event_annotation_bundle_id"], "unit-test-gene-omim")
+            self.assertEqual(contract["event_annotation_gene_source_status"], "ready")
+            self.assertEqual(contract["event_annotation_omim_source_status"], "ready")
+            self.assertEqual(contract["event_annotation_hpo_source_status"], "missing_hpo_source")
 
     def test_sample_report_qc_is_loaded_and_displayed_as_sample_level_context(self):
         with tempfile.TemporaryDirectory() as tmpdir:

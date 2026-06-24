@@ -1,3 +1,4 @@
+import gzip
 import sqlite3
 from pathlib import Path
 
@@ -5,7 +6,9 @@ import pandas as pd
 
 from pgta.predict.annotation import (
     annotate_events_dataframe,
+    build_annotation_bundle,
     collect_events,
+    fetch_metadata,
     normalize_chromosome,
 )
 
@@ -137,3 +140,88 @@ def test_collect_events_deduplicates_report_events_against_classifier(tmp_path):
 
     assert len(events) == 1
     assert events.iloc[0]["event_layer"] == "autosomal_report"
+
+
+def test_build_annotation_bundle_from_refgene_and_omim_sources_records_missing_hpo(tmp_path):
+    cytoband = tmp_path / "cytoBand.txt.gz"
+    with gzip.open(cytoband, "wt", encoding="utf-8") as handle:
+        handle.write("chr1\t0\t300\tp36.33\tgneg\n")
+
+    refgene = tmp_path / "refGene.sorted.bed"
+    refgene.write_text(
+        "\n".join(
+            [
+                "1\t100\t260\t+\tGENE1\tNM_000001\t120\t250\t100,\t260,",
+                "1\t1000\t1300\t-\tGENE2\tNM_000002\t1020\t1280\t1000,\t1300,",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    omim = tmp_path / "20181210_OMIMannotations.tsv.gz"
+    with gzip.open(omim, "wt", encoding="utf-8") as handle:
+        handle.write("genes\tMim Number\tPhenotypes\tInheritance\n")
+        handle.write("GENE1\t123456\texample phenotype\tAD\n")
+
+    bundle = tmp_path / "pgta_cnv_annotation.hg19.sqlite"
+    manifest = tmp_path / "source_manifest.tsv"
+
+    summary = build_annotation_bundle(
+        bundle_db=bundle,
+        cytoband_source=cytoband,
+        refgene_bed=refgene,
+        omim_sources=[omim],
+        hpo_sources=[],
+        source_manifest=manifest,
+        source_root=tmp_path,
+        pgta_source_root=tmp_path,
+        bundle_id="unit-test-gene-omim",
+        genome_build="hg19",
+    )
+
+    assert summary["gene_row_count"] == 2
+    assert summary["omim_row_count"] == 1
+    assert summary["hpo_row_count"] == 0
+    assert summary["hpo_source_status"] == "missing_hpo_source"
+    assert manifest.exists()
+    manifest_text = manifest.read_text(encoding="utf-8")
+    assert "refgene" in manifest_text
+    assert "omim" in manifest_text
+
+    conn = sqlite3.connect(bundle)
+    try:
+        metadata = fetch_metadata(conn)
+    finally:
+        conn.close()
+    assert metadata["bundle_id"] == "unit-test-gene-omim"
+    assert metadata["gene_source_status"] == "ready"
+    assert metadata["omim_source_status"] == "ready"
+    assert metadata["hpo_source_status"] == "missing_hpo_source"
+
+    annotated = annotate_events_dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "event_id": "E1",
+                    "sample_id": "S1",
+                    "chrom": "chr1",
+                    "start": 150,
+                    "end": 240,
+                    "state": "gain",
+                    "event_layer": "autosomal_report",
+                }
+            ]
+        ),
+        bundle_db=bundle,
+        genome_build="hg19",
+    )
+    row = annotated.iloc[0]
+    assert row["genes"] == "GENE1"
+    assert row["gene_number"] == 1
+    assert row["gene_location"] == "refGene"
+    assert row["omim_genes"] == "GENE1:123456"
+    assert row["omim_phenotypes"] == "example phenotype"
+    assert row["gene_source_status"] == "ready"
+    assert row["omim_source_status"] == "ready"
+    assert row["hpo_source_status"] == "missing_hpo_source"

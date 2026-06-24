@@ -11,15 +11,15 @@ def test_current_context_index_exists_and_pins_active_context():
 
     required_tokens = [
         "status: active_current_index",
-        "active_handoff: docs/handoff/2026-06-24_2230_cnv_event_annotation_resource_migration_handoff.md",
-        "previous_handoff: docs/handoff/2026-06-24_0031_sample_master_manifest_handoff.md",
+        "active_handoff: docs/handoff/2026-06-25_0005_cnv_event_annotation_gene_omim_hpo_handoff.md",
+        "previous_handoff: docs/handoff/2026-06-24_2230_cnv_event_annotation_resource_migration_handoff.md",
         "active_reference_id: h_r0_shadow_ref_20260619",
         "reference_status: fixed_shadow_baseline_not_production",
         "branch_a_status: burden_phase1_gap2m_materialized_default_unchanged",
         "branch_b_status: v2_report_table_ablation_audit_development_only",
         "branch_s_status: branch_s_review_manifest_visible_not_final",
-        "report_status: cnv_event_annotation_sidecar_integrated_remote_validated",
-        "annotation_status: pgta_owned_hg19_cytoband_bundle_integrated_gene_omim_hpo_pending",
+        "report_status: cnv_event_annotation_gene_omim_ready_remote_validated",
+        "annotation_status: pgta_owned_hg19_gene_omim_ready_hpo_missing_source",
     ]
     for token in required_tokens:
         assert token in text
@@ -29,6 +29,8 @@ def test_current_context_index_points_to_existing_evidence_docs():
     text = INDEX_PATH.read_text(encoding="utf-8")
 
     expected_paths = [
+        "docs/reports/cnv_event_annotation_gene_omim_hpo_bundle_2026-06-25.md",
+        "docs/handoff/2026-06-25_0005_cnv_event_annotation_gene_omim_hpo_handoff.md",
         "docs/reports/cnv_event_annotation_resource_migration_2026-06-24.md",
         "docs/handoff/2026-06-24_2230_cnv_event_annotation_resource_migration_handoff.md",
         "docs/reports/sample_master_manifest_2026-06-24.md",

@@ -1,5 +1,55 @@
 # CURRENT_STATE.md
 
+## 2026-06-25 CNV Event Annotation Gene/OMIM/HPO Bundle
+
+Current handoff:
+`docs/handoff/2026-06-25_0005_cnv_event_annotation_gene_omim_hpo_handoff.md`.
+
+Current report:
+`docs/reports/cnv_event_annotation_gene_omim_hpo_bundle_2026-06-25.md`.
+
+This loop upgrades the PGTA-owned hg19 annotation bundle from cytoband-only to
+gene/OMIM-ready. HPO remains explicitly unavailable as
+`missing_hpo_source`. This does not modify Branch A, Branch B V2, Branch S,
+reference build, sex calling, report-event classification, filtering,
+PASS/FAIL, or TP/FN/FP.
+
+Runtime bundle:
+
+- `/data/project/CNV/PGT-A/resources/annotation/hg19/pgta_cnv_annotation.hg19.sqlite`
+- bundle ID: `pgta_cnv_annotation.hg19.v20260625_gene_omim`
+
+Remote bundle contents:
+
+- cytoband rows: `862`
+- gene rows: `70384`
+- OMIM rows: `13736`
+- HPO rows: `0`
+- source status: `gene=ready`, `omim=ready`, `hpo=missing_hpo_source`
+
+Resource boundary:
+
+- PGTA runtime reads only the PGTA-owned SQLite bundle.
+- PGTA does not share Arraytools databases.
+- PGTA does not read CNVpro source paths at runtime.
+- CNVpro `filterCNV.py`, CN thresholds, cghFLasso, `CNVcalling.R`, and AnnotSV
+  rank are not imported into report decisions.
+
+Validation state:
+
+- Remote pytest passed:
+  `tests/unit/test_cnv_event_annotation.py`,
+  `tests/unit/test_cnv_report.py`,
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`, and
+  `tests/unit/test_current_context_index.py`: `48 passed in 1.42s`.
+- Y/H/G/0615 active configs dry-ran `cnv_event_annotation cnv_report -n`
+  successfully.
+- 0615 forced smoke materialization generated `147` annotation rows:
+  cytoband `147`, gene `147`, OMIM `146`, HPO `0`.
+- 0615 report contract records bundle ID
+  `pgta_cnv_annotation.hg19.v20260625_gene_omim` and source statuses
+  `gene=ready`, `omim=ready`, `hpo=missing_hpo_source`.
+
 ## 2026-06-24 CNV Event Annotation Resource Migration
 
 Current handoff:

@@ -1,7 +1,7 @@
 ---
 status: active_current_index
 decision_use: active_context_entrypoint
-last_updated: 2026-06-24
+last_updated: 2026-06-25
 active_reference_id: h_r0_shadow_ref_20260619
 ---
 
@@ -15,7 +15,7 @@ handoffs or legacy Branch B outputs.
 ## Required Read Order
 
 1. `docs/CURRENT_CONTEXT_INDEX.md`
-2. `docs/handoff/2026-06-24_2230_cnv_event_annotation_resource_migration_handoff.md`
+2. `docs/handoff/2026-06-25_0005_cnv_event_annotation_gene_omim_hpo_handoff.md`
 3. `AGENTS.md`
 4. `skills/conversation_handoff/SKILL.md`
 5. `skills/pgta_reference_modeling_analysis/SKILL.md`
@@ -23,20 +23,22 @@ handoffs or legacy Branch B outputs.
 
 ## Active Inputs
 
-active_handoff: docs/handoff/2026-06-24_2230_cnv_event_annotation_resource_migration_handoff.md
-previous_handoff: docs/handoff/2026-06-24_0031_sample_master_manifest_handoff.md
+active_handoff: docs/handoff/2026-06-25_0005_cnv_event_annotation_gene_omim_hpo_handoff.md
+previous_handoff: docs/handoff/2026-06-24_2230_cnv_event_annotation_resource_migration_handoff.md
 active_reference_id: h_r0_shadow_ref_20260619
 reference_status: fixed_shadow_baseline_not_production
 remote_snakemake_parse_status: repaired_lf_normalized_2026-06-21
 branch_a_status: burden_phase1_gap2m_materialized_default_unchanged
 branch_b_status: v2_report_table_ablation_audit_development_only
 branch_s_status: branch_s_review_manifest_visible_not_final
-report_status: cnv_event_annotation_sidecar_integrated_remote_validated
+report_status: cnv_event_annotation_gene_omim_ready_remote_validated
 sample_manifest_status: sample_master_manifest_static_validated_pending_g1_g8_truth_tsv
-annotation_status: pgta_owned_hg19_cytoband_bundle_integrated_gene_omim_hpo_pending
+annotation_status: pgta_owned_hg19_gene_omim_ready_hpo_missing_source
 
 ## Current Evidence Files
 
+- `docs/reports/cnv_event_annotation_gene_omim_hpo_bundle_2026-06-25.md`
+- `docs/handoff/2026-06-25_0005_cnv_event_annotation_gene_omim_hpo_handoff.md`
 - `sample_info/sample_master_manifest_20260624.tsv`
 - `docs/reports/cnv_event_annotation_resource_migration_2026-06-24.md`
 - `docs/handoff/2026-06-24_2230_cnv_event_annotation_resource_migration_handoff.md`

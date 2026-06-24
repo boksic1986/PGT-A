@@ -1,5 +1,36 @@
 # PLANS.md
 
+## 2026-06-25 CNV Event Annotation Gene/OMIM/HPO Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-25_0005_cnv_event_annotation_gene_omim_hpo_handoff.md`.
+
+Current report:
+`docs/reports/cnv_event_annotation_gene_omim_hpo_bundle_2026-06-25.md`.
+
+Current status:
+
+- PGTA-owned hg19 annotation bundle is now `gene/OMIM-ready`.
+- Runtime bundle ID is
+  `pgta_cnv_annotation.hg19.v20260625_gene_omim`.
+- Bundle rows: cytoband `862`, gene `70384`, OMIM `13736`, HPO `0`.
+- Source status is `gene=ready`, `omim=ready`,
+  `hpo=missing_hpo_source`.
+- Annotation remains display-only and does not alter CNV/SCA decisions.
+
+Immediate next steps:
+
+1. Commit, PR, merge, and sync tracked `main` content to the non-git remote
+   mirror.
+2. Keep SQLite/resources under
+   `/data/project/CNV/PGT-A/resources/annotation/hg19/` and out of git.
+3. If HPO annotation is required, identify and approve an independent PGTA-owned
+   hg19 HPO source before populating `hpo_term`; do not create fake empty
+   completion.
+4. If AnnotSV rank is evaluated later, keep it as a shadow comparison with a
+   separate validation gate; do not import CNVpro `filterCNV.py` rank/filter
+   behavior.
+
 ## 2026-06-24 CNV Event Annotation Next Gate
 
 Current handoff:

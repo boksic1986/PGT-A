@@ -105,6 +105,9 @@ def apply_event_annotations(events_df, annotation_tsv=""):
         "omim_phenotypes",
         "hpo_terms",
         "region_context",
+        "gene_source_status",
+        "omim_source_status",
+        "hpo_source_status",
         "annotation_backend",
         "annotation_status",
         "annotation_bundle_id",
@@ -139,6 +142,9 @@ def summarize_event_annotation_status(annotation_tsv=""):
             "event_annotation_row_count": 0,
             "event_annotation_backend": "not_configured",
             "event_annotation_bundle_id": "",
+            "event_annotation_gene_source_status": "not_configured",
+            "event_annotation_omim_source_status": "not_configured",
+            "event_annotation_hpo_source_status": "not_configured",
         }
     path = Path(annotation_tsv)
     if not path.exists() or path.stat().st_size == 0:
@@ -147,6 +153,9 @@ def summarize_event_annotation_status(annotation_tsv=""):
             "event_annotation_row_count": 0,
             "event_annotation_backend": "pgta_sqlite",
             "event_annotation_bundle_id": "",
+            "event_annotation_gene_source_status": "missing",
+            "event_annotation_omim_source_status": "missing",
+            "event_annotation_hpo_source_status": "missing",
         }
     annotations = pd.read_csv(path, sep="\t")
     if annotations.empty:
@@ -155,15 +164,24 @@ def summarize_event_annotation_status(annotation_tsv=""):
             "event_annotation_row_count": 0,
             "event_annotation_backend": "pgta_sqlite",
             "event_annotation_bundle_id": "",
+            "event_annotation_gene_source_status": "empty",
+            "event_annotation_omim_source_status": "empty",
+            "event_annotation_hpo_source_status": "empty",
         }
     statuses = annotations.get("annotation_status", pd.Series("", index=annotations.index)).fillna("").astype(str)
     bundle_ids = annotations.get("annotation_bundle_id", pd.Series("", index=annotations.index)).dropna().astype(str)
     backends = annotations.get("annotation_backend", pd.Series("", index=annotations.index)).dropna().astype(str)
+    gene_source_statuses = annotations.get("gene_source_status", pd.Series("", index=annotations.index)).dropna().astype(str)
+    omim_source_statuses = annotations.get("omim_source_status", pd.Series("", index=annotations.index)).dropna().astype(str)
+    hpo_source_statuses = annotations.get("hpo_source_status", pd.Series("", index=annotations.index)).dropna().astype(str)
     return {
         "event_annotation_status": ",".join(sorted(set(statuses))) if not statuses.empty else "unknown",
         "event_annotation_row_count": int(len(annotations)),
         "event_annotation_backend": ",".join(sorted(set(backends))) if not backends.empty else "pgta_sqlite",
         "event_annotation_bundle_id": ",".join(sorted(set(bundle_ids))) if not bundle_ids.empty else "",
+        "event_annotation_gene_source_status": ",".join(sorted(set(gene_source_statuses))) if not gene_source_statuses.empty else "unknown",
+        "event_annotation_omim_source_status": ",".join(sorted(set(omim_source_statuses))) if not omim_source_statuses.empty else "unknown",
+        "event_annotation_hpo_source_status": ",".join(sorted(set(hpo_source_statuses))) if not hpo_source_statuses.empty else "unknown",
     }
 
 
@@ -1246,6 +1264,9 @@ def main():
         f"- Event annotation status: `{report_contract['event_annotation_status']}`",
         f"- Event annotation rows: `{report_contract['event_annotation_row_count']}`",
         f"- Event annotation backend: `{report_contract['event_annotation_backend']}`",
+        f"- Event annotation gene source: `{report_contract['event_annotation_gene_source_status']}`",
+        f"- Event annotation OMIM source: `{report_contract['event_annotation_omim_source_status']}`",
+        f"- Event annotation HPO source: `{report_contract['event_annotation_hpo_source_status']}`",
         "",
         "## Sample Table",
         "",
