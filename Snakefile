@@ -321,6 +321,11 @@ rule branch_s_review:
         ) if CNV_ENABLED and CNV_POSTPROCESS_ENABLE_BRANCH_B else []
 
 
+rule cnv_event_annotation:
+    input:
+        [CNV_EVENT_ANNOTATION_TSV, CNV_EVENT_ANNOTATION_JSON] if CNV_ENABLED and CNV_POSTPROCESS_ENABLE_BRANCH_B else []
+
+
 rule cnv_eval:
     input:
         [CNV_EVAL_SAMPLE_METRICS, CNV_EVAL_EVENT_METRICS, CNV_EVAL_CALIBRATION, CNV_EVAL_SUMMARY] if CNV_ENABLED else []

@@ -13,7 +13,7 @@ elif PIPELINE_MODE_RAW:
 else:
     ref_targets = {"reference_qc", "reference"}
     ref_targets.add("baseline_qc")
-    predict_targets = {"predict_bam_qc", "cnv_qc", "cnv", "branch_a_validation", "branch_b_evidence", "branch_b_v2_benchmark", "branch_b_v2_report_ablation", "branch_s_review", "cnv_sample_report_qc", "cnv_eval", "cnv_ml", "cnv_benchmark", "cnv_report"}
+    predict_targets = {"predict_bam_qc", "cnv_qc", "cnv", "branch_a_validation", "branch_b_evidence", "branch_b_v2_benchmark", "branch_b_v2_report_ablation", "branch_s_review", "cnv_event_annotation", "cnv_sample_report_qc", "cnv_eval", "cnv_ml", "cnv_benchmark", "cnv_report"}
     if PIPELINE_TARGETS & ref_targets and PIPELINE_TARGETS & predict_targets:
         raise ValueError(
             "pipeline.targets mixes reference and predict stages without pipeline.mode. "
@@ -26,7 +26,7 @@ AVAILABLE_TARGETS = {"mapping", "metadata", "baseline_qc", "reference"}
 if TUNING_ENABLED:
     AVAILABLE_TARGETS.add("reference_qc")
 if CNV_ENABLED:
-    AVAILABLE_TARGETS.update({"predict_bam_qc", "cnv_qc", "cnv", "reference_audit", "branch_a_validation", "branch_b_evidence", "branch_b_v2_benchmark", "branch_b_v2_report_ablation", "branch_s_review", "cnv_sample_report_qc", "cnv_eval", "cnv_ml", "cnv_benchmark", "cnv_report"})
+    AVAILABLE_TARGETS.update({"predict_bam_qc", "cnv_qc", "cnv", "reference_audit", "branch_a_validation", "branch_b_evidence", "branch_b_v2_benchmark", "branch_b_v2_report_ablation", "branch_s_review", "cnv_event_annotation", "cnv_sample_report_qc", "cnv_eval", "cnv_ml", "cnv_benchmark", "cnv_report"})
 
 UNKNOWN_TARGETS = sorted(REQUESTED_TARGETS - AVAILABLE_TARGETS)
 if UNKNOWN_TARGETS:
@@ -38,7 +38,7 @@ if UNKNOWN_TARGETS:
 
 MODE_TARGETS = {
     "build_ref": {"mapping", "metadata", "baseline_qc", "reference_qc", "reference"},
-    "predict": {"mapping", "metadata", "predict_bam_qc", "cnv_qc", "cnv", "reference_audit", "branch_a_validation", "branch_b_evidence", "branch_b_v2_benchmark", "branch_b_v2_report_ablation", "branch_s_review", "cnv_sample_report_qc", "cnv_eval", "cnv_ml", "cnv_benchmark", "cnv_report"},
+    "predict": {"mapping", "metadata", "predict_bam_qc", "cnv_qc", "cnv", "reference_audit", "branch_a_validation", "branch_b_evidence", "branch_b_v2_benchmark", "branch_b_v2_report_ablation", "branch_s_review", "cnv_event_annotation", "cnv_sample_report_qc", "cnv_eval", "cnv_ml", "cnv_benchmark", "cnv_report"},
 }
 INVALID_MODE_TARGETS = sorted(REQUESTED_TARGETS - MODE_TARGETS[PIPELINE_MODE])
 if INVALID_MODE_TARGETS:
@@ -71,6 +71,8 @@ if "branch_b_v2_report_ablation" in REQUESTED_TARGETS and CNV_ENABLED and not CN
     raise ValueError("branch_b_v2_report_ablation requires core.wisecondorx.cnv.postprocess.enable_branch_b=true.")
 if "branch_s_review" in REQUESTED_TARGETS and CNV_ENABLED and not CNV_POSTPROCESS_ENABLE_BRANCH_B:
     raise ValueError("branch_s_review requires core.wisecondorx.cnv.postprocess.enable_branch_b=true.")
+if "cnv_event_annotation" in REQUESTED_TARGETS and CNV_ENABLED and not CNV_POSTPROCESS_ENABLE_BRANCH_B:
+    raise ValueError("cnv_event_annotation requires core.wisecondorx.cnv.postprocess.enable_branch_b=true.")
 if PIPELINE_MODE == "build_ref" and "build_reference" not in config:
     raise ValueError("build_ref config must define build_reference.")
 if PIPELINE_MODE == "predict" and "build_reference" in config and BUILD_REF_CFG.get("groups"):

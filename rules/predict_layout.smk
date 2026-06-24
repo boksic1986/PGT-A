@@ -45,6 +45,14 @@ CNV_POSTPROCESS_ENABLE_BRANCH_B = bool(CNV_POSTPROCESS_CFG.get("enable_branch_b"
 CNV_POSTPROCESS_PRESERVE_BRANCH_A = bool(CNV_POSTPROCESS_CFG.get("preserve_branch_a", True))
 CNV_POSTPROCESS_CORRECTION_MODEL = str(CNV_POSTPROCESS_CFG.get("default_correction", "2d_loess_gc_mappability"))
 CNV_POSTPROCESS_GENOME_BUILD = str(CNV_POSTPROCESS_ANNOTATION_CFG.get("genome_build", "hg19"))
+CNV_EVENT_ANNOTATION_CFG = CNV_POSTPROCESS_ANNOTATION_CFG.get("event_annotation", {})
+CNV_EVENT_ANNOTATION_DEFAULT_RESOURCE_DIR = "/data/project/CNV/PGT-A/resources/annotation/hg19"
+CNV_EVENT_ANNOTATION_BUNDLE_DB = resolve_path(
+    CNV_EVENT_ANNOTATION_CFG.get(
+        "bundle_db",
+        str(Path(CNV_EVENT_ANNOTATION_DEFAULT_RESOURCE_DIR) / "pgta_cnv_annotation.hg19.sqlite"),
+    )
+)
 CNV_CORRECTION_LOESS_FRAC = float(CNV_CORRECTION_CFG.get("loess_frac", 0.2))
 CNV_CORRECTION_MIN_VALID_BINS = int(CNV_CORRECTION_CFG.get("min_valid_bins", 200))
 CNV_CORRECTION_ROBUST_ITERS = int(CNV_CORRECTION_CFG.get("robust_iters", 2))
@@ -98,6 +106,9 @@ CNV_POSTPROCESS_AMBIGUOUS_ALIGNMENT_BED = (
 CNV_POSTPROCESS_DIR = resolve_path(
     CNV_POSTPROCESS_CFG.get("output_dir", str(Path(CNV_DIR) / "postprocess"))
 )
+CNV_EVENT_ANNOTATION_DIR = str(Path(CNV_POSTPROCESS_DIR) / "event_annotation")
+CNV_EVENT_ANNOTATION_TSV = str(Path(CNV_EVENT_ANNOTATION_DIR) / "cnv_event_annotation.tsv")
+CNV_EVENT_ANNOTATION_JSON = str(Path(CNV_EVENT_ANNOTATION_DIR) / "cnv_event_annotation.json")
 CNV_PLOTS_DIR = str(Path(CNV_DIR) / "plots")
 CNV_B_CORRECTED_BINS = str(Path(CNV_POSTPROCESS_DIR) / "correction" / "{sample}.bins.tsv")
 CNV_B_CORRECTION_SUMMARY = str(Path(CNV_POSTPROCESS_DIR) / "correction" / "{sample}.summary.json")

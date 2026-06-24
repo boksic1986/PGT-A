@@ -18,6 +18,7 @@ else:
     IMPORT_ERROR = None
     import pgta.predict.report as report_module
     from pgta.predict.report import (
+        apply_event_annotations,
         build_plot_lookup,
         format_biological_candidate_conclusion,
         format_sample_report_qc_status,
@@ -33,6 +34,70 @@ else:
 
 @unittest.skipIf(IMPORT_ERROR is not None, f"optional dependency missing: {IMPORT_ERROR}")
 class CnvReportRankingTest(unittest.TestCase):
+    def test_apply_event_annotations_preserves_event_count_and_adds_display_fields(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            events = pd.DataFrame(
+                [
+                    {
+                        "sample_id": "S1",
+                        "event_id": "E1",
+                        "chrom": "chr1",
+                        "start": 100,
+                        "end": 200,
+                        "state": "gain",
+                    }
+                ]
+            )
+            annotation_tsv = Path(tmpdir) / "cnv_event_annotation.tsv"
+            pd.DataFrame(
+                [
+                    {
+                        "sample_id": "S1",
+                        "event_id": "E1",
+                        "cytoband": "p36.33",
+                        "genes": "GENE1",
+                        "gene_number": 1,
+                        "omim_genes": "GENE1:123456",
+                        "hpo_terms": "HP:0000001:example hpo",
+                        "annotation_status": "annotated",
+                    }
+                ]
+            ).to_csv(annotation_tsv, sep="\t", index=False)
+
+            annotated = apply_event_annotations(events, str(annotation_tsv))
+
+            self.assertEqual(len(annotated), 1)
+            self.assertEqual(annotated.iloc[0]["cytoband"], "p36.33")
+            self.assertEqual(annotated.iloc[0]["genes"], "GENE1")
+            self.assertEqual(annotated.iloc[0]["annotation_status"], "annotated")
+
+    def test_branch_b_top_event_includes_annotation_when_available(self):
+        events_df = pd.DataFrame(
+            [
+                {
+                    "sample_id": "S1",
+                    "event_id": "E1",
+                    "chrom": "chr1",
+                    "start": 100,
+                    "end": 200,
+                    "state": "gain",
+                    "priority_score": 5.0,
+                    "technical_confidence": "high",
+                    "artifact_status": "pass",
+                    "v2_report_layer_class": "report_event",
+                    "v2_report_visibility": "report_strong_event",
+                    "cytoband": "p36.33",
+                    "genes": "GENE1,GENE2",
+                }
+            ]
+        )
+
+        _, top_branch_b = summarize_branch_b_events(events_df)
+
+        top_event = top_branch_b.iloc[0]["branch_b_top_event"]
+        self.assertIn("p36.33", top_event)
+        self.assertIn("GENE1", top_event)
+
     def test_sample_report_qc_is_loaded_and_displayed_as_sample_level_context(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             qc_path = Path(tmpdir) / "sample_report_qc.tsv"

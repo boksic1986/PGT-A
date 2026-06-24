@@ -102,6 +102,37 @@ def test_predict_reportability_qc_is_formal_workflow_target_and_report_input():
     assert "sample_report_qc_status" not in workflow.split("rule cnv_branch_b_v2_classifier:", 1)[1].split("rule cnv_branch_b_v2_benchmark:", 1)[0]
 
 
+def test_cnv_event_annotation_is_owned_sidecar_target_and_report_input():
+    dispatcher = read_text("scripts/_compat_entry.py")
+    entrypoints = read_text("rules/script_entrypoints.smk")
+    layout = read_text("rules/predict_layout.smk")
+    workflow = read_text("rules/predict_workflow.smk")
+    modes = read_text("rules/pipeline_modes.smk")
+    target_assembly = read_text("rules/target_assembly.smk")
+    report = read_text("pgta/predict/report.py")
+    snakefile = read_text("Snakefile")
+
+    assert '"cnv_event_annotation": "pgta.predict.annotation"' in dispatcher
+    assert 'SCRIPT_CNV_EVENT_ANNOTATION_ACTION = "cnv_event_annotation"' in entrypoints
+    assert '"cnv_event_annotation"' in modes
+    assert "CNV_EVENT_ANNOTATION_TSV" in layout
+    assert "CNV_EVENT_ANNOTATION_JSON" in layout
+    assert "CNV_EVENT_ANNOTATION_BUNDLE_DB" in layout
+    assert "/data/project/CNV/PGT-A/resources/annotation/hg19" in layout
+    assert "rule cnv_event_annotation_build" in workflow
+    assert "CNV_EVENT_ANNOTATION_TSV" in target_assembly
+    assert "CNV_EVENT_ANNOTATION_JSON" in target_assembly
+    assert "rule cnv_event_annotation:" in snakefile
+
+    report_rule = workflow.split("rule cnv_report_summary:", 1)[1]
+    assert "event_annotation=([CNV_EVENT_ANNOTATION_TSV]" in report_rule
+    assert "--event-annotation-tsv" in report_rule
+    assert "branch_b_v2_report_ablation" not in report_rule.split("script:", 1)[0]
+
+    assert "--event-annotation-tsv" in report
+    assert "apply_event_annotations" in report
+
+
 def test_reference_audit_target_is_branch_a_level_and_report_safe():
     layout = read_text("rules/predict_layout.smk")
     workflow = read_text("rules/predict_workflow.smk")
