@@ -1,5 +1,36 @@
 # PLANS.md
 
+## 2026-06-24 CNV Event Annotation Next Gate
+
+Current handoff:
+`docs/handoff/2026-06-24_2230_cnv_event_annotation_resource_migration_handoff.md`.
+
+Current report:
+`docs/reports/cnv_event_annotation_resource_migration_2026-06-24.md`.
+
+Current status:
+
+- `cnv_event_annotation` is now a formal sidecar target.
+- `cnv_report` consumes event annotation TSV and writes annotation status,
+  backend, row count, and bundle ID into `report_contract`.
+- PGTA owns a new hg19 SQLite bundle under
+  `/data/project/CNV/PGT-A/resources/annotation/hg19/`.
+- The current bundle contains cytoband only. Gene/OMIM/HPO tables are empty
+  placeholders because the CNVpro minimal bundle did not provide standalone
+  source tables.
+- Annotation is display-only and does not alter CNV/SCA decisions.
+
+Immediate next steps:
+
+1. Identify an approved PGTA-owned source for hg19 gene, OMIM, and HPO tables;
+   do not use Arraytools database paths and do not read CNVpro paths at runtime.
+2. Populate the SQLite `gene`, `omim_gene`, `hpo_term`, and `region_context`
+   tables, then add tests requiring non-empty gene coverage.
+3. If AnnotSV rank is evaluated, keep it as a shadow comparison with a separate
+   validation gate; do not import CNVpro `filterCNV.py` rank/filter behavior.
+4. After PR/merge, sync tracked main code to the remote mirror; resource bundle
+   files remain remote PGTA resources, not Git-tracked source files.
+
 ## 2026-06-24 Sample Master Manifest Next Gate
 
 Current handoff:

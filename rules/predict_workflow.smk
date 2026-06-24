@@ -1174,6 +1174,41 @@ if CNV_ENABLED:
                     command.extend(["--lowres-3mb-events", input.lowres_3mb[0]])
                 subprocess.run(command, check=True)
 
+        rule cnv_event_annotation_build:
+            input:
+                report_events=([CNV_B_V2_BENCHMARK_REPORT_EVENTS] if "branch_b_v2_benchmark" in AVAILABLE_TARGETS else []),
+                classifications=expand(CNV_B_V2_CLASSIFIER, sample=SAMPLES),
+                branch_s_evidence=expand(CNV_BRANCH_S_EVIDENCE, sample=SAMPLES),
+                metadata=RUN_METADATA
+            output:
+                tsv=CNV_EVENT_ANNOTATION_TSV,
+                json=CNV_EVENT_ANNOTATION_JSON
+            log:
+                project_path("logs", "cnv", "event_annotation.log")
+            threads: 1
+            run:
+                from pgta.core.logging import write_rule_audit_log
+                import subprocess
+
+                write_rule_audit_log(log[0], input.metadata)
+                command = [
+                    config["biosoft"]["python"],
+                    SCRIPT_CNV_EVENT_ANNOTATION,
+                    SCRIPT_CNV_EVENT_ANNOTATION_ACTION,
+                    "--bundle-db", CNV_EVENT_ANNOTATION_BUNDLE_DB,
+                    "--genome-build", CNV_POSTPROCESS_GENOME_BUILD,
+                    "--output-tsv", output.tsv,
+                    "--output-json", output.json,
+                    "--log", log[0],
+                ]
+                for path_value in input.report_events:
+                    command.extend(["--event-tsv", path_value])
+                for path_value in input.classifications:
+                    command.extend(["--classification-tsv", path_value])
+                for path_value in input.branch_s_evidence:
+                    command.extend(["--branch-s-evidence", path_value])
+                subprocess.run(command, check=True)
+
     if CNV_MOSAIC_FRACTION_TRUTH_TSV and ("cnv_benchmark" in AVAILABLE_TARGETS or "cnv_report" in AVAILABLE_TARGETS):
         rule cnv_mosaic_truth_validation:
             input:
@@ -1376,6 +1411,7 @@ if CNV_ENABLED:
                 branch_s_summaries=(expand(CNV_BRANCH_S_SUMMARY, sample=SAMPLES) if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 branch_b_v2_benchmark_summary=([CNV_B_V2_BENCHMARK_SUMMARY] if "branch_b_v2_benchmark" in AVAILABLE_TARGETS else []),
                 branch_b_v2_sample_summary=([CNV_B_V2_BENCHMARK_SAMPLE_SUMMARY] if "branch_b_v2_benchmark" in AVAILABLE_TARGETS else []),
+                event_annotation=([CNV_EVENT_ANNOTATION_TSV] if CNV_POSTPROCESS_ENABLE_BRANCH_B else []),
                 predict_bam_qc_summary=([CNV_PREDICT_BAM_QC_SUMMARY_TSV] if CNV_ENABLED else []),
                 sample_report_qc=([CNV_SAMPLE_REPORT_QC_TSV] if CNV_ENABLED else []),
                 evaluation_summary=([CNV_EVAL_SUMMARY] if "cnv_eval" in REQUESTED_TARGETS else []),
@@ -1448,4 +1484,6 @@ if CNV_ENABLED:
                     command.extend(["--branch-b-evidence-summary", path_value])
                 for path_value in input.branch_s_summaries:
                     command.extend(["--branch-s-summary", path_value])
+                if input.event_annotation:
+                    command.extend(["--event-annotation-tsv", input.event_annotation[0]])
                 subprocess.run(command, check=True)

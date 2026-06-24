@@ -1,5 +1,52 @@
 # CURRENT_STATE.md
 
+## 2026-06-24 CNV Event Annotation Resource Migration
+
+Current handoff:
+`docs/handoff/2026-06-24_2230_cnv_event_annotation_resource_migration_handoff.md`.
+
+Current report:
+`docs/reports/cnv_event_annotation_resource_migration_2026-06-24.md`.
+
+This loop adds a PGTA-owned event-level annotation sidecar. It does not modify
+Branch A, Branch B V2, Branch S, reference build, sex calling, report-event
+classification, filtering, PASS/FAIL, or TP/FN/FP.
+
+New workflow target:
+
+- `cnv_event_annotation`
+
+New PGTA-owned resource bundle:
+
+- `/data/project/CNV/PGT-A/resources/annotation/hg19/pgta_cnv_annotation.hg19.sqlite`
+- bundle ID: `pgta_cnv_annotation.hg19.v20260624`
+- source migrated from CNVpro minimal package:
+  `code/cnvseqpipe/cytoBand.txt.gz`
+- source MD5: `161003a509f74247805d8ff346a8149e`
+- cytoband rows: `862`
+
+Resource boundary:
+
+- PGTA does not share Arraytools databases.
+- PGTA runtime reads only the PGTA-owned bundle path.
+- CNVpro `filterCNV.py`, cghFLasso, CN thresholds, and AnnotSV rank are not
+  imported into report decisions.
+- Gene, OMIM, HPO, and region-context tables currently exist as empty PGTA
+  placeholders because those source tables were not present in the CNVpro
+  minimal bundle.
+
+Validation state:
+
+- Remote pytest passed:
+  `tests/unit/test_cnv_event_annotation.py`,
+  `tests/unit/test_cnv_report.py`, and
+  `tests/unit/test_branch_ab_phase12_workflow_contract.py`: `43 passed in
+  1.87s`.
+- Y/H/G/0615 active configs dry-ran `cnv_event_annotation cnv_report -n`
+  successfully.
+- 0615 smoke materialization generated `147` unique annotation rows; all had
+  cytoband annotation and no gene annotation, matching current bundle contents.
+
 ## 2026-06-24 Sample Master Manifest
 
 Current handoff:

@@ -48,6 +48,7 @@ def parse_args():
     parser.add_argument("--branch-s-summary", action="append", default=[])
     parser.add_argument("--branch-b-v2-benchmark-summary", default="")
     parser.add_argument("--branch-b-v2-sample-summary", default="")
+    parser.add_argument("--event-annotation-tsv", default="")
     parser.add_argument("--predict-bam-qc-summary", default="")
     parser.add_argument("--sample-report-qc", default="")
     parser.add_argument("--reference-id", default="")
@@ -84,6 +85,86 @@ def load_events(paths):
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
+
+
+def apply_event_annotations(events_df, annotation_tsv=""):
+    if events_df is None or events_df.empty or not annotation_tsv:
+        return events_df
+    path = Path(annotation_tsv)
+    if not path.exists() or path.stat().st_size == 0:
+        return events_df
+    annotations = pd.read_csv(path, sep="\t")
+    if annotations.empty:
+        return events_df
+    annotation_columns = [
+        "cytoband",
+        "genes",
+        "gene_number",
+        "gene_location",
+        "omim_genes",
+        "omim_phenotypes",
+        "hpo_terms",
+        "region_context",
+        "annotation_backend",
+        "annotation_status",
+        "annotation_bundle_id",
+        "genome_build",
+    ]
+    frame = events_df.copy()
+    if "event_id" in frame.columns and "event_id" in annotations.columns:
+        keys = ["sample_id", "event_id"] if "sample_id" in frame.columns and "sample_id" in annotations.columns else ["event_id"]
+    else:
+        keys = [
+            column
+            for column in ["sample_id", "chrom", "start", "end", "state"]
+            if column in frame.columns and column in annotations.columns
+        ]
+    if not keys:
+        return frame
+    merge_columns = keys + [column for column in annotation_columns if column in annotations.columns]
+    right = annotations[merge_columns].drop_duplicates(subset=keys, keep="first")
+    merged = frame.merge(right, on=keys, how="left")
+    if len(merged) != len(frame):
+        raise ValueError("event annotation merge changed event row count")
+    for column in annotation_columns:
+        if column not in merged.columns:
+            merged[column] = ""
+    return merged
+
+
+def summarize_event_annotation_status(annotation_tsv=""):
+    if not annotation_tsv:
+        return {
+            "event_annotation_status": "not_configured",
+            "event_annotation_row_count": 0,
+            "event_annotation_backend": "not_configured",
+            "event_annotation_bundle_id": "",
+        }
+    path = Path(annotation_tsv)
+    if not path.exists() or path.stat().st_size == 0:
+        return {
+            "event_annotation_status": "missing",
+            "event_annotation_row_count": 0,
+            "event_annotation_backend": "pgta_sqlite",
+            "event_annotation_bundle_id": "",
+        }
+    annotations = pd.read_csv(path, sep="\t")
+    if annotations.empty:
+        return {
+            "event_annotation_status": "empty",
+            "event_annotation_row_count": 0,
+            "event_annotation_backend": "pgta_sqlite",
+            "event_annotation_bundle_id": "",
+        }
+    statuses = annotations.get("annotation_status", pd.Series("", index=annotations.index)).fillna("").astype(str)
+    bundle_ids = annotations.get("annotation_bundle_id", pd.Series("", index=annotations.index)).dropna().astype(str)
+    backends = annotations.get("annotation_backend", pd.Series("", index=annotations.index)).dropna().astype(str)
+    return {
+        "event_annotation_status": ",".join(sorted(set(statuses))) if not statuses.empty else "unknown",
+        "event_annotation_row_count": int(len(annotations)),
+        "event_annotation_backend": ",".join(sorted(set(backends))) if not backends.empty else "pgta_sqlite",
+        "event_annotation_bundle_id": ",".join(sorted(set(bundle_ids))) if not bundle_ids.empty else "",
+    }
 
 
 def load_one_row_tables(paths):
@@ -568,7 +649,14 @@ def cnvseq_tier_rank(value):
 
 def format_branch_b_top_event(row):
     tier = str(row.get("cnvseq_report_tier", "") or "").strip()
-    suffix = f"; {tier}" if tier else ""
+    suffix_items = [tier] if tier else []
+    cytoband = text_or_empty(row.get("cytoband", ""))
+    genes = text_or_empty(row.get("genes", ""))
+    if cytoband:
+        suffix_items.append(cytoband)
+    if genes:
+        suffix_items.append(genes)
+    suffix = f"; {'; '.join(suffix_items)}" if suffix_items else ""
     return (
         f"{row['chrom']}:{int(row['start'])}-{int(row['end'])} {row['state']} "
         f"[{row['artifact_status']}/{row['technical_confidence']}{suffix}]"
@@ -785,6 +873,21 @@ def summarize_branch_b_events(events_df):
                     for column in ["artifact_flags", "downgrade_reason", "filter_reason", "retain_reason"]
                     if column in display_events_df.columns
                 ],
+                *[
+                    column
+                    for column in [
+                        "cytoband",
+                        "genes",
+                        "gene_number",
+                        "gene_location",
+                        "omim_genes",
+                        "omim_phenotypes",
+                        "hpo_terms",
+                        "region_context",
+                        "annotation_status",
+                    ]
+                    if column in display_events_df.columns
+                ],
             ]
         ]
         .copy()
@@ -994,6 +1097,7 @@ def main():
     args = parse_args()
     logger = setup_logger("cnv_report", args.log or None)
     events_df = load_events(args.event_tsv)
+    events_df = apply_event_annotations(events_df, args.event_annotation_tsv)
     gender_df = load_one_row_tables(args.gender_tsv)
     qc_df = load_one_row_tables(args.qc_tsv)
     a_branch_df = load_a_branch(args.a_branch_bed)
@@ -1007,6 +1111,7 @@ def main():
     )
     sample_report_qc_df = load_sample_report_qc(args.sample_report_qc)
     sample_report_qc_contract = summarize_sample_report_qc(sample_report_qc_df)
+    event_annotation_contract = summarize_event_annotation_status(args.event_annotation_tsv)
     evaluation_summary = read_optional_json(args.evaluation_summary)
     ml_summary = read_optional_json(args.ml_summary)
     benchmark_summary = read_optional_json(args.benchmark_summary)
@@ -1081,6 +1186,7 @@ def main():
         **branch_b_v2_contract,
         "branch_b_raw_ledger_used": False,
         "branch_s_raw_evidence_used": False,
+        **event_annotation_contract,
         **sample_report_qc_contract,
         "note": (
             "P6 report package carries P3/P5 review summaries and Branch B V2 burden display only; "
@@ -1137,6 +1243,9 @@ def main():
         "- Branch B V2 limitation: `development_review_only display; not FP-reduction proof; not final promotion`",
         f"- Sample reportability QC status: `{report_contract['sample_report_qc_status']}`",
         f"- Sample reportability QC: pass `{report_contract['pass_reportable_count']}`, review `{report_contract['sample_quality_review_count']}`, no-call `{report_contract['no_call_recommended_count']}`",
+        f"- Event annotation status: `{report_contract['event_annotation_status']}`",
+        f"- Event annotation rows: `{report_contract['event_annotation_row_count']}`",
+        f"- Event annotation backend: `{report_contract['event_annotation_backend']}`",
         "",
         "## Sample Table",
         "",
